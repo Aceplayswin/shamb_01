@@ -1,5 +1,6 @@
 import { Inter, Outfit } from 'next/font/google';
 import { AuthHydrate } from '@/components/AuthHydrate';
+import { AppFrame } from '@/components/layout/AppFrame';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
@@ -13,8 +14,10 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className={`${inter.variable} ${outfit.variable}`}>
-      <body className="flex min-h-screen flex-col font-sans antialiased">
-        <AuthHydrate>{children}</AuthHydrate>
+      <body className="font-sans antialiased">
+        <AuthHydrate>
+          <AppFrame>{children}</AppFrame>
+        </AuthHydrate>
       </body>
     </html>
   );

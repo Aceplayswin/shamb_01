@@ -6,7 +6,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from core import services
+from core import admin_services, services
 from core.ai import chat_respond, fraud_score, pytorch_version, welcome_call
 from core.geo import detect_geo_from_ip
 from core.middleware import require_auth
@@ -238,6 +238,18 @@ def admin_dashboard(request):
 
 @require_auth(['admin'])
 @require_http_methods(['GET'])
+def admin_dashboard_charts(request):
+    return JsonResponse(admin_services.get_dashboard_charts())
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_recent_activity(request):
+    return JsonResponse(admin_services.get_recent_activity(), safe=False)
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
 def admin_users(request):
     return JsonResponse(
         services.list_users(
@@ -250,16 +262,228 @@ def admin_users(request):
     )
 
 
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_user_detail(request, user_id):
+    try:
+        return JsonResponse(admin_services.get_user_full_detail(user_id))
+    except User.DoesNotExist:
+        return _error_response(ValueError('User not found'), 404)
+
+
 @csrf_exempt
 @require_auth(['admin'])
 @require_http_methods(['PATCH'])
 def admin_user_status(request, user_id):
     try:
         body = _json_body(request)
-        User.objects.filter(id=user_id).update(account_status=body['status'])
-        return JsonResponse({'updated': True})
+        if 'status' in body:
+            User.objects.filter(id=user_id).update(account_status=body['status'])
+            return JsonResponse({'updated': True})
+        return JsonResponse(
+            admin_services.update_user_admin(
+                user_id,
+                account_status=body.get('account_status'),
+                kyc_status=body.get('kyc_status'),
+                fraud_score=body.get('fraud_score'),
+            )
+        )
     except (KeyError, json.JSONDecodeError) as e:
         return _error_response(e)
+    except User.DoesNotExist:
+        return _error_response(ValueError('User not found'), 404)
+    except ValueError as e:
+        return _error_response(e)
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_transactions(request):
+    return JsonResponse(
+        admin_services.list_admin_transactions(
+            request.GET.get('type'),
+            request.GET.get('status'),
+            request.GET.get('userId'),
+            int(request.GET.get('limit', 50)),
+            int(request.GET.get('offset', 0)),
+        ),
+        safe=False,
+    )
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_deposits_pending(request):
+    return JsonResponse(admin_services.list_pending_deposits(), safe=False)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_deposit_confirm(request, tx_id):
+    try:
+        body = _json_body(request)
+        ref = body.get('referenceNumber') or body.get('reference_number', f'ADMIN-{tx_id[:8]}')
+        return JsonResponse(services.confirm_deposit(tx_id, ref))
+    except Transaction.DoesNotExist:
+        return _error_response(ValueError('Transaction not found'), 404)
+    except Exception as e:
+        return _error_response(e)
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_games(request):
+    return JsonResponse(
+        admin_services.list_admin_games(
+            int(request.GET.get('limit', 200)),
+            int(request.GET.get('offset', 0)),
+        ),
+        safe=False,
+    )
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_games_create(request):
+    try:
+        return JsonResponse(admin_services.create_game(_json_body(request)), status=201)
+    except (KeyError, json.JSONDecodeError) as e:
+        return _error_response(e)
+    except Exception as e:
+        return _error_response(e)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['PATCH'])
+def admin_games_update(request, game_id):
+    try:
+        return JsonResponse(admin_services.update_game(game_id, _json_body(request)))
+    except Exception as e:
+        return _error_response(e)
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_providers(request):
+    return JsonResponse(admin_services.list_admin_providers(), safe=False)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_providers_create(request):
+    try:
+        return JsonResponse(admin_services.create_provider(_json_body(request)), status=201)
+    except (KeyError, json.JSONDecodeError) as e:
+        return _error_response(e)
+    except Exception as e:
+        return _error_response(e)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['PATCH'])
+def admin_providers_update(request, provider_id):
+    try:
+        return JsonResponse(admin_services.update_provider(provider_id, _json_body(request)))
+    except Exception as e:
+        return _error_response(e)
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_bets(request):
+    return JsonResponse(
+        admin_services.list_admin_bets(
+            int(request.GET.get('limit', 50)),
+            int(request.GET.get('offset', 0)),
+            request.GET.get('userId'),
+        ),
+        safe=False,
+    )
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_bonuses(request):
+    return JsonResponse(admin_services.list_admin_bonuses(), safe=False)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_bonuses_create(request):
+    try:
+        return JsonResponse(admin_services.create_bonus(_json_body(request)), status=201)
+    except (KeyError, json.JSONDecodeError) as e:
+        return _error_response(e)
+    except Exception as e:
+        return _error_response(e)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['PATCH'])
+def admin_bonuses_update(request, bonus_id):
+    try:
+        return JsonResponse(admin_services.update_bonus(bonus_id, _json_body(request)))
+    except Exception as e:
+        return _error_response(e)
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_settings(request):
+    return JsonResponse(admin_services.list_platform_settings(), safe=False)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['PUT'])
+def admin_settings_update(request, setting_key):
+    try:
+        body = _json_body(request)
+        return JsonResponse(admin_services.update_platform_setting(setting_key, body['value']))
+    except (KeyError, json.JSONDecodeError) as e:
+        return _error_response(e)
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_ai_calls(request):
+    return JsonResponse(
+        admin_services.list_ai_call_logs(
+            int(request.GET.get('limit', 50)),
+            int(request.GET.get('offset', 0)),
+        ),
+        safe=False,
+    )
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_wallet_adjust(request, user_id):
+    try:
+        body = _json_body(request)
+        return JsonResponse(
+            admin_services.wallet_adjustment(
+                user_id, float(body['amount']), body.get('notes', '')
+            )
+        )
+    except Wallet.DoesNotExist:
+        return _error_response(ValueError('Wallet not found'), 404)
+    except (KeyError, json.JSONDecodeError, TypeError, ValueError) as e:
+        return _error_response(e)
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_staff(request):
+    return JsonResponse(admin_services.list_admin_users_list(), safe=False)
 
 
 @require_auth(['admin'])

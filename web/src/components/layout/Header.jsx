@@ -2,141 +2,220 @@
 
 import Link from 'next/link';
 import {
-  Diamond,
-  Settings,
-  Menu,
+  Home,
+  Trophy,
+  Dices,
+  Cherry,
   Gamepad2,
+  Gift,
   Ticket,
   Rocket,
   CircleDot,
-  Coins,
+  WalletCards,
+  Diamond,
   Crown,
-  HeartHandshake,
+  Coins,
   Spade,
   Tv,
-  WalletCards,
+  HeartHandshake,
+  LifeBuoy,
+  Settings,
+  Search,
+  Wallet,
+  Plus,
+  Sparkles,
+  User,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 
-const TOP_NAV = [
-  { href: '#', label: 'SPORTS' },
-  { href: '#', label: 'CASINO' },
-  { href: '#', label: 'SLOTS' },
-  { href: '#', label: 'FANTASY GAMES' },
-  { href: '#', label: 'PROMOTIONS' },
+const PRIMARY = [
+  { label: 'Home', href: '/', icon: Home },
+  { label: 'Sports', href: '#', icon: Trophy },
+  { label: 'Casino', href: '#', icon: Dices },
+  { label: 'Slots', href: '#', icon: Cherry },
+  { label: 'Fantasy', href: '#', icon: Gamepad2 },
+  { label: 'Promos', href: '#', icon: Gift },
 ];
 
-const SUB_NAV = [
-  { href: '#', label: 'LOTTERY', icon: <Ticket className="h-4 w-4 text-pink-500" /> },
-  { href: '#', label: 'CRASH GAMES', icon: <Rocket className="h-4 w-4 text-orange-500" /> },
-  { href: '#', label: 'ROULETTE', icon: <CircleDot className="h-4 w-4 text-red-500" /> },
-  { href: '#', label: 'BLACKJACK', icon: <WalletCards className="h-4 w-4 text-slate-300" /> },
-  { href: '#', label: 'BACCARAT', icon: <Diamond className="h-4 w-4 text-blue-400" /> },
-  { href: '#', label: 'DRAGON TIGER', icon: <Crown className="h-4 w-4 text-yellow-500" /> },
-  { href: '#', label: 'TEEN PATTI', icon: <Coins className="h-4 w-4 text-red-600" /> },
-  { href: '#', label: 'POKER', icon: <Spade className="h-4 w-4 text-slate-400" /> },
-  { href: '#', label: 'GAME SHOWS', icon: <Tv className="h-4 w-4 text-gray-300" /> },
-  { href: '#', label: 'ANDAR BAHAR', icon: <HeartHandshake className="h-4 w-4 text-red-400" /> },
+const CATEGORIES = [
+  { label: 'Lottery', href: '#', icon: Ticket, color: 'text-pink-400' },
+  { label: 'Crash', href: '#', icon: Rocket, color: 'text-brand-400' },
+  { label: 'Roulette', href: '#', icon: CircleDot, color: 'text-red-400' },
+  { label: 'Blackjack', href: '#', icon: WalletCards, color: 'text-slate-200' },
+  { label: 'Baccarat', href: '#', icon: Diamond, color: 'text-sky-400' },
+  { label: 'Dragon', href: '#', icon: Crown, color: 'text-brand-300' },
+  { label: 'Teen Patti', href: '#', icon: Coins, color: 'text-amber-400' },
+  { label: 'Poker', href: '#', icon: Spade, color: 'text-accent-300' },
+  { label: 'Shows', href: '#', icon: Tv, color: 'text-emerald-400' },
+  { label: 'Andar', href: '#', icon: HeartHandshake, color: 'text-rose-400' },
 ];
+
+const MOBILE_TABS = [
+  { label: 'Home', href: '/', icon: Home },
+  { label: 'Casino', href: '#', icon: Dices },
+  { label: 'Sports', href: '#', icon: Trophy },
+  { label: 'Promos', href: '#', icon: Gift },
+  { label: 'Account', href: '/login', icon: User },
+];
+
+const fire = (title, text, icon = 'info') =>
+  Swal.fire({
+    title,
+    text,
+    icon,
+    background: '#15131f',
+    color: '#fff',
+    confirmButtonColor: '#ff9800',
+    timer: icon === 'info' ? 1100 : undefined,
+    showConfirmButton: icon !== 'info',
+  });
+
+function RailItem({ item }) {
+  const Icon = item.icon;
+  const onClick = (e) => {
+    if (item.href === '#') {
+      e.preventDefault();
+      fire(item.label, `Opening ${item.label}…`);
+    }
+  };
+  return (
+    <Link
+      href={item.href}
+      onClick={onClick}
+      title={item.label}
+      className="group flex flex-col items-center gap-1 rounded-xl py-2 text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-white"
+    >
+      <span className="grid h-9 w-9 place-items-center rounded-xl border border-transparent transition group-hover:border-white/10 group-hover:bg-surface-800">
+        <Icon className={`h-[18px] w-[18px] ${item.color ?? ''}`} />
+      </span>
+      <span className="text-[0.55rem] font-semibold tracking-wide">{item.label}</span>
+    </Link>
+  );
+}
 
 export function Header() {
-  const handleNavClick = (e, label) => {
-    e.preventDefault();
-    Swal.fire({
-      title: 'Navigation',
-      text: `Navigating to ${label}...`,
-      icon: 'info',
-      background: '#1a1a1a',
-      color: '#fff',
-      confirmButtonColor: '#ff9800',
-      timer: 1500,
-      showConfirmButton: false,
-    });
-  };
-
-  const handleDemoPlay = () => {
-    Swal.fire({
-      title: 'Demo Play',
-      text: 'Initializing demo account with virtual funds...',
-      icon: 'success',
-      background: '#1a1a1a',
-      color: '#fff',
-      confirmButtonColor: '#ff9800',
-    });
-  };
-
   return (
-    <header className="sticky top-0 z-50 flex flex-col bg-surface-900 border-b border-surface-700">
-      {/* Top Header */}
-      <div className="flex items-center justify-between px-4 py-3 xl:px-6">
-        <div className="flex items-center gap-8">
-          <Link href="/" className="flex items-center gap-1">
-            {/* Placeholder logo matching DOLLARA style */}
-            <div className="flex flex-col items-start leading-none tracking-tighter">
-              <span className="text-2xl font-black italic text-brand-500">DOLLARA</span>
-              <span className="text-[0.5rem] uppercase text-slate-400 tracking-widest mt-0.5">Play. Win. Repeat.</span>
-            </div>
-          </Link>
+    <>
+      {/* ===== Desktop: fixed vertical side rail ===== */}
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[92px] flex-col border-r border-white/[0.06] bg-surface-950/90 backdrop-blur-xl lg:flex">
+        <Link href="/" className="flex shrink-0 items-center justify-center py-4">
+          <span className="relative grid h-11 w-11 place-items-center">
+            <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-brand-400 to-accent-500 blur-[7px] opacity-60" />
+            <span className="relative grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-brand-400 via-brand-500 to-accent-600 shadow-glow">
+              <Sparkles className="h-5 w-5 text-surface-950" strokeWidth={2.5} />
+            </span>
+          </span>
+        </Link>
 
-          <nav className="hidden lg:flex items-center gap-6 text-sm font-semibold text-slate-300">
-            {TOP_NAV.map((item) => (
-              <a 
-                key={item.label} 
-                href={item.href} 
-                onClick={(e) => handleNavClick(e, item.label)}
-                className="hover:text-white transition-colors cursor-pointer"
-              >
-                {item.label}
-              </a>
-            ))}
-          </nav>
+        <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-3 scrollbar-hide">
+          {PRIMARY.map((item) => (
+            <RailItem key={item.label} item={item} />
+          ))}
+          <div className="mx-3 my-2 border-t border-white/[0.06]" />
+          {CATEGORIES.map((item) => (
+            <RailItem key={item.label} item={item} />
+          ))}
+        </nav>
+
+        <div className="shrink-0 space-y-1 border-t border-white/[0.06] px-2 py-3">
+          <RailItem item={{ label: 'Support', href: '/support/chat', icon: LifeBuoy }} />
+          <RailItem item={{ label: 'Settings', href: '#', icon: Settings }} />
+        </div>
+      </aside>
+
+      {/* ===== Top utility bar (desktop offset by rail; full width on mobile) ===== */}
+      <header className="fixed inset-x-0 top-0 z-30 flex h-16 items-center gap-3 border-b border-white/[0.06] bg-surface-900/80 px-4 backdrop-blur-xl lg:left-[92px]">
+        {/* Mobile logo */}
+        <Link href="/" className="flex items-center gap-2 lg:hidden">
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-accent-600 shadow-glow">
+            <Sparkles className="h-4 w-4 text-surface-950" strokeWidth={2.5} />
+          </span>
+          <span className="font-display text-lg font-extrabold">
+            <span className="text-gradient-gold">DOLL</span>
+            <span className="text-white">ARA</span>
+          </span>
+        </Link>
+
+        {/* Search */}
+        <div className="relative ml-auto hidden w-full max-w-md items-center sm:flex lg:ml-0">
+          <Search className="absolute left-3.5 h-4 w-4 text-slate-400" />
+          <input
+            placeholder="Search 2,000+ games, sports & providers…"
+            className="w-full rounded-xl border border-white/10 bg-surface-950/60 py-2.5 pl-10 pr-4 text-sm text-white placeholder-slate-500 transition-colors focus:border-brand-400 focus:outline-none"
+          />
         </div>
 
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={handleDemoPlay}
-            className="hidden sm:flex items-center gap-2 rounded border border-surface-600 px-4 py-2 text-xs font-bold text-white hover:bg-surface-800 transition"
+        <div className="ml-auto flex items-center gap-2.5 lg:ml-0">
+          {/* Live online */}
+          <span className="hidden items-center gap-2 rounded-full border border-white/10 bg-surface-800/60 px-3 py-1.5 xl:flex">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+            </span>
+            <span className="text-xs font-semibold text-slate-300">
+              <span className="text-white">12,480</span> online
+            </span>
+          </span>
+
+          {/* Wallet / balance pill */}
+          <button
+            onClick={() => fire('Wallet', 'Add funds via UPI, cards or wallets.', 'success')}
+            className="hidden items-center gap-2 rounded-full border border-white/10 bg-surface-800/60 py-1 pl-3 pr-1 md:flex"
           >
-            <Diamond className="h-3.5 w-3.5 text-slate-300" />
-            DEMO PLAY
+            <Wallet className="h-4 w-4 text-brand-400" />
+            <span className="text-sm font-bold text-white">₹0.00</span>
+            <span className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-surface-950">
+              <Plus className="h-4 w-4" strokeWidth={3} />
+            </span>
           </button>
+
           <Link
             href="/login"
-            className="hidden sm:inline-flex rounded border border-surface-600 px-6 py-2 text-xs font-bold text-white hover:bg-surface-800 transition"
+            className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-white transition hover:border-brand-400/50 hover:bg-surface-800"
           >
             LOG IN
           </Link>
-          <button
-            onClick={(e) => handleNavClick(e, 'Register')}
-            className="rounded bg-brand-500 px-6 py-2 text-xs font-bold text-surface-900 hover:bg-brand-400 transition"
+          <Link
+            href="/register"
+            className="rounded-xl bg-gradient-to-r from-brand-400 to-brand-600 px-4 py-2 text-xs font-bold text-surface-950 shadow-glow transition hover:from-brand-300 hover:to-brand-500"
           >
             REGISTER
-          </button>
-          <button className="rounded p-2 text-slate-300 hover:bg-surface-800 hover:text-brand-500 transition border border-surface-600/50">
-            <Settings className="h-5 w-5" />
-          </button>
-          <button className="rounded p-2 text-slate-300 hover:bg-surface-800 transition border border-surface-600/50">
-            <Menu className="h-5 w-5" />
-          </button>
+          </Link>
         </div>
-      </div>
+      </header>
 
-      {/* Sub Navigation */}
-      <div className="border-t border-surface-700 bg-surface-900/50">
-        <div className="mx-auto flex gap-6 overflow-x-auto px-4 py-3 xl:px-6 scrollbar-hide">
-          {SUB_NAV.map((item) => (
-            <a
+      {/* ===== Mobile: fixed bottom tab bar ===== */}
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-white/[0.06] bg-surface-950/90 backdrop-blur-xl lg:hidden">
+        {MOBILE_TABS.map((item, i) => {
+          const Icon = item.icon;
+          const isCenter = i === 2;
+          const onClick = (e) => {
+            if (item.href === '#') {
+              e.preventDefault();
+              fire(item.label, `Opening ${item.label}…`);
+            }
+          };
+          return (
+            <Link
               key={item.label}
               href={item.href}
-              onClick={(e) => handleNavClick(e, item.label)}
-              className="flex whitespace-nowrap items-center gap-2 text-xs font-bold text-slate-400 hover:text-white transition-colors uppercase tracking-wide cursor-pointer"
+              onClick={onClick}
+              className="flex flex-1 flex-col items-center justify-center gap-1 py-2.5 text-slate-400 transition-colors hover:text-white"
             >
-              {item.icon}
-              {item.label}
-            </a>
-          ))}
-        </div>
-      </div>
-    </header>
+              <span
+                className={
+                  isCenter
+                    ? 'grid h-10 w-10 -translate-y-3 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-surface-950 shadow-glow'
+                    : 'grid h-6 w-6 place-items-center'
+                }
+              >
+                <Icon className={isCenter ? 'h-5 w-5' : 'h-5 w-5'} />
+              </span>
+              <span className={`text-[0.6rem] font-semibold ${isCenter ? '-mt-2' : ''}`}>{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+    </>
   );
 }

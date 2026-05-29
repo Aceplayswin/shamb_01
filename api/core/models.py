@@ -13,6 +13,7 @@ class User(models.Model):
         KYC = 'kyc', 'KYC'
 
     class KycStatus(models.TextChoices):
+        
         NONE = 'none', 'None'
         PENDING = 'pending', 'Pending'
         VERIFIED = 'verified', 'Verified'

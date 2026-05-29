@@ -3,24 +3,41 @@
 import { useState } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { Play, ChevronDown, Search, ChevronLeft, ChevronRight, Zap, X } from 'lucide-react';
+import {
+  Play,
+  ChevronDown,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Zap,
+  X,
+  Flame,
+  Trophy,
+  Dices,
+  Sparkles,
+  ArrowRight,
+  ShieldCheck,
+  Clock,
+  CreditCard,
+  UserPlus,
+} from 'lucide-react';
 import Swal from 'sweetalert2';
 import 'sweetalert2/dist/sweetalert2.min.css';
 
 const PROVIDERS = ['MAC88', '18PEACHES', 'VELIPLAY', 'AVIATRIX', 'INOUT', 'GALAXSYS', 'SMARTSOFT', '2J', 'TURBOGAMES WORLD', 'AURA GAMING', 'LOTTO', 'PGGAMING', 'ODIN COCKFIGHTING'];
 
 const LIVE_SPORTS = [
-  { id: 's1', name: 'Lucky Sports', provider: 'MAC88' },
-  { id: 's2', name: 'E-Sports', provider: 'VELIPLAY' },
-  { id: 's3', name: 'Football', provider: '18PEACHES' },
+  { id: 's1', name: 'Lucky Sports', provider: 'MAC88', tag: 'LIVE' },
+  { id: 's2', name: 'E-Sports', provider: 'VELIPLAY', tag: 'LIVE' },
+  { id: 's3', name: 'Football', provider: '18PEACHES', tag: 'LIVE' },
 ];
 
 const CASINO_GAMES = [
   { id: 'c1', name: 'Microgaming', provider: 'MAC88' },
-  { id: 'c2', name: 'Aviator', provider: 'AVIATRIX' },
+  { id: 'c2', name: 'Aviator', provider: 'AVIATRIX', tag: 'HOT' },
   { id: 'c3', name: 'Live Dealer', provider: 'INOUT' },
   { id: 'c4', name: 'Mines', provider: 'GALAXSYS' },
-  { id: 'c5', name: 'Crazy Time', provider: 'SMARTSOFT' },
+  { id: 'c5', name: 'Crazy Time', provider: 'SMARTSOFT', tag: 'HOT' },
   { id: 'c6', name: 'Go Rush', provider: '2J' },
 ];
 
@@ -44,26 +61,47 @@ const TRENDING_SLOTS = [
 
 const ALL_GAMES = [...LIVE_SPORTS, ...CASINO_GAMES, ...TRENDING_GAMES, ...TRENDING_SLOTS];
 
-const PARTNERS = ['Caleta', 'CQ9', 'Endorphina', 'Evolution', 'Evoplay', 'PG Soft', 'Pragmatic Play', 'Saba Sports'];
+const PARTNERS = ['Caleta', 'CQ9', 'Endorphina', 'Evolution', 'Evoplay', 'PG Soft', 'Pragmatic', 'Saba Sports'];
 
-function SectionTitle({ title, icon, onSeeAll }) {
+// Per-section theming so the page reads as designed rather than a stock template.
+const THEMES = {
+  sports: { ring: 'from-emerald-400/40', glow: 'shadow-[0_18px_50px_-22px_rgba(16,210,122,0.7)]', dot: 'bg-emerald-400', chip: 'text-emerald-300' },
+  casino: { ring: 'from-brand-400/40', glow: 'shadow-[0_18px_50px_-22px_rgba(255,152,0,0.7)]', dot: 'bg-brand-400', chip: 'text-brand-300' },
+  trending: { ring: 'from-rose-400/40', glow: 'shadow-[0_18px_50px_-22px_rgba(244,63,94,0.7)]', dot: 'bg-rose-400', chip: 'text-rose-300' },
+  slots: { ring: 'from-accent-400/40', glow: 'shadow-[0_18px_50px_-22px_rgba(124,77,255,0.7)]', dot: 'bg-accent-400', chip: 'text-accent-300' },
+};
+
+const ACCENT_TEXT = {
+  brand: 'text-brand-400',
+  emerald: 'text-emerald-400',
+  rose: 'text-rose-400',
+  accent: 'text-accent-400',
+};
+
+function SectionHeader({ title, kicker, Icon, onSeeAll, accent = 'brand' }) {
   return (
-    <div className="flex items-center justify-between mb-4">
-      <h2 className="text-lg font-bold text-white flex items-center gap-2 uppercase tracking-wide">
-        <span className="w-1 h-5 bg-brand-500 rounded-sm"></span>
-        {icon}
-        {title}
-      </h2>
+    <div className="mb-5 flex items-end justify-between gap-4">
+      <div className="flex items-center gap-3">
+        <span className={`grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-surface-800 ${ACCENT_TEXT[accent]}`}>
+          <Icon className="h-5 w-5" />
+        </span>
+        <div>
+          {kicker && (
+            <p className="text-[0.6rem] font-bold uppercase tracking-[0.25em] text-slate-500">{kicker}</p>
+          )}
+          <h2 className="font-display text-xl font-bold text-white">{title}</h2>
+        </div>
+      </div>
       <div className="flex items-center gap-2">
-        <button className="p-1 rounded-full bg-surface-800 text-slate-400 hover:text-white hover:bg-surface-700 transition">
-          <ChevronLeft className="w-5 h-5" />
+        <button className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 text-slate-400 transition hover:bg-surface-800 hover:text-white">
+          <ChevronLeft className="h-4 w-4" />
         </button>
-        <button className="p-1 rounded-full bg-surface-800 text-slate-400 hover:text-white hover:bg-surface-700 transition">
-          <ChevronRight className="w-5 h-5" />
+        <button className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 text-slate-400 transition hover:bg-surface-800 hover:text-white">
+          <ChevronRight className="h-4 w-4" />
         </button>
         {onSeeAll && (
-          <button className="ml-2 px-3 py-1 bg-brand-500 text-surface-900 text-xs font-bold rounded hover:bg-brand-400 transition flex items-center gap-1">
-            <Search className="w-3 h-3" /> SEE ALL
+          <button className="ml-1 hidden items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-bold text-slate-300 transition hover:border-brand-400/50 hover:text-white sm:flex">
+            See all <ArrowRight className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
@@ -71,31 +109,52 @@ function SectionTitle({ title, icon, onSeeAll }) {
   );
 }
 
-function GameCard({ item, onPlay, heightClass = 'h-48' }) {
+function GameCard({ item, onPlay, theme = THEMES.casino, rank }) {
   return (
-    <div
+    <button
       onClick={() => onPlay(item)}
-      className={`shrink-0 snap-start rounded-xl bg-surface-800 border border-surface-700 overflow-hidden relative group cursor-pointer w-40 sm:w-48 md:w-56 ${heightClass}`}
+      className={`group relative flex aspect-[3/4] w-44 shrink-0 snap-start flex-col justify-end overflow-hidden rounded-2xl border border-white/[0.07] bg-surface-800 text-left transition-all duration-300 hover:-translate-y-1 hover:border-white/20 ${theme.glow} sm:w-48`}
     >
-      <div className={`absolute inset-0 bg-gradient-to-br from-surface-700 to-surface-900 flex flex-col items-center justify-center`}>
-         <span className="text-white/80 font-bold text-center p-2 text-lg">{item.name}</span>
-         <span className="text-brand-500/80 font-bold text-xs mt-1 uppercase tracking-wider">{item.provider}</span>
+      {/* Art placeholder — themed gradient mesh */}
+      <div className={`absolute inset-0 bg-gradient-to-br ${theme.ring} via-surface-800 to-surface-950`} />
+      <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-white/[0.04] blur-2xl transition group-hover:bg-white/[0.08]" />
+
+      {/* Top badges */}
+      <div className="absolute left-3 right-3 top-3 flex items-center justify-between">
+        {item.tag ? (
+          <span className={`flex items-center gap-1 rounded-full bg-surface-950/70 px-2 py-0.5 text-[0.55rem] font-bold uppercase tracking-wider backdrop-blur ${theme.chip}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${theme.dot} ${item.tag === 'LIVE' ? 'animate-pulse' : ''}`} />
+            {item.tag}
+          </span>
+        ) : (
+          <span />
+        )}
+        {rank && (
+          <span className="font-display text-2xl font-black text-white/15">{rank}</span>
+        )}
       </div>
-      
-      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-         <button className="bg-brand-500 rounded-full p-3 shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
-            <Play className="w-6 h-6 text-surface-900 fill-current" />
-         </button>
+
+      {/* Title block */}
+      <div className="relative z-10 p-3.5">
+        <p className={`text-[0.6rem] font-bold uppercase tracking-widest ${theme.chip}`}>{item.provider}</p>
+        <h3 className="mt-0.5 font-display text-base font-bold leading-tight text-white">{item.name}</h3>
       </div>
-    </div>
+
+      {/* Hover play overlay */}
+      <div className="absolute inset-0 z-20 flex items-center justify-center bg-surface-950/55 opacity-0 backdrop-blur-[2px] transition-opacity duration-300 group-hover:opacity-100">
+        <span className="flex h-14 w-14 scale-90 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-accent-500 shadow-glow transition-transform duration-300 group-hover:scale-100">
+          <Play className="h-6 w-6 fill-surface-950 text-surface-950" />
+        </span>
+      </div>
+    </button>
   );
 }
 
-function Carousel({ items, heightClass = 'h-48', onPlay }) {
+function Carousel({ items, onPlay, theme, ranked }) {
   return (
-    <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-4">
-      {items.map((item) => (
-        <GameCard key={item.id} item={item} onPlay={onPlay} heightClass={heightClass} />
+    <div className="edge-fade-x flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+      {items.map((item, i) => (
+        <GameCard key={item.id} item={item} onPlay={onPlay} theme={theme} rank={ranked ? i + 1 : undefined} />
       ))}
     </div>
   );
@@ -103,23 +162,18 @@ function Carousel({ items, heightClass = 'h-48', onPlay }) {
 
 function Accordion({ question, answer, isOpen, onClick }) {
   return (
-    <div className="bg-surface-800 rounded-lg border border-surface-700 overflow-hidden">
-      <button
-        onClick={onClick}
-        className="w-full flex items-center justify-between p-4 text-left hover:bg-surface-700/50 transition-colors"
-      >
-        <span className="font-bold text-sm text-white flex items-center gap-2 uppercase tracking-wide">
-          <span className="w-2 h-2 rounded-full bg-brand-500"></span>
+    <div className={`overflow-hidden rounded-2xl border transition-colors ${isOpen ? 'border-brand-400/40 bg-surface-800' : 'border-white/[0.07] bg-surface-800/60'}`}>
+      <button onClick={onClick} className="flex w-full items-center justify-between gap-4 p-5 text-left">
+        <span className="flex items-center gap-3 font-semibold text-white">
+          <span className={`h-2 w-2 rounded-full transition-colors ${isOpen ? 'bg-brand-400' : 'bg-slate-600'}`} />
           {question}
         </span>
-        <div className={`p-1 rounded bg-surface-700 transition-transform ${isOpen ? 'rotate-180' : ''}`}>
-           <ChevronDown className="w-4 h-4 text-slate-300" />
-        </div>
+        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-surface-700 transition-transform ${isOpen ? 'rotate-180' : ''}`}>
+          <ChevronDown className="h-4 w-4 text-slate-300" />
+        </span>
       </button>
       {isOpen && (
-        <div className="p-4 pt-0 text-sm text-slate-400 border-t border-surface-700 bg-surface-800/50">
-          <p className="mt-4">{answer}</p>
-        </div>
+        <div className="px-5 pb-5 pl-10 text-sm leading-relaxed text-slate-400">{answer}</div>
       )}
     </div>
   );
@@ -132,138 +186,169 @@ export default function HomePage() {
 
   const handlePlayGame = (game) => {
     Swal.fire({
-      title: 'Ready to Play?',
-      text: `You are going to play ${game.name}.`,
+      title: 'Ready to play?',
+      html: `<p style="margin:0;color:#94a3b8">Launching <b style="color:#fff">${game.name}</b> by ${game.provider}</p>`,
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: '#ff9800',
-      cancelButtonColor: '#333333',
-      confirmButtonText: 'Yes, Play Now!',
-      background: '#1a1a1a',
+      cancelButtonColor: '#211d30',
+      confirmButtonText: 'Play now',
+      cancelButtonText: 'Cancel',
+      background: '#15131f',
       color: '#fff',
-      customClass: {
-        popup: 'border border-surface-700 rounded-xl',
-      }
     }).then((result) => {
       if (result.isConfirmed) {
         Swal.fire({
-          title: 'Starting...',
-          text: `Launching ${game.name}!`,
+          title: 'Loading…',
+          text: `${game.name} is starting up.`,
           icon: 'success',
-          background: '#1a1a1a',
+          background: '#15131f',
           color: '#fff',
-          confirmButtonColor: '#ff9800'
+          confirmButtonColor: '#ff9800',
         });
       }
     });
   };
 
-  const filteredGames = ALL_GAMES.filter(game => {
+  const filteredGames = ALL_GAMES.filter((game) => {
     const matchesSearch = game.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesProvider = selectedProvider ? game.provider === selectedProvider : true;
     return matchesSearch && matchesProvider;
   });
 
-  // Remove duplicates for display in filtered view since some games might be in multiple lists
-  const uniqueFilteredGames = Array.from(new Map(filteredGames.map(item => [item.id, item])).values());
-
+  const uniqueFilteredGames = Array.from(new Map(filteredGames.map((item) => [item.id, item])).values());
   const isFiltering = searchQuery !== '' || selectedProvider !== null;
 
   return (
     <>
       <Header />
-      <main className="bg-surface-900 min-h-screen">
-        <div className="mx-auto max-w-[1400px] px-4 py-6 xl:px-6 space-y-8">
-          
+      <main>
+        <div className="mx-auto max-w-[1400px] space-y-12 px-4 py-6 xl:px-6">
           {!isFiltering && (
             <>
-              {/* Hero Banners */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-red-900 to-black p-8 sm:p-12 border border-surface-700 min-h-[300px] flex flex-col justify-center">
-                  <h2 className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-yellow-600 italic">
-                    WELCOME BONUS
-                  </h2>
-                  <h3 className="text-6xl sm:text-7xl font-black text-yellow-500 italic drop-shadow-lg mt-2">
-                    5%
-                  </h3>
-                  <p className="mt-4 text-yellow-500 font-bold tracking-widest text-sm uppercase">On your first deposit!</p>
-                  <h4 className="text-5xl sm:text-6xl font-black text-white italic drop-shadow-md mt-2">
-                    UP TO <span className="text-yellow-500">₹5000</span>
-                  </h4>
+              {/* Bento hero — one feature panel + a stacked side column */}
+              <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                {/* Primary welcome panel */}
+                <div className="ring-grad relative flex min-h-[320px] flex-col justify-between overflow-hidden rounded-3xl bg-mesh-amber p-8 sm:p-10 lg:col-span-2">
+                  <div className="pointer-events-none absolute -right-10 top-1/2 h-64 w-64 -translate-y-1/2 rounded-full bg-brand-500/20 blur-3xl" />
+                  <div className="relative">
+                    <span className="inline-flex items-center gap-2 rounded-full border border-brand-400/30 bg-brand-500/10 px-3 py-1 text-xs font-bold uppercase tracking-widest text-brand-300">
+                      <Sparkles className="h-3.5 w-3.5" /> Welcome offer
+                    </span>
+                    <h1 className="mt-5 font-display text-4xl font-black leading-[0.95] text-white sm:text-6xl">
+                      Get a <span className="text-gradient-gold">5% boost</span>
+                      <br />
+                      on your first deposit
+                    </h1>
+                    <p className="mt-4 max-w-md text-sm text-slate-300/80">
+                      Sign up in seconds and claim up to{' '}
+                      <span className="font-bold text-brand-300">₹5,000</span> in instant bonus credits — no wagering tricks.
+                    </p>
+                  </div>
+                  <div className="relative mt-8 flex flex-wrap items-center gap-3">
+                    <a
+                      href="/register"
+                      className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-400 to-brand-600 px-6 py-3 text-sm font-bold text-surface-950 shadow-glow transition hover:from-brand-300 hover:to-brand-500"
+                    >
+                      Claim ₹5,000 <ArrowRight className="h-4 w-4" />
+                    </a>
+                    <span className="text-xs font-medium text-slate-400">⚡ Credited instantly</span>
+                  </div>
                 </div>
 
-                <div className="relative overflow-hidden rounded-xl bg-gradient-to-l from-yellow-900 to-black p-8 sm:p-12 border border-surface-700 min-h-[300px] flex flex-col justify-center items-end text-right">
-                  <h2 className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 to-yellow-500 italic">
-                    DEPOSIT BONUS
-                  </h2>
-                  <p className="mt-4 text-yellow-500 font-bold tracking-widest text-sm uppercase">Deposit now and get extra</p>
-                  <h3 className="text-6xl sm:text-7xl font-black text-yellow-500 italic drop-shadow-lg mt-2">
-                    100/-
-                  </h3>
-                  <p className="text-yellow-600 font-black tracking-widest text-lg uppercase mt-2">No Wagering</p>
+                {/* Side stack */}
+                <div className="flex flex-col gap-4">
+                  <div className="relative flex flex-1 flex-col justify-center overflow-hidden rounded-3xl border border-white/[0.07] bg-mesh-violet p-6">
+                    <div className="pointer-events-none absolute -right-6 -top-6 h-32 w-32 rounded-full bg-accent-500/25 blur-2xl" />
+                    <p className="text-xs font-bold uppercase tracking-widest text-accent-300">Deposit bonus</p>
+                    <p className="mt-2 font-display text-5xl font-black text-white">
+                      ₹100<span className="text-2xl text-accent-300">/-</span>
+                    </p>
+                    <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-slate-400">Extra · No wagering</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="rounded-3xl border border-white/[0.07] bg-surface-800/70 p-5">
+                      <Trophy className="h-5 w-5 text-brand-400" />
+                      <p className="mt-3 font-display text-2xl font-black text-white">₹8.4Cr</p>
+                      <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-500">Paid this week</p>
+                    </div>
+                    <div className="rounded-3xl border border-white/[0.07] bg-surface-800/70 p-5">
+                      <Dices className="h-5 w-5 text-emerald-400" />
+                      <p className="mt-3 font-display text-2xl font-black text-white">2,000+</p>
+                      <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-500">Live games</p>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              </section>
 
               {/* Ticker */}
-              <div className="flex bg-surface-800 rounded-lg overflow-hidden border border-surface-700 h-10 items-center">
-                <div className="bg-brand-500 h-full px-4 flex items-center justify-center font-bold text-xs uppercase text-surface-900 shrink-0 gap-2">
-                   <Zap className="w-4 h-4" /> LATEST NEWS
+              <div className="flex items-center overflow-hidden rounded-2xl border border-white/[0.07] bg-surface-800/60">
+                <div className="flex h-11 shrink-0 items-center gap-2 bg-gradient-to-r from-brand-400 to-brand-600 px-4 text-xs font-bold uppercase text-surface-950">
+                  <Zap className="h-4 w-4" /> Latest
                 </div>
-                <div className="flex-1 overflow-hidden relative">
-                  <div className="whitespace-nowrap animate-[marquee_20s_linear_infinite] text-xs font-bold text-slate-300 tracking-wide">
-                    LIVE CASINO GAMES LAUNCHING IN 7 DAYS • MEGA SLOTS TOURNAMENT STARTS IN 10 DAYS • WEEKLY CASHBACK UPDATE VERSION 2.0 RELEASING SOON
+                <div className="relative flex-1 overflow-hidden">
+                  <div className="flex w-max animate-marquee whitespace-nowrap text-xs font-semibold tracking-wide text-slate-300">
+                    {[0, 1].map((dup) => (
+                      <span key={dup} className="flex items-center">
+                        <span className="px-6">🎰 Live casino games launching in 7 days</span>
+                        <span className="px-6">🏆 Mega slots tournament starts in 10 days</span>
+                        <span className="px-6">💸 Weekly cashback v2.0 releasing soon</span>
+                      </span>
+                    ))}
                   </div>
                 </div>
               </div>
             </>
           )}
 
-          {/* Search/Filter Bar */}
-          <div className="bg-surface-800 rounded-xl p-4 border border-surface-700 flex flex-col sm:flex-row items-center justify-between gap-4 sticky top-0 z-10">
-             <div className="flex items-center gap-4 text-white w-full sm:w-auto">
-                <span className="font-bold uppercase tracking-widest text-sm whitespace-nowrap hidden sm:block">PREMIER <span className="text-brand-500">BETTING</span> EXPERIENCE</span>
-                <span className="h-px w-12 bg-white/20 hidden sm:block"></span>
-                <span className="font-bold text-xl tracking-tighter italic"><span className="text-brand-500">DOLLARA</span></span>
-             </div>
-             <div className="relative w-full sm:w-72 flex items-center">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="Search games..." 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-surface-900 border border-surface-700 rounded-lg p-2.5 pl-10 pr-10 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 transition-colors"
-                />
-                {searchQuery && (
-                  <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <X className="w-4 h-4 text-slate-400 hover:text-white" />
-                  </button>
-                )}
-             </div>
+          {/* Search + brand strip */}
+          <div className="glass sticky top-[4.5rem] z-20 flex flex-col items-center justify-between gap-4 p-4 sm:flex-row">
+            <div className="flex items-center gap-3 text-white">
+              <span className="hidden text-xs font-bold uppercase tracking-[0.2em] text-slate-400 sm:block">
+                Premier <span className="text-brand-400">betting</span> experience
+              </span>
+              <span className="hidden h-4 w-px bg-white/15 sm:block" />
+              <span className="font-display text-lg font-extrabold italic text-gradient-gold">DOLLARA</span>
+            </div>
+            <div className="relative flex w-full items-center sm:w-80">
+              <Search className="absolute left-3.5 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search 2,000+ games…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-surface-950/60 p-2.5 pl-10 pr-10 text-sm text-white placeholder-slate-500 transition-colors focus:border-brand-400 focus:outline-none"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-3.5">
+                  <X className="h-4 w-4 text-slate-400 hover:text-white" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Providers */}
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <SectionTitle title="GAME PROVIDERS" />
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Game Providers</h3>
               {selectedProvider && (
-                <button 
+                <button
                   onClick={() => setSelectedProvider(null)}
-                  className="text-xs text-brand-500 hover:text-brand-400 font-bold uppercase tracking-wider flex items-center gap-1"
+                  className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-brand-400 hover:text-brand-300"
                 >
-                  <X className="w-3 h-3" /> Clear Filter
+                  <X className="h-3 w-3" /> Clear
                 </button>
               )}
             </div>
-            <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
-              {PROVIDERS.map(p => (
-                <button 
-                  key={p} 
+            <div className="edge-fade-x flex gap-2.5 overflow-x-auto pb-1 scrollbar-hide">
+              {PROVIDERS.map((p) => (
+                <button
+                  key={p}
                   onClick={() => setSelectedProvider(p === selectedProvider ? null : p)}
-                  className={`shrink-0 px-6 py-2 rounded-lg border text-xs font-bold uppercase tracking-wider transition ${
-                    p === selectedProvider 
-                      ? 'bg-brand-500 border-brand-500 text-surface-900' 
-                      : 'border-surface-700 bg-surface-800 hover:bg-surface-700 text-slate-300'
+                  className={`shrink-0 rounded-full border px-5 py-2 text-xs font-bold uppercase tracking-wider transition ${
+                    p === selectedProvider
+                      ? 'border-brand-400 bg-gradient-to-r from-brand-400 to-brand-600 text-surface-950 shadow-glow'
+                      : 'border-white/10 bg-surface-800/60 text-slate-300 hover:border-white/20 hover:text-white'
                   }`}
                 >
                   {p}
@@ -274,106 +359,112 @@ export default function HomePage() {
 
           {isFiltering ? (
             <section className="min-h-[400px]">
-               <h2 className="text-lg font-bold text-white mb-6 uppercase tracking-wide">
-                 Search Results ({uniqueFilteredGames.length})
-               </h2>
-               {uniqueFilteredGames.length > 0 ? (
-                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                   {uniqueFilteredGames.map(game => (
-                     <GameCard key={game.id} item={game} onPlay={handlePlayGame} heightClass="h-48 w-full" />
-                   ))}
-                 </div>
-               ) : (
-                 <div className="text-center text-slate-500 py-12">
-                   <Search className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                   <p className="text-lg font-bold">No games found.</p>
-                   <p className="text-sm mt-2">Try adjusting your search or provider filter.</p>
-                 </div>
-               )}
+              <h2 className="mb-6 font-display text-xl font-bold text-white">
+                Results <span className="text-slate-500">({uniqueFilteredGames.length})</span>
+              </h2>
+              {uniqueFilteredGames.length > 0 ? (
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                  {uniqueFilteredGames.map((game) => (
+                    <div key={game.id} className="flex justify-center">
+                      <GameCard item={game} onPlay={handlePlayGame} />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-16 text-center text-slate-500">
+                  <Search className="mx-auto mb-4 h-12 w-12 opacity-20" />
+                  <p className="text-lg font-bold text-slate-300">No games found</p>
+                  <p className="mt-2 text-sm">Try a different search or provider filter.</p>
+                </div>
+              )}
             </section>
           ) : (
             <>
-              {/* Carousels */}
               <section>
-                <SectionTitle title="LIVE SPORTS" icon="⚽" onSeeAll />
-                <Carousel items={LIVE_SPORTS} heightClass="h-48 md:h-64" onPlay={handlePlayGame} />
+                <SectionHeader title="Live Sports" kicker="In play now" Icon={Trophy} accent="emerald" onSeeAll />
+                <Carousel items={LIVE_SPORTS} onPlay={handlePlayGame} theme={THEMES.sports} />
               </section>
 
               <section>
-                <SectionTitle title="CASINO (PROVIDER LOBBY)" icon="🔴" onSeeAll />
-                <Carousel items={CASINO_GAMES} heightClass="h-48" onPlay={handlePlayGame} />
+                <SectionHeader title="Casino Lobby" kicker="Top providers" Icon={Dices} accent="brand" onSeeAll />
+                <Carousel items={CASINO_GAMES} onPlay={handlePlayGame} theme={THEMES.casino} />
               </section>
 
               <section>
-                <SectionTitle title="TRENDING GAMES" icon="🔥" onSeeAll />
-                <Carousel items={TRENDING_GAMES} heightClass="h-48 md:h-56" onPlay={handlePlayGame} />
+                <SectionHeader title="Trending Games" kicker="Player favourites" Icon={Flame} accent="rose" onSeeAll />
+                <Carousel items={TRENDING_GAMES} onPlay={handlePlayGame} theme={THEMES.trending} ranked />
               </section>
 
               <section>
-                <SectionTitle title="TRENDING SLOT" icon="🎰" onSeeAll />
-                <Carousel items={TRENDING_SLOTS} heightClass="h-48 md:h-56" onPlay={handlePlayGame} />
+                <SectionHeader title="Trending Slots" kicker="Big multipliers" Icon={Sparkles} accent="accent" onSeeAll />
+                <Carousel items={TRENDING_SLOTS} onPlay={handlePlayGame} theme={THEMES.slots} ranked />
               </section>
 
-              {/* Partnerships */}
-              <section className="py-8">
-                <div className="text-center mb-8">
-                  <h2 className="text-xs tracking-[0.2em] font-bold text-slate-500 uppercase mb-2">Worldwide Partnerships</h2>
+              {/* Why choose — feature row */}
+              <section>
+                <div className="mb-6">
+                  <p className="text-[0.6rem] font-bold uppercase tracking-[0.25em] text-slate-500">Why we're different</p>
+                  <h2 className="font-display text-2xl font-bold text-white">
+                    Built for players who <span className="text-gradient-gold">expect more</span>
+                  </h2>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
-                   {PARTNERS.map(partner => (
-                     <div key={partner} className="bg-surface-800 border border-surface-700 rounded-xl p-4 flex flex-col items-center justify-center gap-2 aspect-video hover:bg-surface-700 transition cursor-pointer group">
-                        <span className="font-bold text-slate-300 group-hover:text-white transition">{partner}</span>
-                        <span className="text-[8px] text-slate-500 uppercase tracking-widest">Official Partner</span>
-                     </div>
-                   ))}
-                </div>
-              </section>
-
-              {/* Why Choose */}
-              <section className="py-8">
-                <h2 className="text-2xl font-bold text-white uppercase tracking-wide flex items-center gap-2 mb-2">
-                   <span className="w-1.5 h-6 bg-brand-500 rounded-sm"></span>
-                   WHY CHOOSE <span className="text-brand-500">DOLLARA?</span>
-                </h2>
-                <p className="text-xs text-slate-500 font-bold tracking-[0.2em] uppercase mb-8 ml-4">Why we're different</p>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                   {[
-                    { title: 'FAST WITHDRAWAL', icon: '🕒' },
-                    { title: 'INSTANT DEPOSIT', icon: '💳' },
-                    { title: '1-CLICK SIGNUP', icon: '👤' },
-                    { title: 'TRUSTED PLATFORM', icon: '🛡️' },
-                  ].map((feature, idx) => (
-                    <div key={idx} className="bg-surface-800 border border-surface-700 rounded-xl p-6 flex flex-col items-center text-center hover:border-brand-500/50 transition relative overflow-hidden group">
-                       <div className="absolute top-4 right-4 text-[10px] font-black text-surface-700 group-hover:text-brand-500/20 transition">
-                          0{idx + 1}
-                       </div>
-                       <div className="text-4xl mb-4 opacity-80 group-hover:opacity-100 transition group-hover:scale-110">{feature.icon}</div>
-                       <h3 className="font-bold text-white tracking-widest text-sm">{feature.title}</h3>
+                    { title: 'Fast Withdrawals', desc: 'Cash out in under 5 minutes', Icon: Clock },
+                    { title: 'Instant Deposits', desc: 'UPI, cards & wallets', Icon: CreditCard },
+                    { title: '1-Click Signup', desc: 'No paperwork to start', Icon: UserPlus },
+                    { title: 'Provably Fair', desc: 'Certified RNG & licensing', Icon: ShieldCheck },
+                  ].map((f, i) => (
+                    <div
+                      key={f.title}
+                      className="group relative overflow-hidden rounded-2xl border border-white/[0.07] bg-surface-800/60 p-6 transition hover:-translate-y-1 hover:border-brand-400/40"
+                    >
+                      <span className="absolute right-4 top-4 font-display text-3xl font-black text-white/[0.04]">0{i + 1}</span>
+                      <span className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-surface-700 to-surface-800 text-brand-400 ring-1 ring-white/10 transition group-hover:text-brand-300">
+                        <f.Icon className="h-5 w-5" />
+                      </span>
+                      <h3 className="mt-4 font-display text-base font-bold text-white">{f.title}</h3>
+                      <p className="mt-1 text-xs text-slate-400">{f.desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Partners */}
+              <section>
+                <p className="mb-6 text-center text-[0.6rem] font-bold uppercase tracking-[0.25em] text-slate-500">
+                  Worldwide partnerships
+                </p>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+                  {PARTNERS.map((partner) => (
+                    <div
+                      key={partner}
+                      className="group flex aspect-[3/2] flex-col items-center justify-center gap-1 rounded-xl border border-white/[0.06] bg-surface-800/40 transition hover:border-white/15 hover:bg-surface-800"
+                    >
+                      <span className="font-display font-bold text-slate-400 transition group-hover:text-white">{partner}</span>
+                      <span className="text-[0.5rem] uppercase tracking-[0.2em] text-slate-600">Official</span>
                     </div>
                   ))}
                 </div>
               </section>
 
               {/* FAQ */}
-              <section className="py-12 max-w-4xl mx-auto">
-                <div className="text-center mb-8">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-800 border border-surface-700 text-[10px] font-bold text-brand-500 uppercase tracking-widest mb-4">
-                     💡 Knowledge Base
-                  </div>
-                  <h2 className="text-3xl font-bold text-white uppercase tracking-wider">
-                    FREQUENTLY ASKED <span className="text-brand-500">QUESTIONS (FAQ)</span>
+              <section className="mx-auto max-w-3xl py-4">
+                <div className="mb-8 text-center">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-surface-800/60 px-3 py-1 text-[0.65rem] font-bold uppercase tracking-widest text-accent-300">
+                    <Sparkles className="h-3 w-3" /> Knowledge base
+                  </span>
+                  <h2 className="mt-4 font-display text-3xl font-bold text-white">
+                    Frequently asked <span className="text-gradient-gold">questions</span>
                   </h2>
-                  <div className="w-16 h-1 bg-brand-500 mx-auto mt-4 rounded-full"></div>
                 </div>
-
                 <div className="space-y-3">
                   {[
-                    { q: 'WHY IS THIS ONE OF THE BEST ONLINE BETTING SITES IN INDIA?', a: 'THIS IS A TRUSTED BETTING PLATFORM OFFERING FAST TRANSACTIONS AND SECURE GAMING EXPERIENCES.' },
-                    { q: 'IS ONLINE BETTING LEGAL IN INDIA?', a: 'Yes, there are no federal laws explicitly prohibiting online betting in most parts of India.' },
-                    { q: 'HOW DO I WITHDRAW MY WINNINGS?', a: 'You can instantly withdraw using your preferred payment method like UPI or bank transfer.' },
-                    { q: 'CAN I EVER WIN IN AN ONLINE CASINO?', a: 'Absolutely. We offer fair games with certified RNG (Random Number Generators).' },
-                    { q: 'IS ONLINE CASINO GAMES A SKILL OR LUCK?', a: 'It depends on the game. Slots are luck-based, while games like Poker and Blackjack involve skill.' },
+                    { q: 'Why is DOLLARA one of the best betting sites in India?', a: 'A trusted, licensed platform built around fast payouts, fair games and 24/7 human support — without the clutter of typical betting sites.' },
+                    { q: 'Is online betting legal in India?', a: 'There are no federal laws explicitly prohibiting online betting across most of India. We recommend checking your local state regulations.' },
+                    { q: 'How do I withdraw my winnings?', a: 'Withdraw instantly to UPI or your bank account. Most cash-outs complete in under five minutes.' },
+                    { q: 'Can I actually win in an online casino?', a: 'Yes. Every game uses certified RNG and published RTP so outcomes are genuinely random and verifiable.' },
+                    { q: 'Are casino games skill or luck?', a: 'It depends. Slots and crash games are luck-based, while Poker and Blackjack reward skill and strategy.' },
                   ].map((faq, idx) => (
                     <Accordion
                       key={idx}
@@ -387,7 +478,6 @@ export default function HomePage() {
               </section>
             </>
           )}
-
         </div>
       </main>
       <Footer />

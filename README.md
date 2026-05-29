@@ -152,7 +152,7 @@ npm run dev:web
 | API (REST) | http://localhost:4000 |
 | GraphQL | http://localhost:4000/graphql |
 | WebSocket | ws://localhost:4000/ws |
-| Admin UI | http://localhost:3000/admin |
+| Admin UI | http://localhost:3000/admin/login |
 
 ## Default credentials
 
@@ -161,6 +161,20 @@ npm run dev:web
 | Admin | `superadmin` | `Admin@123` |
 
 Change these before any production deployment.
+
+### Admin panel
+
+Sign in at `/admin/login`. The panel includes:
+
+- **Dashboard** — users, deposits, withdrawals, liability
+- **Users** — status, KYC, wallet adjustments
+- **Transactions** — all payment activity with filters
+- **Deposits / Withdrawals** — approve, confirm, or reject
+- **Games & Providers** — catalog CRUD
+- **Bets, Bonuses, Settings** — operations and platform config
+- **AI Calls & Staff** — call logs and admin accounts
+
+Admin auth uses a separate `admin_token` in localStorage (not the player JWT).
 
 ## API examples
 

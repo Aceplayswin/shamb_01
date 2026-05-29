@@ -10,31 +10,83 @@ module.exports = {
           200: '#ffdf88',
           300: '#ffcb4a',
           400: '#ffb218',
-          500: '#ff9800', // Primary orange from logo
+          500: '#ff9800', // Primary amber from logo
           600: '#e67e00',
           700: '#bf5d00',
           800: '#994700',
           900: '#7d3c05',
           950: '#4a1e00',
         },
+        // Secondary accent — violet. Pairs with amber for a premium, non-generic look.
+        accent: {
+          50: '#f3f0ff',
+          100: '#e9e3ff',
+          200: '#d6cbff',
+          300: '#b8a3ff',
+          400: '#9670ff',
+          500: '#7c4dff',
+          600: '#6a35f0',
+          700: '#5a26cc',
+          800: '#4a21a6',
+          900: '#3e1f85',
+          950: '#251056',
+        },
+        // Positive / live states
+        emerald: {
+          400: '#34d399',
+          500: '#10d27a',
+          600: '#06b36a',
+        },
         surface: {
-          900: '#121212', // Main background
-          800: '#1a1a1a', // Secondary background (cards, etc.)
-          700: '#242424', // Lighter borders/backgrounds
-          600: '#333333',
+          950: '#08070d', // Deepest base
+          900: '#0d0b14', // Main background (cool near-black)
+          800: '#15131f', // Cards
+          700: '#211d30', // Raised / borders
+          600: '#322c46',
         },
       },
       fontFamily: {
         sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],
         display: ['var(--font-outfit)', 'system-ui', 'sans-serif'],
       },
+      boxShadow: {
+        glow: '0 0 0 1px rgba(255,152,0,0.25), 0 10px 40px -10px rgba(255,152,0,0.45)',
+        'glow-violet': '0 0 0 1px rgba(124,77,255,0.3), 0 10px 40px -10px rgba(124,77,255,0.55)',
+        card: '0 20px 50px -20px rgba(0,0,0,0.8)',
+      },
+      backgroundImage: {
+        'mesh-amber':
+          'radial-gradient(120% 120% at 0% 0%, rgba(255,152,0,0.18) 0%, transparent 45%), radial-gradient(120% 120% at 100% 100%, rgba(124,77,255,0.16) 0%, transparent 50%)',
+        'mesh-violet':
+          'radial-gradient(120% 120% at 100% 0%, rgba(124,77,255,0.22) 0%, transparent 50%), radial-gradient(120% 120% at 0% 100%, rgba(16,210,122,0.1) 0%, transparent 55%)',
+      },
       animation: {
-        'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
+        'pulse-glow': 'pulse-glow 2.4s ease-in-out infinite',
+        marquee: 'marquee 28s linear infinite',
+        float: 'float 6s ease-in-out infinite',
+        shimmer: 'shimmer 2.5s linear infinite',
+        'fade-up': 'fade-up 0.5s ease-out both',
       },
       keyframes: {
         'pulse-glow': {
           '0%, 100%': { boxShadow: '0 0 20px rgba(255, 152, 0, 0.3)' },
           '50%': { boxShadow: '0 0 40px rgba(255, 152, 0, 0.6)' },
+        },
+        marquee: {
+          '0%': { transform: 'translateX(0)' },
+          '100%': { transform: 'translateX(-50%)' },
+        },
+        float: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-8px)' },
+        },
+        shimmer: {
+          '0%': { backgroundPosition: '-200% 0' },
+          '100%': { backgroundPosition: '200% 0' },
+        },
+        'fade-up': {
+          '0%': { opacity: '0', transform: 'translateY(12px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
         },
       },
     },
