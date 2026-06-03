@@ -12,8 +12,6 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 INSTALLED_APPS = [
     'daphne',
-    'django.contrib.contenttypes',
-    'django.contrib.auth',
     'django.contrib.staticfiles',
     'corsheaders',
     'rest_framework',
@@ -66,6 +64,9 @@ USE_I18N = True
 USE_TZ = True
 STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Schema is applied via api/database/init.sql (no Django migrations).
+MIGRATION_MODULES = {'core': None}
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG
 CORS_ALLOW_CREDENTIALS = True

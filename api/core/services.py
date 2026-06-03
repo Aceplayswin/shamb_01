@@ -13,12 +13,12 @@ from django.utils import timezone
 
 from core.auth_jwt import sign_token
 from core.models import (
-    AdminUser,
     Bet,
     Game,
     OtpVerification,
     Transaction,
     User,
+    UserSetting,
     Wallet,
     WithdrawalStage,
 )
@@ -30,6 +30,10 @@ def _hash_password(password: str) -> str:
 
 def _check_password(password: str, password_hash: str) -> bool:
     return bcrypt.checkpw(password.encode(), password_hash.encode())
+
+
+def _player_users():
+    return User.objects.filter(role=User.Role.USER, usersetting__is_demo=False)
 
 
 def send_otp(phone: str, channel: str) -> dict:
@@ -69,28 +73,46 @@ def verify_otp(phone: str, otp: str) -> None:
     cache.delete(f'otp:{phone}')
 
 
+def _create_user_settings(user: User, **kwargs) -> UserSetting:
+    if user.role != User.Role.USER:
+        raise ValueError('User settings are only for player accounts')
+    return UserSetting.objects.create(user=user, **kwargs)
+
+
+def get_user_settings(user: User) -> UserSetting | None:
+    try:
+        return user.usersetting
+    except UserSetting.DoesNotExist:
+        return None
+
+
 def register_with_otp(full_name: str, phone: str, country_code: str = 'IN') -> dict:
     username = f'user_{phone[-6:]}_{secrets.token_hex(4)}'
+    voice_id = f'AI_EXEC_{random.randint(1, 50):03d}'
     user = User.objects.create(
         username=username,
         phone=phone,
         full_name=full_name,
         country_code=country_code,
-        registration_path=User.RegistrationPath.OTP,
-        phone_verified=True,
-        ai_voice_executive_id=f'AI_EXEC_{random.randint(1, 50):03d}',
+        role=User.Role.USER,
     )
     Wallet.objects.create(
         user=user,
         bonus_balance=Decimal(str(settings.WELCOME_BONUS)),
     )
-    token = sign_token({'sub': user.id, 'role': 'user'})
+    _create_user_settings(
+        user,
+        registration_path=UserSetting.RegistrationPath.OTP,
+        phone_verified=True,
+        ai_voice_executive_id=voice_id,
+    )
+    token = sign_token({'sub': user.id, 'role': User.Role.USER})
     return {
         'userId': user.id,
         'username': username,
         'token': token,
         'welcomeBonus': settings.WELCOME_BONUS,
-        'voiceId': user.ai_voice_executive_id,
+        'voiceId': voice_id,
     }
 
 
@@ -99,11 +121,15 @@ def create_demo_session() -> dict:
     expires_at = timezone.now() + timedelta(minutes=settings.DEMO_SESSION_MINUTES)
     user = User.objects.create(
         username=demo_id,
-        is_demo=True,
-        demo_expires_at=expires_at,
+        role=User.Role.USER,
         account_status=User.AccountStatus.ACTIVE,
     )
-    token = sign_token({'sub': user.id, 'role': 'user', 'type': 'demo'})
+    _create_user_settings(
+        user,
+        is_demo=True,
+        demo_expires_at=expires_at,
+    )
+    token = sign_token({'sub': user.id, 'role': User.Role.USER, 'type': 'demo'})
     cache.set(
         f'demo:{user.id}',
         {'expiresAt': expires_at.isoformat()},
@@ -113,7 +139,7 @@ def create_demo_session() -> dict:
 
 
 def login_user(phone: str, password: str) -> dict:
-    user = User.objects.filter(phone=phone).first()
+    user = User.objects.filter(phone=phone, role=User.Role.USER).first()
     if not user or not user.password_hash:
         raise ValueError('Invalid credentials')
     if user.account_status != User.AccountStatus.ACTIVE:
@@ -122,25 +148,30 @@ def login_user(phone: str, password: str) -> dict:
         raise ValueError('Invalid credentials')
     user.last_login_at = timezone.now()
     user.save(update_fields=['last_login_at'])
-    payload = {'sub': user.id, 'role': 'user'}
-    if user.is_demo:
+    payload = {'sub': user.id, 'role': User.Role.USER}
+    prefs = get_user_settings(user)
+    if prefs and prefs.is_demo:
         payload['type'] = 'demo'
     return {'token': sign_token(payload), 'userId': user.id}
 
 
 def login_admin(username: str, password: str) -> dict:
-    admin = AdminUser.objects.filter(username=username, is_active=True).first()
-    if not admin or not _check_password(password, admin.password_hash):
+    admin = User.objects.filter(
+        username=username,
+        role__in=[User.Role.ADMIN, User.Role.SUPER_ADMIN],
+        account_status=User.AccountStatus.ACTIVE,
+    ).first()
+    if not admin or not admin.password_hash or not _check_password(password, admin.password_hash):
         raise ValueError('Invalid credentials')
     admin.last_login_at = timezone.now()
     admin.save(update_fields=['last_login_at'])
     return {
-        'token': sign_token({'sub': admin.id, 'role': 'admin'}),
+        'token': sign_token({'sub': admin.id, 'role': admin.role}),
         'role': admin.role,
     }
 
 
-def get_wallet(user_id: str) -> dict:
+def get_wallet(user_id: int) -> dict:
     wallet = Wallet.objects.get(user_id=user_id)
     main = float(wallet.main_balance)
     locked = float(wallet.locked_balance)
@@ -154,7 +185,7 @@ def get_wallet(user_id: str) -> dict:
     }
 
 
-def create_deposit(user_id: str, amount: float, payment_method: str, currency: str = 'INR') -> dict:
+def create_deposit(user_id: int, amount: float, payment_method: str, currency: str = 'INR') -> dict:
     tx = Transaction.objects.create(
         user_id=user_id,
         type=Transaction.TxType.DEPOSIT,
@@ -166,7 +197,7 @@ def create_deposit(user_id: str, amount: float, payment_method: str, currency: s
     return {'transactionId': tx.id, 'status': 'pending'}
 
 
-def confirm_deposit(transaction_id: str, reference_number: str) -> dict:
+def confirm_deposit(transaction_id: int, reference_number: str) -> dict:
     with transaction.atomic():
         tx = Transaction.objects.select_for_update().get(
             id=transaction_id, type=Transaction.TxType.DEPOSIT
@@ -181,7 +212,7 @@ def confirm_deposit(transaction_id: str, reference_number: str) -> dict:
     return {'credited': float(amount)}
 
 
-def create_withdrawal(user_id: str, amount: float, payment_method: str) -> dict:
+def create_withdrawal(user_id: int, amount: float, payment_method: str) -> dict:
     wallet_data = get_wallet(user_id)
     if amount > wallet_data['available']:
         raise ValueError('Insufficient balance')
@@ -212,7 +243,7 @@ def create_withdrawal(user_id: str, amount: float, payment_method: str) -> dict:
     return {'transactionId': tx.id, 'status': 'pending'}
 
 
-def process_withdrawal_stages(transaction_id: str) -> dict:
+def process_withdrawal_stages(transaction_id: int) -> dict:
     auto_approve = True
     status = 'passed' if auto_approve else 'review'
     WithdrawalStage.objects.filter(transaction_id=transaction_id).update(status=status)
@@ -255,7 +286,7 @@ def list_games(
     ]
 
 
-def place_bet(user_id: str, game_id: str, amount: float, odds: float | None = None) -> dict:
+def place_bet(user_id: int, game_id: int, amount: float, odds: float | None = None) -> dict:
     with transaction.atomic():
         wallet = Wallet.objects.select_for_update().get(user_id=user_id)
         available = wallet.main_balance - wallet.locked_balance
@@ -275,7 +306,7 @@ def place_bet(user_id: str, game_id: str, amount: float, odds: float | None = No
 
 def get_dashboard_stats() -> dict:
     today = timezone.now().date()
-    users_qs = User.objects.filter(is_demo=False)
+    users_qs = _player_users()
     deposits_today = Transaction.objects.filter(
         type=Transaction.TxType.DEPOSIT,
         status=Transaction.Status.COMPLETED,
@@ -318,11 +349,11 @@ def list_users(
     limit: int = 50,
     offset: int = 0,
 ):
-    qs = User.objects.filter(is_demo=False).select_related('wallet')
+    qs = _player_users().select_related('wallet', 'usersetting')
     if status:
         qs = qs.filter(account_status=status)
     if kyc_status:
-        qs = qs.filter(kyc_status=kyc_status)
+        qs = qs.filter(usersetting__kyc_status=kyc_status)
     qs = qs.order_by('-created_at')[offset : offset + limit]
     result = []
     for u in qs:
@@ -330,13 +361,14 @@ def list_users(
             w = u.wallet
         except Wallet.DoesNotExist:
             w = None
+        prefs = get_user_settings(u)
         result.append({
             'id': u.id,
             'username': u.username,
             'full_name': u.full_name,
             'phone': u.phone,
             'email': u.email,
-            'kyc_status': u.kyc_status,
+            'kyc_status': prefs.kyc_status if prefs else UserSetting.KycStatus.NONE,
             'account_status': u.account_status,
             'created_at': u.created_at.isoformat(),
             'last_login_at': u.last_login_at.isoformat() if u.last_login_at else None,

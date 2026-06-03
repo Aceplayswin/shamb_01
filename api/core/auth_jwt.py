@@ -5,20 +5,32 @@ import jwt
 from django.conf import settings
 
 
+def _normalize_sub(sub: Any) -> int | str:
+    if isinstance(sub, str) and sub.isdigit():
+        return int(sub)
+    return sub
+
+
 def sign_token(payload: dict[str, Any]) -> str:
-    data = {**payload, 'exp': datetime.now(timezone.utc) + timedelta(days=settings.JWT_EXPIRY_DAYS)}
+    data = dict(payload)
+    if 'sub' in data and data['sub'] is not None:
+        data['sub'] = str(data['sub'])
+    data['exp'] = datetime.now(timezone.utc) + timedelta(days=settings.JWT_EXPIRY_DAYS)
     return jwt.encode(data, settings.JWT_SECRET, algorithm='HS256')
 
 
 def decode_token(token: str) -> dict[str, Any] | None:
     try:
-        return jwt.decode(token, settings.JWT_SECRET, algorithms=['HS256'])
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=['HS256'])
+        if 'sub' in payload:
+            payload['sub'] = _normalize_sub(payload['sub'])
+        return payload
     except jwt.PyJWTError:
         return None
 
 
 class AuthUser:
-    def __init__(self, sub: str, role: str, token_type: str | None = None):
+    def __init__(self, sub: int | str, role: str, token_type: str | None = None):
         self.sub = sub
         self.role = role
         self.type = token_type

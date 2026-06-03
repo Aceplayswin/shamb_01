@@ -71,7 +71,7 @@ mysql -u root -e "
 "
 ```
 
-Optional — load the reference schema before migrations:
+Load the database schema:
 
 ```bash
 mysql -u dollara -pdollara_pass dollara < api/database/init.sql
@@ -102,17 +102,10 @@ npm install
 
 ### 3. Database
 
-From the repo root (with the API venv activated, or use `api/.venv/bin/python`):
+Import the schema (see step above), then seed (with the API venv activated):
 
 ```bash
-npm run db:migrate
-npm run db:seed
-```
-
-If you already imported `api/database/init.sql`, run migrations with a fake initial instead:
-
-```bash
-cd api && python manage.py migrate --fake-initial && python manage.py seed
+cd api && python manage.py seed
 ```
 
 ### 4. Mobile app (optional)
@@ -242,8 +235,7 @@ Point `web/.env` `NEXT_PUBLIC_*` URLs at your deployed API.
 | `npm run dev` | API + web concurrently |
 | `npm run dev:api` | Django on port 4000 |
 | `npm run dev:web` | Next.js on port 3000 |
-| `npm run db:migrate` | Run Django migrations |
-| `npm run db:seed` | Seed admin and sample data |
+| `npm run db:seed` | Seed admin and sample data (after `init.sql`) |
 | `npm run build` | Production Next.js build |
 | `npm run lint` | Lint web app |
 

@@ -2,10 +2,11 @@ from typing import Optional
 
 import strawberry
 from django.db.models import F, Sum
+from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 
 from core import services
-from core.models import Transaction, User
+from core.models import Transaction, User, UserSetting
 
 
 @strawberry.type
@@ -37,7 +38,7 @@ class GameType:
 
 @strawberry.type
 class UserType:
-    id: str
+    id: int
     username: Optional[str]
     full_name: Optional[str]
     phone: Optional[str]
@@ -99,19 +100,20 @@ class Query:
         auth = _get_auth(info)
         if not auth:
             return None
-        user = User.objects.filter(id=auth.sub).first()
+        user = User.objects.select_related('usersetting').filter(id=auth.sub).first()
         if not user:
             return None
+        prefs = services.get_user_settings(user)
         return UserType(
             id=user.id,
             username=user.username,
             full_name=user.full_name,
             phone=user.phone,
             email=user.email,
-            kyc_status=user.kyc_status,
+            kyc_status=prefs.kyc_status if prefs else UserSetting.KycStatus.NONE,
             account_status=user.account_status,
-            currency=user.currency,
-            website_language=user.website_language,
+            currency=prefs.currency if prefs else 'INR',
+            website_language=prefs.website_language if prefs else 'en',
         )
 
     @strawberry.field
@@ -181,4 +183,7 @@ class Query:
         return result
 
 
-schema = strawberry.Schema(query=Query)
+schema = strawberry.Schema(
+    query=Query,
+    config=StrawberryConfig(auto_camel_case=False),
+)

@@ -2,6 +2,20 @@ from django.http import JsonResponse
 
 from core.auth_jwt import AuthUser, decode_token
 
+STAFF_ROLES = frozenset({'admin', 'super_admin'})
+
+
+def role_is_allowed(auth_role: str, allowed: list[str] | None) -> bool:
+    if not allowed:
+        return True
+    expanded: set[str] = set()
+    for role in allowed:
+        if role == 'admin':
+            expanded |= STAFF_ROLES
+        else:
+            expanded.add(role)
+    return auth_role in expanded
+
 
 class JWTAuthenticationMiddleware:
     """Attach JWT auth payload to request.auth (optional — views enforce roles)."""
@@ -28,7 +42,7 @@ def require_auth(roles: list[str] | None = None):
         def wrapped(request, *args, **kwargs):
             if not request.auth:
                 return JsonResponse({'error': 'Unauthorized'}, status=401)
-            if roles and request.auth.role not in roles:
+            if roles and not role_is_allowed(request.auth.role, roles):
                 return JsonResponse({'error': 'Forbidden'}, status=403)
             return view_func(request, *args, **kwargs)
         return wrapped

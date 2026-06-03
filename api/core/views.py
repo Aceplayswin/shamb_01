@@ -323,7 +323,7 @@ def admin_deposits_pending(request):
 def admin_deposit_confirm(request, tx_id):
     try:
         body = _json_body(request)
-        ref = body.get('referenceNumber') or body.get('reference_number', f'ADMIN-{tx_id[:8]}')
+        ref = body.get('referenceNumber') or body.get('reference_number', f'ADMIN-{tx_id}')
         return JsonResponse(services.confirm_deposit(tx_id, ref))
     except Transaction.DoesNotExist:
         return _error_response(ValueError('Transaction not found'), 404)
@@ -571,15 +571,17 @@ def ai_fraud_score(request):
 def ai_welcome_call(request):
     body = _json_body(request)
     user_id = body.get('userId') or request.auth.sub
-    user = User.objects.get(id=user_id)
+    user = User.objects.select_related('usersetting').get(id=user_id)
+    prefs = services.get_user_settings(user)
+    voice_id = prefs.ai_voice_executive_id if prefs else None
     data = welcome_call(
         user_id=user_id,
         name=user.full_name,
-        voice_executive_id=user.ai_voice_executive_id,
+        voice_executive_id=voice_id,
     )
     AiCallLog.objects.create(
         user_id=user_id,
-        voice_executive_id=user.ai_voice_executive_id,
+        voice_executive_id=voice_id,
         duration_seconds=data.get('duration_seconds', 90),
         transcript=data.get('transcript', ''),
         status='completed',

@@ -5,44 +5,58 @@ SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
 CREATE TABLE IF NOT EXISTS users (
-  id CHAR(36) PRIMARY KEY,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   username VARCHAR(50) UNIQUE,
   email VARCHAR(255) UNIQUE,
+  country_code CHAR(2),
   phone VARCHAR(20) UNIQUE,
   password_hash VARCHAR(255),
   full_name VARCHAR(100),
-  date_of_birth DATE,
-  gender ENUM('male', 'female', 'other', 'prefer_not_to_say'),
-  country_code CHAR(2),
-  currency VARCHAR(10) DEFAULT 'INR',
-  website_language VARCHAR(10) DEFAULT 'en',
-  communication_language VARCHAR(10) DEFAULT 'en',
-  registration_path ENUM('otp', 'kyc') DEFAULT 'otp',
-  kyc_status ENUM('none', 'pending', 'verified', 'rejected') DEFAULT 'none',
-  email_verified BOOLEAN DEFAULT FALSE,
-  phone_verified BOOLEAN DEFAULT FALSE,
-  two_factor_enabled BOOLEAN DEFAULT FALSE,
-  two_factor_secret VARCHAR(255),
+  role ENUM('user', 'admin', 'super_admin') NOT NULL DEFAULT 'user',
   account_status ENUM('active', 'inactive', 'suspended', 'blocked') DEFAULT 'active',
-  is_demo BOOLEAN DEFAULT FALSE,
-  demo_expires_at DATETIME,
-  preferred_game_type VARCHAR(50),
-  typical_bet_range VARCHAR(20),
-  ai_voice_executive_id VARCHAR(50),
-  affiliate_id CHAR(36),
-  agent_id CHAR(36),
-  fraud_score INT DEFAULT 0,
   last_login_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_users_phone (phone),
   INDEX idx_users_status (account_status),
-  INDEX idx_users_country (country_code)
+  INDEX idx_users_country (country_code),
+  INDEX idx_users_role (role)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS user_settings (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  date_of_birth DATE,
+  gender ENUM('male', 'female', 'other', 'prefer_not_to_say'),
+  kyc_status ENUM('none', 'pending', 'verified', 'rejected') DEFAULT 'none',
+  email_verified BOOLEAN DEFAULT FALSE,
+  phone_verified BOOLEAN DEFAULT FALSE,
+  two_factor_enabled BOOLEAN DEFAULT FALSE,
+  two_factor_secret VARCHAR(255),
+  affiliate_id BIGINT UNSIGNED,
+  agent_id BIGINT UNSIGNED,
+  fraud_score INT DEFAULT 0,
+  is_demo BOOLEAN DEFAULT FALSE,
+  demo_expires_at DATETIME,
+  website_language VARCHAR(10) DEFAULT 'en',
+  communication_language VARCHAR(10) DEFAULT 'en',
+  currency VARCHAR(10) DEFAULT 'INR',
+  registration_path ENUM('otp', 'kyc') DEFAULT 'otp',
+  preferred_game_type VARCHAR(50),
+  typical_bet_range VARCHAR(20),
+  ai_voice_executive_id VARCHAR(50),
+  notifications_enabled BOOLEAN DEFAULT TRUE,
+  marketing_opt_in BOOLEAN DEFAULT FALSE,
+  settings JSON,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_user_settings_user (user_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS wallets (
-  id CHAR(36) PRIMARY KEY,
-  user_id CHAR(36) NOT NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
   main_balance DECIMAL(18,2) DEFAULT 0,
   bonus_balance DECIMAL(18,2) DEFAULT 0,
   exposure_balance DECIMAL(18,2) DEFAULT 0,
@@ -55,7 +69,7 @@ CREATE TABLE IF NOT EXISTS wallets (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS otp_verifications (
-  id CHAR(36) PRIMARY KEY,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   phone VARCHAR(20) NOT NULL,
   otp_hash VARCHAR(255) NOT NULL,
   channel ENUM('sms', 'whatsapp', 'telegram', 'voice') DEFAULT 'sms',
@@ -67,21 +81,21 @@ CREATE TABLE IF NOT EXISTS otp_verifications (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS kyc_documents (
-  id CHAR(36) PRIMARY KEY,
-  user_id CHAR(36) NOT NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
   document_type ENUM('id_proof', 'address_proof', 'selfie') NOT NULL,
   file_url VARCHAR(500),
   status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
   rejection_reason TEXT,
-  reviewed_by CHAR(36),
+  reviewed_by BIGINT UNSIGNED,
   reviewed_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS bank_accounts (
-  id CHAR(36) PRIMARY KEY,
-  user_id CHAR(36) NOT NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
   account_holder_name VARCHAR(100) NOT NULL,
   account_number VARCHAR(50) NOT NULL,
   ifsc_code VARCHAR(20),
@@ -95,8 +109,8 @@ CREATE TABLE IF NOT EXISTS bank_accounts (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS transactions (
-  id CHAR(36) PRIMARY KEY,
-  user_id CHAR(36) NOT NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
   type ENUM('deposit', 'withdrawal', 'bonus_credit', 'bet_settlement', 'refund', 'adjustment') NOT NULL,
   amount DECIMAL(18,2) NOT NULL,
   currency VARCHAR(10) DEFAULT 'INR',
@@ -104,7 +118,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   payment_method VARCHAR(50),
   payment_provider VARCHAR(50),
   reference_number VARCHAR(255),
-  bonus_id CHAR(36),
+  bonus_id BIGINT UNSIGNED,
   fraud_score INT DEFAULT 0,
   metadata JSON,
   notes TEXT,
@@ -117,8 +131,8 @@ CREATE TABLE IF NOT EXISTS transactions (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS withdrawal_stages (
-  id CHAR(36) PRIMARY KEY,
-  transaction_id CHAR(36) NOT NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  transaction_id BIGINT UNSIGNED NOT NULL,
   stage ENUM('account_verification', 'duplicate_check', 'wagering_compliance', 'final_approval', 'payment_processing') NOT NULL,
   status ENUM('pending', 'passed', 'failed', 'review') DEFAULT 'pending',
   details JSON,
@@ -127,7 +141,7 @@ CREATE TABLE IF NOT EXISTS withdrawal_stages (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS bonuses (
-  id CHAR(36) PRIMARY KEY,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   display_title VARCHAR(150),
   description TEXT,
@@ -148,9 +162,9 @@ CREATE TABLE IF NOT EXISTS bonuses (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS user_bonuses (
-  id CHAR(36) PRIMARY KEY,
-  user_id CHAR(36) NOT NULL,
-  bonus_id CHAR(36) NOT NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  bonus_id BIGINT UNSIGNED NOT NULL,
   amount DECIMAL(18,2) NOT NULL,
   wagering_required DECIMAL(18,2) DEFAULT 0,
   wagering_completed DECIMAL(18,2) DEFAULT 0,
@@ -162,7 +176,7 @@ CREATE TABLE IF NOT EXISTS user_bonuses (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS game_providers (
-  id CHAR(36) PRIMARY KEY,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   slug VARCHAR(50) UNIQUE NOT NULL,
   logo_url VARCHAR(500),
@@ -171,8 +185,8 @@ CREATE TABLE IF NOT EXISTS game_providers (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS games (
-  id CHAR(36) PRIMARY KEY,
-  provider_id CHAR(36),
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  provider_id BIGINT UNSIGNED,
   name VARCHAR(150) NOT NULL,
   slug VARCHAR(100) UNIQUE NOT NULL,
   category ENUM('slots', 'live_casino', 'sports', 'lottery', 'ai_games', 'fantasy', 'virtual_sports') NOT NULL,
@@ -194,9 +208,9 @@ CREATE TABLE IF NOT EXISTS games (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS bets (
-  id CHAR(36) PRIMARY KEY,
-  user_id CHAR(36) NOT NULL,
-  game_id CHAR(36),
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  game_id BIGINT UNSIGNED,
   category VARCHAR(50),
   bet_amount DECIMAL(18,2) NOT NULL,
   odds DECIMAL(10,4),
@@ -216,22 +230,9 @@ CREATE TABLE IF NOT EXISTS bets (
   INDEX idx_bets_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS admin_users (
-  id CHAR(36) PRIMARY KEY,
-  username VARCHAR(50) UNIQUE NOT NULL,
-  email VARCHAR(255) UNIQUE NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
-  role ENUM('super_admin', 'finance_manager', 'support_lead', 'support_agent', 'marketing_manager', 'risk_manager', 'game_manager', 'reporting_analyst') NOT NULL,
-  two_factor_enabled BOOLEAN DEFAULT TRUE,
-  two_factor_secret VARCHAR(255),
-  is_active BOOLEAN DEFAULT TRUE,
-  last_login_at DATETIME,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 CREATE TABLE IF NOT EXISTS agents (
-  id CHAR(36) PRIMARY KEY,
-  user_id CHAR(36),
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED,
   code VARCHAR(20) UNIQUE NOT NULL,
   name VARCHAR(100) NOT NULL,
   commission_rate DECIMAL(5,2) DEFAULT 10,
@@ -244,12 +245,12 @@ CREATE TABLE IF NOT EXISTS agents (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS affiliates (
-  id CHAR(36) PRIMARY KEY,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   code VARCHAR(20) UNIQUE NOT NULL,
   name VARCHAR(100) NOT NULL,
   email VARCHAR(255),
   commission_tier INT DEFAULT 1,
-  parent_affiliate_id CHAR(36),
+  parent_affiliate_id BIGINT UNSIGNED,
   total_referrals INT DEFAULT 0,
   total_commission DECIMAL(18,2) DEFAULT 0,
   is_active BOOLEAN DEFAULT TRUE,
@@ -257,13 +258,13 @@ CREATE TABLE IF NOT EXISTS affiliates (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS support_tickets (
-  id CHAR(36) PRIMARY KEY,
-  user_id CHAR(36) NOT NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
   subject VARCHAR(255) NOT NULL,
   category ENUM('deposit', 'withdrawal', 'game', 'account', 'bonus', 'other') DEFAULT 'other',
   priority ENUM('low', 'medium', 'high') DEFAULT 'medium',
   status ENUM('open', 'in_progress', 'pending_user', 'resolved', 'closed') DEFAULT 'open',
-  assigned_to CHAR(36),
+  assigned_to BIGINT UNSIGNED,
   source ENUM('web', 'email', 'whatsapp', 'phone', 'app') DEFAULT 'web',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -272,10 +273,10 @@ CREATE TABLE IF NOT EXISTS support_tickets (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS ticket_messages (
-  id CHAR(36) PRIMARY KEY,
-  ticket_id CHAR(36) NOT NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  ticket_id BIGINT UNSIGNED NOT NULL,
   sender_type ENUM('user', 'agent', 'system') NOT NULL,
-  sender_id CHAR(36),
+  sender_id BIGINT UNSIGNED,
   message TEXT NOT NULL,
   is_internal BOOLEAN DEFAULT FALSE,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -283,10 +284,10 @@ CREATE TABLE IF NOT EXISTS ticket_messages (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS blocked_ips (
-  id CHAR(36) PRIMARY KEY,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   ip_address VARCHAR(45) NOT NULL,
   reason VARCHAR(100),
-  blocked_by CHAR(36),
+  blocked_by BIGINT UNSIGNED,
   expires_at DATETIME,
   is_permanent BOOLEAN DEFAULT FALSE,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -294,9 +295,9 @@ CREATE TABLE IF NOT EXISTS blocked_ips (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS notifications (
-  id CHAR(36) PRIMARY KEY,
-  user_id CHAR(36),
-  admin_id CHAR(36),
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED,
+  admin_id BIGINT UNSIGNED,
   type VARCHAR(50) NOT NULL,
   title VARCHAR(255),
   message TEXT,
@@ -308,8 +309,8 @@ CREATE TABLE IF NOT EXISTS notifications (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS ai_call_logs (
-  id CHAR(36) PRIMARY KEY,
-  user_id CHAR(36) NOT NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
   voice_executive_id VARCHAR(50),
   duration_seconds INT,
   recording_url VARCHAR(500),
@@ -322,15 +323,16 @@ CREATE TABLE IF NOT EXISTS ai_call_logs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS platform_settings (
-  setting_key VARCHAR(100) PRIMARY KEY,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  setting_key VARCHAR(100) NOT NULL UNIQUE,
   setting_value JSON NOT NULL,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS login_history (
-  id CHAR(36) PRIMARY KEY,
-  user_id CHAR(36),
-  admin_id CHAR(36),
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED,
+  admin_id BIGINT UNSIGNED,
   ip_address VARCHAR(45),
   user_agent TEXT,
   device_type VARCHAR(50),
@@ -341,16 +343,16 @@ CREATE TABLE IF NOT EXISTS login_history (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS admin_audit_logs (
-  id CHAR(36) PRIMARY KEY,
-  admin_id CHAR(36) NOT NULL,
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  admin_id BIGINT UNSIGNED NOT NULL,
   action VARCHAR(100) NOT NULL,
   entity_type VARCHAR(50),
-  entity_id CHAR(36),
+  entity_id BIGINT UNSIGNED,
   before_value JSON,
   after_value JSON,
   ip_address VARCHAR(45),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (admin_id) REFERENCES admin_users(id)
+  FOREIGN KEY (admin_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 1;

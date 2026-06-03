@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
+import { api } from '@/lib/api';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import Swal from 'sweetalert2';
@@ -19,24 +20,37 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
 
-    // Mock API call delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    // Static login bypass
-    Swal.fire({
-      title: 'Success!',
-      text: 'You have successfully logged in.',
-      icon: 'success',
-      background: '#1a1a1a',
-      color: '#fff',
-      confirmButtonColor: '#ff9800',
-      timer: 1500,
-      showConfirmButton: false,
-    });
-
-    setAuth({ token: 'mock-token-123', userId: 'user-demo' });
-    setLoading(false);
-    router.push('/');
+    try {
+      const result = await api('/api/v1/auth/demo', { method: 'POST' });
+      Swal.fire({
+        title: 'Success!',
+        text: 'You have successfully logged in.',
+        icon: 'success',
+        background: '#1a1a1a',
+        color: '#fff',
+        confirmButtonColor: '#ff9800',
+        timer: 1500,
+        showConfirmButton: false,
+      });
+      setAuth({
+        token: result.token,
+        userId: result.demoId,
+        username: result.demoId,
+        isDemo: true,
+      });
+      router.push('/');
+    } catch (err) {
+      Swal.fire({
+        title: 'Login failed',
+        text: err instanceof Error ? err.message : 'Could not start demo session',
+        icon: 'error',
+        background: '#1a1a1a',
+        color: '#fff',
+        confirmButtonColor: '#ff9800',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

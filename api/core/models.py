@@ -1,23 +1,11 @@
-import uuid
-
 from django.db import models
 
 
-def uuid_str():
-    return str(uuid.uuid4())
-
-
 class User(models.Model):
-    class RegistrationPath(models.TextChoices):
-        OTP = 'otp', 'OTP'
-        KYC = 'kyc', 'KYC'
-
-    class KycStatus(models.TextChoices):
-        
-        NONE = 'none', 'None'
-        PENDING = 'pending', 'Pending'
-        VERIFIED = 'verified', 'Verified'
-        REJECTED = 'rejected', 'Rejected'
+    class Role(models.TextChoices):
+        USER = 'user', 'User'
+        ADMIN = 'admin', 'Admin'
+        SUPER_ADMIN = 'super_admin', 'Super Admin'
 
     class AccountStatus(models.TextChoices):
         ACTIVE = 'active', 'Active'
@@ -25,32 +13,19 @@ class User(models.Model):
         SUSPENDED = 'suspended', 'Suspended'
         BLOCKED = 'blocked', 'Blocked'
 
-    id = models.CharField(primary_key=True, max_length=36, default=uuid_str, editable=False)
+    id = models.BigAutoField(primary_key=True)
     username = models.CharField(max_length=50, unique=True, null=True, blank=True)
     email = models.EmailField(unique=True, null=True, blank=True)
+    country_code = models.CharField(max_length=2, null=True, blank=True)
     phone = models.CharField(max_length=20, unique=True, null=True, blank=True)
     password_hash = models.CharField(max_length=255, null=True, blank=True)
     full_name = models.CharField(max_length=100, null=True, blank=True)
-    country_code = models.CharField(max_length=2, default='IN')
-    currency = models.CharField(max_length=10, default='INR')
-    website_language = models.CharField(max_length=10, default='en')
-    communication_language = models.CharField(max_length=10, default='en')
-    registration_path = models.CharField(
-        max_length=10, choices=RegistrationPath.choices, default=RegistrationPath.OTP
+    role = models.CharField(
+        max_length=20, choices=Role.choices, default=Role.USER, db_index=True
     )
-    kyc_status = models.CharField(
-        max_length=20, choices=KycStatus.choices, default=KycStatus.NONE
-    )
-    email_verified = models.BooleanField(default=False)
-    phone_verified = models.BooleanField(default=False)
-    two_factor_enabled = models.BooleanField(default=False)
     account_status = models.CharField(
         max_length=20, choices=AccountStatus.choices, default=AccountStatus.ACTIVE
     )
-    is_demo = models.BooleanField(default=False)
-    demo_expires_at = models.DateTimeField(null=True, blank=True)
-    ai_voice_executive_id = models.CharField(max_length=50, null=True, blank=True)
-    fraud_score = models.IntegerField(default=0)
     last_login_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -58,9 +33,69 @@ class User(models.Model):
     class Meta:
         db_table = 'users'
 
+    @property
+    def is_staff(self) -> bool:
+        return self.role in (self.Role.ADMIN, self.Role.SUPER_ADMIN)
+
+
+class UserSetting(models.Model):
+    """Per-player profile, verification, and preferences (role=user only)."""
+
+    class Gender(models.TextChoices):
+        MALE = 'male', 'Male'
+        FEMALE = 'female', 'Female'
+        OTHER = 'other', 'Other'
+        PREFER_NOT_TO_SAY = 'prefer_not_to_say', 'Prefer not to say'
+
+    class KycStatus(models.TextChoices):
+        NONE = 'none', 'None'
+        PENDING = 'pending', 'Pending'
+        VERIFIED = 'verified', 'Verified'
+        REJECTED = 'rejected', 'Rejected'
+
+    class RegistrationPath(models.TextChoices):
+        OTP = 'otp', 'OTP'
+        KYC = 'kyc', 'KYC'
+
+    id = models.BigAutoField(primary_key=True)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, db_column='user_id')
+    date_of_birth = models.DateField(null=True, blank=True)
+    gender = models.CharField(
+        max_length=20, choices=Gender.choices, null=True, blank=True
+    )
+    kyc_status = models.CharField(
+        max_length=20, choices=KycStatus.choices, default=KycStatus.NONE
+    )
+    email_verified = models.BooleanField(default=False)
+    phone_verified = models.BooleanField(default=False)
+    two_factor_enabled = models.BooleanField(default=False)
+    two_factor_secret = models.CharField(max_length=255, null=True, blank=True)
+    affiliate_id = models.BigIntegerField(null=True, blank=True)
+    agent_id = models.BigIntegerField(null=True, blank=True)
+    fraud_score = models.IntegerField(default=0)
+    is_demo = models.BooleanField(default=False)
+    demo_expires_at = models.DateTimeField(null=True, blank=True)
+    website_language = models.CharField(max_length=10, default='en')
+    communication_language = models.CharField(max_length=10, default='en')
+    currency = models.CharField(max_length=10, default='INR')
+    registration_path = models.CharField(
+        max_length=10, choices=RegistrationPath.choices, default=RegistrationPath.OTP
+    )
+    preferred_game_type = models.CharField(max_length=50, null=True, blank=True)
+    typical_bet_range = models.CharField(max_length=20, null=True, blank=True)
+    ai_voice_executive_id = models.CharField(max_length=50, null=True, blank=True)
+    notifications_enabled = models.BooleanField(default=True)
+    marketing_opt_in = models.BooleanField(default=False)
+    settings = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'user_settings'
+
 
 class Wallet(models.Model):
-    id = models.CharField(primary_key=True, max_length=36, default=uuid_str, editable=False)
+    id = models.BigAutoField(primary_key=True)
     user = models.OneToOneField(User, on_delete=models.CASCADE, db_column='user_id')
     main_balance = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     bonus_balance = models.DecimalField(max_digits=18, decimal_places=2, default=0)
@@ -81,7 +116,7 @@ class OtpVerification(models.Model):
         TELEGRAM = 'telegram', 'Telegram'
         VOICE = 'voice', 'Voice'
 
-    id = models.CharField(primary_key=True, max_length=36, default=uuid_str, editable=False)
+    id = models.BigAutoField(primary_key=True)
     phone = models.CharField(max_length=20, db_index=True)
     otp_hash = models.CharField(max_length=255)
     channel = models.CharField(max_length=20, choices=Channel.choices, default=Channel.SMS)
@@ -111,7 +146,7 @@ class Transaction(models.Model):
         REJECTED = 'rejected', 'Rejected'
         CANCELLED = 'cancelled', 'Cancelled'
 
-    id = models.CharField(primary_key=True, max_length=36, default=uuid_str, editable=False)
+    id = models.BigAutoField(primary_key=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, db_column='user_id')
     type = models.CharField(max_length=20, choices=TxType.choices)
     amount = models.DecimalField(max_digits=18, decimal_places=2)
@@ -128,7 +163,7 @@ class Transaction(models.Model):
 
 
 class WithdrawalStage(models.Model):
-    id = models.CharField(primary_key=True, max_length=36, default=uuid_str, editable=False)
+    id = models.BigAutoField(primary_key=True)
     transaction = models.ForeignKey(
         Transaction, on_delete=models.CASCADE, db_column='transaction_id'
     )
@@ -141,7 +176,7 @@ class WithdrawalStage(models.Model):
 
 
 class GameProvider(models.Model):
-    id = models.CharField(primary_key=True, max_length=36, default=uuid_str, editable=False)
+    id = models.BigAutoField(primary_key=True)
     name = models.CharField(max_length=100)
     slug = models.SlugField(max_length=50, unique=True)
     logo_url = models.URLField(max_length=500, null=True, blank=True)
@@ -162,7 +197,7 @@ class Game(models.Model):
         FANTASY = 'fantasy', 'Fantasy'
         VIRTUAL_SPORTS = 'virtual_sports', 'Virtual Sports'
 
-    id = models.CharField(primary_key=True, max_length=36, default=uuid_str, editable=False)
+    id = models.BigAutoField(primary_key=True)
     provider = models.ForeignKey(
         GameProvider, on_delete=models.SET_NULL, null=True, db_column='provider_id'
     )
@@ -194,7 +229,7 @@ class Bet(models.Model):
         CANCELLED = 'cancelled', 'Cancelled'
         CASHOUT = 'cashout', 'Cashout'
 
-    id = models.CharField(primary_key=True, max_length=36, default=uuid_str, editable=False)
+    id = models.BigAutoField(primary_key=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, db_column='user_id')
     game = models.ForeignKey(Game, on_delete=models.SET_NULL, null=True, db_column='game_id')
     bet_amount = models.DecimalField(max_digits=18, decimal_places=2)
@@ -207,33 +242,8 @@ class Bet(models.Model):
         db_table = 'bets'
 
 
-class AdminUser(models.Model):
-    class Role(models.TextChoices):
-        SUPER_ADMIN = 'super_admin', 'Super Admin'
-        FINANCE_MANAGER = 'finance_manager', 'Finance Manager'
-        SUPPORT_LEAD = 'support_lead', 'Support Lead'
-        SUPPORT_AGENT = 'support_agent', 'Support Agent'
-        MARKETING_MANAGER = 'marketing_manager', 'Marketing Manager'
-        RISK_MANAGER = 'risk_manager', 'Risk Manager'
-        GAME_MANAGER = 'game_manager', 'Game Manager'
-        REPORTING_ANALYST = 'reporting_analyst', 'Reporting Analyst'
-
-    id = models.CharField(primary_key=True, max_length=36, default=uuid_str, editable=False)
-    username = models.CharField(max_length=50, unique=True)
-    email = models.EmailField(unique=True)
-    password_hash = models.CharField(max_length=255)
-    role = models.CharField(max_length=30, choices=Role.choices)
-    two_factor_enabled = models.BooleanField(default=True)
-    is_active = models.BooleanField(default=True)
-    last_login_at = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = 'admin_users'
-
-
 class Bonus(models.Model):
-    id = models.CharField(primary_key=True, max_length=36, default=uuid_str, editable=False)
+    id = models.BigAutoField(primary_key=True)
     name = models.CharField(max_length=100)
     display_title = models.CharField(max_length=150, null=True, blank=True)
     bonus_type = models.CharField(max_length=20)
@@ -252,7 +262,8 @@ class Bonus(models.Model):
 
 
 class PlatformSetting(models.Model):
-    setting_key = models.CharField(primary_key=True, max_length=100)
+    id = models.BigAutoField(primary_key=True)
+    setting_key = models.CharField(max_length=100, unique=True)
     setting_value = models.JSONField()
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -261,7 +272,7 @@ class PlatformSetting(models.Model):
 
 
 class AiCallLog(models.Model):
-    id = models.CharField(primary_key=True, max_length=36, default=uuid_str, editable=False)
+    id = models.BigAutoField(primary_key=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, db_column='user_id')
     voice_executive_id = models.CharField(max_length=50, null=True, blank=True)
     duration_seconds = models.IntegerField(null=True, blank=True)

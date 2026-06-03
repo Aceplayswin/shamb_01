@@ -8,7 +8,6 @@ from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
 from core.models import (
-    AdminUser,
     AiCallLog,
     Bet,
     Bonus,
@@ -17,11 +16,14 @@ from core.models import (
     PlatformSetting,
     Transaction,
     User,
+    UserSetting,
     Wallet,
 )
+from core.services import get_user_settings
 
 
-def _serialize_user(u: User, wallet: Wallet | None = None) -> dict:
+def _serialize_user(u: User, wallet: Wallet | None = None, user_settings: UserSetting | None = None) -> dict:
+    prefs = user_settings
     return {
         'id': u.id,
         'username': u.username,
@@ -29,13 +31,13 @@ def _serialize_user(u: User, wallet: Wallet | None = None) -> dict:
         'phone': u.phone,
         'email': u.email,
         'country_code': u.country_code,
-        'currency': u.currency,
-        'kyc_status': u.kyc_status,
+        'currency': prefs.currency if prefs else 'INR',
+        'kyc_status': prefs.kyc_status if prefs else UserSetting.KycStatus.NONE,
         'account_status': u.account_status,
-        'email_verified': u.email_verified,
-        'phone_verified': u.phone_verified,
-        'fraud_score': u.fraud_score,
-        'is_demo': u.is_demo,
+        'email_verified': prefs.email_verified if prefs else False,
+        'phone_verified': prefs.phone_verified if prefs else False,
+        'fraud_score': prefs.fraud_score if prefs else 0,
+        'is_demo': prefs.is_demo if prefs else False,
         'created_at': u.created_at.isoformat(),
         'last_login_at': u.last_login_at.isoformat() if u.last_login_at else None,
         'main_balance': float(wallet.main_balance) if wallet else 0,
@@ -44,39 +46,43 @@ def _serialize_user(u: User, wallet: Wallet | None = None) -> dict:
     }
 
 
-def get_user_detail(user_id: str) -> dict:
-    user = User.objects.select_related('wallet').get(id=user_id)
+def get_user_detail(user_id: int) -> dict:
+    user = User.objects.select_related('wallet', 'usersetting').get(id=user_id)
     try:
         wallet = user.wallet
     except Wallet.DoesNotExist:
         wallet = None
-    return _serialize_user(user, wallet)
+    return _serialize_user(user, wallet, get_user_settings(user))
 
 
 def update_user_admin(
-    user_id: str,
+    user_id: int,
     *,
     account_status: str | None = None,
     kyc_status: str | None = None,
     fraud_score: int | None = None,
 ) -> dict:
-    updates = {}
+    user_updates = {}
+    settings_updates = {}
     if account_status is not None:
-        updates['account_status'] = account_status
+        user_updates['account_status'] = account_status
     if kyc_status is not None:
-        updates['kyc_status'] = kyc_status
+        settings_updates['kyc_status'] = kyc_status
     if fraud_score is not None:
-        updates['fraud_score'] = fraud_score
-    if not updates:
+        settings_updates['fraud_score'] = fraud_score
+    if not user_updates and not settings_updates:
         raise ValueError('No fields to update')
-    User.objects.filter(id=user_id).update(**updates)
+    if user_updates:
+        User.objects.filter(id=user_id).update(**user_updates)
+    if settings_updates:
+        UserSetting.objects.filter(user_id=user_id).update(**settings_updates)
     return get_user_detail(user_id)
 
 
 def list_admin_transactions(
     tx_type: str | None = None,
     status: str | None = None,
-    user_id: str | None = None,
+    user_id: int | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[dict]:
@@ -158,7 +164,7 @@ def create_game(data: dict) -> dict:
     return {'id': game.id}
 
 
-def update_game(game_id: str, data: dict) -> dict:
+def update_game(game_id: int, data: dict) -> dict:
     allowed = {
         'name', 'slug', 'category', 'provider_id', 'thumbnail_url',
         'rtp', 'min_bet', 'max_bet', 'is_featured', 'is_active_web',
@@ -199,7 +205,7 @@ def create_provider(data: dict) -> dict:
     return {'id': provider.id}
 
 
-def update_provider(provider_id: str, data: dict) -> dict:
+def update_provider(provider_id: int, data: dict) -> dict:
     allowed = {'name', 'slug', 'logo_url', 'is_active'}
     updates = {k: v for k, v in data.items() if k in allowed}
     if updates:
@@ -207,7 +213,7 @@ def update_provider(provider_id: str, data: dict) -> dict:
     return {'updated': True}
 
 
-def list_admin_bets(limit: int = 50, offset: int = 0, user_id: str | None = None) -> list[dict]:
+def list_admin_bets(limit: int = 50, offset: int = 0, user_id: int | None = None) -> list[dict]:
     qs = Bet.objects.select_related('user', 'game').order_by('-created_at')
     if user_id:
         qs = qs.filter(user_id=user_id)
@@ -265,7 +271,7 @@ def create_bonus(data: dict) -> dict:
     return {'id': bonus.id}
 
 
-def update_bonus(bonus_id: str, data: dict) -> dict:
+def update_bonus(bonus_id: int, data: dict) -> dict:
     allowed = {
         'name', 'display_title', 'bonus_type', 'value_type', 'value_amount',
         'min_deposit', 'max_bonus_cap', 'wagering_multiplier', 'status',
@@ -319,7 +325,7 @@ def list_ai_call_logs(limit: int = 50, offset: int = 0) -> list[dict]:
     ]
 
 
-def wallet_adjustment(user_id: str, amount: float, notes: str) -> dict:
+def wallet_adjustment(user_id: int, amount: float, notes: str) -> dict:
     with transaction.atomic():
         wallet = Wallet.objects.select_for_update().get(user_id=user_id)
         delta = Decimal(str(amount))
@@ -336,17 +342,18 @@ def wallet_adjustment(user_id: str, amount: float, notes: str) -> dict:
 
 
 def list_admin_users_list() -> list[dict]:
+    staff_roles = [User.Role.ADMIN, User.Role.SUPER_ADMIN]
     return [
         {
             'id': a.id,
             'username': a.username,
             'email': a.email,
             'role': a.role,
-            'is_active': a.is_active,
+            'is_active': a.account_status == User.AccountStatus.ACTIVE,
             'last_login_at': a.last_login_at.isoformat() if a.last_login_at else None,
             'created_at': a.created_at.isoformat(),
         }
-        for a in AdminUser.objects.order_by('username')
+        for a in User.objects.filter(role__in=staff_roles).order_by('username')
     ]
 
 
@@ -365,7 +372,11 @@ def get_dashboard_charts(days: int = 7) -> dict:
             type=Transaction.TxType.WITHDRAWAL,
             status=Transaction.Status.COMPLETED,
         ).aggregate(total=Sum('amount'))['total'] or 0
-        signups = User.objects.filter(is_demo=False, created_at__date=day).count()
+        signups = User.objects.filter(
+            role=User.Role.USER,
+            usersetting__is_demo=False,
+            created_at__date=day,
+        ).count()
         series.append({
             'date': day.isoformat(),
             'label': day.strftime('%a'),
@@ -390,7 +401,7 @@ def get_dashboard_charts(days: int = 7) -> dict:
     ]
 
     status_rows = (
-        User.objects.filter(is_demo=False)
+        User.objects.filter(role=User.Role.USER, usersetting__is_demo=False)
         .values('account_status')
         .annotate(count=Count('id'))
     )
@@ -408,8 +419,10 @@ def get_dashboard_charts(days: int = 7) -> dict:
             type=Transaction.TxType.DEPOSIT,
             status=Transaction.Status.PENDING,
         ).count(),
-        'kycPending': User.objects.filter(
-            is_demo=False, kyc_status=User.KycStatus.PENDING
+        'kycPending': UserSetting.objects.filter(
+            is_demo=False,
+            kyc_status=UserSetting.KycStatus.PENDING,
+            user__role=User.Role.USER,
         ).count(),
     }
 
@@ -433,7 +446,7 @@ def get_recent_activity(limit: int = 12) -> list[dict]:
     ]
 
 
-def get_user_full_detail(user_id: str) -> dict:
+def get_user_full_detail(user_id: int) -> dict:
     detail = get_user_detail(user_id)
     txs = Transaction.objects.filter(user_id=user_id).order_by('-created_at')[:20]
     bets = Bet.objects.select_related('game').filter(user_id=user_id).order_by('-created_at')[:20]

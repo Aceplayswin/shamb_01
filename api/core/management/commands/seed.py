@@ -5,7 +5,7 @@ import bcrypt
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from core.models import AdminUser, Bonus, Game, GameProvider, PlatformSetting
+from core.models import Bonus, Game, GameProvider, PlatformSetting, User
 
 
 class Command(BaseCommand):
@@ -13,13 +13,13 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         password_hash = bcrypt.hashpw(b'Admin@123', bcrypt.gensalt()).decode()
-        admin, created = AdminUser.objects.get_or_create(
+        admin, created = User.objects.get_or_create(
             username='superadmin',
             defaults={
                 'email': 'admin@dollara.local',
                 'password_hash': password_hash,
-                'role': AdminUser.Role.SUPER_ADMIN,
-                'two_factor_enabled': False,
+                'role': User.Role.SUPER_ADMIN,
+                'account_status': User.AccountStatus.ACTIVE,
             },
         )
         if created:

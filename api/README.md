@@ -25,16 +25,9 @@ pip install -r requirements.txt
 Copy `.env.example` to `.env` and adjust `MYSQL_*` / `REDIS_URL` if needed.
 
 ```bash
-python manage.py migrate
+mysql -u dollara -pdollara_pass dollara < database/init.sql
 python manage.py seed
 python manage.py runserver 0.0.0.0:4000
-```
-
-If you imported `database/init.sql` manually first:
-
-```bash
-python manage.py migrate --fake-initial
-python manage.py seed
 ```
 
 ## Endpoints
