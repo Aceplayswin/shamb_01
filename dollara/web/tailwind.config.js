@@ -44,6 +44,21 @@ module.exports = {
           700: '#211d30', // Raised / borders
           600: '#322c46',
         },
+        // Theme-aware tokens — values swap between dark/light via CSS vars in globals.css.
+        // Use these (instead of `surface-*` / `white` / `slate-*`) for chrome that should
+        // adapt to the active theme; keep `surface-*` where a fixed dark tone is required
+        // (e.g. ink on bright gradient buttons, which must stay legible in both themes).
+        app: {
+          bg: 'rgb(var(--color-app-bg) / <alpha-value>)',
+          fg: 'rgb(var(--color-app-fg) / <alpha-value>)',
+        },
+        rail: 'rgb(var(--color-rail) / <alpha-value>)',
+        panel: {
+          DEFAULT: 'rgb(var(--color-panel) / <alpha-value>)',
+          strong: 'rgb(var(--color-panel-strong) / <alpha-value>)',
+        },
+        muted: 'rgb(var(--color-muted) / <alpha-value>)',
+        hairline: 'rgb(var(--color-hairline) / <alpha-value>)',
       },
       fontFamily: {
         sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],

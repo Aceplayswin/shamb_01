@@ -1,5 +1,6 @@
 import { Inter, Outfit } from 'next/font/google';
 import { AuthHydrate } from '@/components/AuthHydrate';
+import { ThemeHydrate, themeInitScript } from '@/components/ThemeHydrate';
 import { AppFrame } from '@/components/layout/AppFrame';
 import { BrandProvider } from '@/hooks/useBranding';
 import './globals.css';
@@ -14,13 +15,19 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={`${inter.variable} ${outfit.variable}`}>
+    <html lang="en" className={`${inter.variable} ${outfit.variable}`} suppressHydrationWarning>
+      <head>
+        {/* Sets the theme class before first paint to avoid a flash of the wrong theme. */}
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="font-sans antialiased">
-        <BrandProvider>
-          <AuthHydrate>
-            <AppFrame>{children}</AppFrame>
-          </AuthHydrate>
-        </BrandProvider>
+        <ThemeHydrate>
+          <BrandProvider>
+            <AuthHydrate>
+              <AppFrame>{children}</AppFrame>
+            </AuthHydrate>
+          </BrandProvider>
+        </ThemeHydrate>
       </body>
     </html>
   );

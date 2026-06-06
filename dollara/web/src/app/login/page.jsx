@@ -26,8 +26,6 @@ export default function LoginPage() {
         title: 'Success!',
         text: 'You have successfully logged in.',
         icon: 'success',
-        background: '#1a1a1a',
-        color: '#fff',
         confirmButtonColor: '#ff9800',
         timer: 1500,
         showConfirmButton: false,
@@ -44,8 +42,6 @@ export default function LoginPage() {
         title: 'Login failed',
         text: err instanceof Error ? err.message : 'Could not start demo session',
         icon: 'error',
-        background: '#1a1a1a',
-        color: '#fff',
         confirmButtonColor: '#ff9800',
       });
     } finally {

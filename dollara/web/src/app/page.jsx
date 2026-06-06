@@ -83,25 +83,25 @@ function SectionHeader({ title, kicker, Icon, onSeeAll, accent = 'brand' }) {
   return (
     <div className="mb-5 flex items-end justify-between gap-4">
       <div className="flex items-center gap-3">
-        <span className={`grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-surface-800 ${ACCENT_TEXT[accent]}`}>
+        <span className={`grid h-10 w-10 place-items-center rounded-xl border border-hairline/10 bg-panel ${ACCENT_TEXT[accent]}`}>
           <Icon className="h-5 w-5" />
         </span>
         <div>
           {kicker && (
-            <p className="text-[0.6rem] font-bold uppercase tracking-[0.25em] text-slate-500">{kicker}</p>
+            <p className="text-[0.6rem] font-bold uppercase tracking-[0.25em] text-muted/80">{kicker}</p>
           )}
-          <h2 className="font-display text-xl font-bold text-white">{title}</h2>
+          <h2 className="font-display text-xl font-bold text-app-fg">{title}</h2>
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <button className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 text-slate-400 transition hover:bg-surface-800 hover:text-white">
+        <button className="grid h-8 w-8 place-items-center rounded-lg border border-hairline/10 text-muted transition hover:bg-panel hover:text-app-fg">
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <button className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 text-slate-400 transition hover:bg-surface-800 hover:text-white">
+        <button className="grid h-8 w-8 place-items-center rounded-lg border border-hairline/10 text-muted transition hover:bg-panel hover:text-app-fg">
           <ChevronRight className="h-4 w-4" />
         </button>
         {onSeeAll && (
-          <button className="ml-1 hidden items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-bold text-slate-300 transition hover:border-brand-400/50 hover:text-white sm:flex">
+          <button className="ml-1 hidden items-center gap-1 rounded-lg border border-hairline/10 px-3 py-1.5 text-xs font-bold text-app-fg/70 transition hover:border-brand-400/50 hover:text-app-fg sm:flex">
             See all <ArrowRight className="h-3.5 w-3.5" />
           </button>
         )}
@@ -114,9 +114,9 @@ function GameCard({ item, onPlay, theme = THEMES.casino, rank }) {
   return (
     <button
       onClick={() => onPlay(item)}
-      className={`group relative flex aspect-[3/4] w-44 shrink-0 snap-start flex-col justify-end overflow-hidden rounded-2xl border border-white/[0.07] bg-surface-800 text-left transition-all duration-300 hover:-translate-y-1 hover:border-white/20 ${theme.glow} sm:w-48`}
+      className={`group relative flex aspect-[3/4] w-44 shrink-0 snap-start flex-col justify-end overflow-hidden rounded-2xl border border-hairline/[0.07] bg-panel text-left transition-all duration-300 hover:-translate-y-1 hover:border-hairline/20 ${theme.glow} sm:w-48`}
     >
-      {/* Art placeholder — themed gradient mesh */}
+      {/* Art placeholder — themed gradient mesh (kept on the fixed dark scale for contrast against any theme) */}
       <div className={`absolute inset-0 bg-gradient-to-br ${theme.ring} via-surface-800 to-surface-950`} />
       <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-white/[0.04] blur-2xl transition group-hover:bg-white/[0.08]" />
 
@@ -141,7 +141,7 @@ function GameCard({ item, onPlay, theme = THEMES.casino, rank }) {
         <h3 className="mt-0.5 font-display text-base font-bold leading-tight text-white">{item.name}</h3>
       </div>
 
-      {/* Hover play overlay */}
+      {/* Hover play overlay — sits over the art placeholder, stays on the fixed dark scale */}
       <div className="absolute inset-0 z-20 flex items-center justify-center bg-surface-950/55 opacity-0 backdrop-blur-[2px] transition-opacity duration-300 group-hover:opacity-100">
         <span className="flex h-14 w-14 scale-90 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-accent-500 shadow-glow transition-transform duration-300 group-hover:scale-100">
           <Play className="h-6 w-6 fill-surface-950 text-surface-950" />
@@ -163,18 +163,18 @@ function Carousel({ items, onPlay, theme, ranked }) {
 
 function Accordion({ question, answer, isOpen, onClick }) {
   return (
-    <div className={`overflow-hidden rounded-2xl border transition-colors ${isOpen ? 'border-brand-400/40 bg-surface-800' : 'border-white/[0.07] bg-surface-800/60'}`}>
+    <div className={`overflow-hidden rounded-2xl border transition-colors ${isOpen ? 'border-brand-400/40 bg-panel' : 'border-hairline/[0.07] bg-panel/60'}`}>
       <button onClick={onClick} className="flex w-full items-center justify-between gap-4 p-5 text-left">
-        <span className="flex items-center gap-3 font-semibold text-white">
-          <span className={`h-2 w-2 rounded-full transition-colors ${isOpen ? 'bg-brand-400' : 'bg-slate-600'}`} />
+        <span className="flex items-center gap-3 font-semibold text-app-fg">
+          <span className={`h-2 w-2 rounded-full transition-colors ${isOpen ? 'bg-brand-400' : 'bg-muted/40'}`} />
           {question}
         </span>
-        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-surface-700 transition-transform ${isOpen ? 'rotate-180' : ''}`}>
-          <ChevronDown className="h-4 w-4 text-slate-300" />
+        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-hairline/10 transition-transform ${isOpen ? 'rotate-180' : ''}`}>
+          <ChevronDown className="h-4 w-4 text-app-fg/70" />
         </span>
       </button>
       {isOpen && (
-        <div className="px-5 pb-5 pl-10 text-sm leading-relaxed text-slate-400">{answer}</div>
+        <div className="px-5 pb-5 pl-10 text-sm leading-relaxed text-muted">{answer}</div>
       )}
     </div>
   );
@@ -189,23 +189,19 @@ export default function HomePage() {
   const handlePlayGame = (game) => {
     Swal.fire({
       title: 'Ready to play?',
-      html: `<p style="margin:0;color:#94a3b8">Launching <b style="color:#fff">${game.name}</b> by ${game.provider}</p>`,
+      html: `<p style="margin:0;color:rgb(var(--color-muted))">Launching <b style="color:rgb(var(--color-app-fg))">${game.name}</b> by ${game.provider}</p>`,
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: '#ff9800',
       cancelButtonColor: '#211d30',
       confirmButtonText: 'Play now',
       cancelButtonText: 'Cancel',
-      background: '#15131f',
-      color: '#fff',
     }).then((result) => {
       if (result.isConfirmed) {
         Swal.fire({
           title: 'Loading…',
           text: `${game.name} is starting up.`,
           icon: 'success',
-          background: '#15131f',
-          color: '#fff',
           confirmButtonColor: '#ff9800',
         });
       }
@@ -231,18 +227,18 @@ export default function HomePage() {
               {/* Bento hero — one feature panel + a stacked side column */}
               <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 {/* Primary welcome panel */}
-                <div className="ring-grad relative flex min-h-[320px] flex-col justify-between overflow-hidden rounded-3xl bg-mesh-amber p-8 sm:p-10 lg:col-span-2">
+                <div className="ring-grad relative flex min-h-[320px] flex-col justify-between overflow-hidden rounded-3xl bg-panel-strong bg-mesh-amber p-8 sm:p-10 lg:col-span-2">
                   <div className="pointer-events-none absolute -right-10 top-1/2 h-64 w-64 -translate-y-1/2 rounded-full bg-brand-500/20 blur-3xl" />
                   <div className="relative">
                     <span className="inline-flex items-center gap-2 rounded-full border border-brand-400/30 bg-brand-500/10 px-3 py-1 text-xs font-bold uppercase tracking-widest text-brand-300">
                       <Sparkles className="h-3.5 w-3.5" /> Welcome offer
                     </span>
-                    <h1 className="mt-5 font-display text-4xl font-black leading-[0.95] text-white sm:text-6xl">
+                    <h1 className="mt-5 font-display text-4xl font-black leading-[0.95] text-app-fg sm:text-6xl">
                       Get a <span className="text-gradient-gold">5% boost</span>
                       <br />
                       on your first deposit
                     </h1>
-                    <p className="mt-4 max-w-md text-sm text-slate-300/80">
+                    <p className="mt-4 max-w-md text-sm text-muted">
                       Sign up in seconds and claim up to{' '}
                       <span className="font-bold text-brand-300">₹5,000</span> in instant bonus credits — no wagering tricks.
                     </p>
@@ -254,42 +250,42 @@ export default function HomePage() {
                     >
                       Claim ₹5,000 <ArrowRight className="h-4 w-4" />
                     </a>
-                    <span className="text-xs font-medium text-slate-400">⚡ Credited instantly</span>
+                    <span className="text-xs font-medium text-muted">⚡ Credited instantly</span>
                   </div>
                 </div>
 
                 {/* Side stack */}
                 <div className="flex flex-col gap-4">
-                  <div className="relative flex flex-1 flex-col justify-center overflow-hidden rounded-3xl border border-white/[0.07] bg-mesh-violet p-6">
+                  <div className="relative flex flex-1 flex-col justify-center overflow-hidden rounded-3xl border border-hairline/[0.07] bg-panel-strong bg-mesh-violet p-6">
                     <div className="pointer-events-none absolute -right-6 -top-6 h-32 w-32 rounded-full bg-accent-500/25 blur-2xl" />
                     <p className="text-xs font-bold uppercase tracking-widest text-accent-300">Deposit bonus</p>
-                    <p className="mt-2 font-display text-5xl font-black text-white">
+                    <p className="mt-2 font-display text-5xl font-black text-app-fg">
                       ₹100<span className="text-2xl text-accent-300">/-</span>
                     </p>
-                    <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-slate-400">Extra · No wagering</p>
+                    <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-muted">Extra · No wagering</p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="rounded-3xl border border-white/[0.07] bg-surface-800/70 p-5">
+                    <div className="rounded-3xl border border-hairline/[0.07] bg-panel/70 p-5">
                       <Trophy className="h-5 w-5 text-brand-400" />
-                      <p className="mt-3 font-display text-2xl font-black text-white">₹8.4Cr</p>
-                      <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-500">Paid this week</p>
+                      <p className="mt-3 font-display text-2xl font-black text-app-fg">₹8.4Cr</p>
+                      <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted/80">Paid this week</p>
                     </div>
-                    <div className="rounded-3xl border border-white/[0.07] bg-surface-800/70 p-5">
+                    <div className="rounded-3xl border border-hairline/[0.07] bg-panel/70 p-5">
                       <Dices className="h-5 w-5 text-emerald-400" />
-                      <p className="mt-3 font-display text-2xl font-black text-white">2,000+</p>
-                      <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-500">Live games</p>
+                      <p className="mt-3 font-display text-2xl font-black text-app-fg">2,000+</p>
+                      <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted/80">Live games</p>
                     </div>
                   </div>
                 </div>
               </section>
 
               {/* Ticker */}
-              <div className="flex items-center overflow-hidden rounded-2xl border border-white/[0.07] bg-surface-800/60">
+              <div className="flex items-center overflow-hidden rounded-2xl border border-hairline/[0.07] bg-panel/60">
                 <div className="flex h-11 shrink-0 items-center gap-2 bg-gradient-to-r from-brand-400 to-brand-600 px-4 text-xs font-bold uppercase text-surface-950">
                   <Zap className="h-4 w-4" /> Latest
                 </div>
                 <div className="relative flex-1 overflow-hidden">
-                  <div className="flex w-max animate-marquee whitespace-nowrap text-xs font-semibold tracking-wide text-slate-300">
+                  <div className="flex w-max animate-marquee whitespace-nowrap text-xs font-semibold tracking-wide text-app-fg/80">
                     {[0, 1].map((dup) => (
                       <span key={dup} className="flex items-center">
                         <span className="px-6">🎰 Live casino games launching in 7 days</span>
@@ -305,25 +301,25 @@ export default function HomePage() {
 
           {/* Search + brand strip */}
           <div className="glass sticky top-[4.5rem] z-20 flex flex-col items-center justify-between gap-4 p-4 sm:flex-row">
-            <div className="flex items-center gap-3 text-white">
-              <span className="hidden text-xs font-bold uppercase tracking-[0.2em] text-slate-400 sm:block">
+            <div className="flex items-center gap-3 text-app-fg">
+              <span className="hidden text-xs font-bold uppercase tracking-[0.2em] text-muted sm:block">
                 Premier <span className="text-brand-400">betting</span> experience
               </span>
-              <span className="hidden h-4 w-px bg-white/15 sm:block" />
+              <span className="hidden h-4 w-px bg-hairline/15 sm:block" />
               <span className="font-display text-lg font-extrabold italic text-gradient-gold">{branding.product_name}</span>
             </div>
             <div className="relative flex w-full items-center sm:w-80">
-              <Search className="absolute left-3.5 h-4 w-4 text-slate-400" />
+              <Search className="absolute left-3.5 h-4 w-4 text-muted" />
               <input
                 type="text"
                 placeholder="Search 2,000+ games…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-xl border border-white/10 bg-surface-950/60 p-2.5 pl-10 pr-10 text-sm text-white placeholder-slate-500 transition-colors focus:border-brand-400 focus:outline-none"
+                className="w-full rounded-xl border border-hairline/10 bg-rail/60 p-2.5 pl-10 pr-10 text-sm text-app-fg placeholder-muted/70 transition-colors focus:border-brand-400 focus:outline-none"
               />
               {searchQuery && (
                 <button onClick={() => setSearchQuery('')} className="absolute right-3.5">
-                  <X className="h-4 w-4 text-slate-400 hover:text-white" />
+                  <X className="h-4 w-4 text-muted hover:text-app-fg" />
                 </button>
               )}
             </div>
@@ -332,7 +328,7 @@ export default function HomePage() {
           {/* Providers */}
           <div>
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Game Providers</h3>
+              <h3 className="text-xs font-bold uppercase tracking-[0.25em] text-muted">Game Providers</h3>
               {selectedProvider && (
                 <button
                   onClick={() => setSelectedProvider(null)}
@@ -350,7 +346,7 @@ export default function HomePage() {
                   className={`shrink-0 rounded-full border px-5 py-2 text-xs font-bold uppercase tracking-wider transition ${
                     p === selectedProvider
                       ? 'border-brand-400 bg-gradient-to-r from-brand-400 to-brand-600 text-surface-950 shadow-glow'
-                      : 'border-white/10 bg-surface-800/60 text-slate-300 hover:border-white/20 hover:text-white'
+                      : 'border-hairline/10 bg-panel/60 text-app-fg/70 hover:border-hairline/20 hover:text-app-fg'
                   }`}
                 >
                   {p}
@@ -361,8 +357,8 @@ export default function HomePage() {
 
           {isFiltering ? (
             <section className="min-h-[400px]">
-              <h2 className="mb-6 font-display text-xl font-bold text-white">
-                Results <span className="text-slate-500">({uniqueFilteredGames.length})</span>
+              <h2 className="mb-6 font-display text-xl font-bold text-app-fg">
+                Results <span className="text-muted/70">({uniqueFilteredGames.length})</span>
               </h2>
               {uniqueFilteredGames.length > 0 ? (
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
@@ -373,9 +369,9 @@ export default function HomePage() {
                   ))}
                 </div>
               ) : (
-                <div className="py-16 text-center text-slate-500">
+                <div className="py-16 text-center text-muted/70">
                   <Search className="mx-auto mb-4 h-12 w-12 opacity-20" />
-                  <p className="text-lg font-bold text-slate-300">No games found</p>
+                  <p className="text-lg font-bold text-app-fg/70">No games found</p>
                   <p className="mt-2 text-sm">Try a different search or provider filter.</p>
                 </div>
               )}
@@ -405,8 +401,8 @@ export default function HomePage() {
               {/* Why choose — feature row */}
               <section>
                 <div className="mb-6">
-                  <p className="text-[0.6rem] font-bold uppercase tracking-[0.25em] text-slate-500">Why we're different</p>
-                  <h2 className="font-display text-2xl font-bold text-white">
+                  <p className="text-[0.6rem] font-bold uppercase tracking-[0.25em] text-muted/80">Why we're different</p>
+                  <h2 className="font-display text-2xl font-bold text-app-fg">
                     Built for players who <span className="text-gradient-gold">expect more</span>
                   </h2>
                 </div>
@@ -419,14 +415,14 @@ export default function HomePage() {
                   ].map((f, i) => (
                     <div
                       key={f.title}
-                      className="group relative overflow-hidden rounded-2xl border border-white/[0.07] bg-surface-800/60 p-6 transition hover:-translate-y-1 hover:border-brand-400/40"
+                      className="group relative overflow-hidden rounded-2xl border border-hairline/[0.07] bg-panel/60 p-6 transition hover:-translate-y-1 hover:border-brand-400/40"
                     >
-                      <span className="absolute right-4 top-4 font-display text-3xl font-black text-white/[0.04]">0{i + 1}</span>
+                      <span className="absolute right-4 top-4 font-display text-3xl font-black text-app-fg/[0.06]">0{i + 1}</span>
                       <span className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-surface-700 to-surface-800 text-brand-400 ring-1 ring-white/10 transition group-hover:text-brand-300">
                         <f.Icon className="h-5 w-5" />
                       </span>
-                      <h3 className="mt-4 font-display text-base font-bold text-white">{f.title}</h3>
-                      <p className="mt-1 text-xs text-slate-400">{f.desc}</p>
+                      <h3 className="mt-4 font-display text-base font-bold text-app-fg">{f.title}</h3>
+                      <p className="mt-1 text-xs text-muted">{f.desc}</p>
                     </div>
                   ))}
                 </div>
@@ -434,17 +430,17 @@ export default function HomePage() {
 
               {/* Partners */}
               <section>
-                <p className="mb-6 text-center text-[0.6rem] font-bold uppercase tracking-[0.25em] text-slate-500">
+                <p className="mb-6 text-center text-[0.6rem] font-bold uppercase tracking-[0.25em] text-muted/80">
                   Worldwide partnerships
                 </p>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
                   {PARTNERS.map((partner) => (
                     <div
                       key={partner}
-                      className="group flex aspect-[3/2] flex-col items-center justify-center gap-1 rounded-xl border border-white/[0.06] bg-surface-800/40 transition hover:border-white/15 hover:bg-surface-800"
+                      className="group flex aspect-[3/2] flex-col items-center justify-center gap-1 rounded-xl border border-hairline/[0.06] bg-panel/40 transition hover:border-hairline/15 hover:bg-panel"
                     >
-                      <span className="font-display font-bold text-slate-400 transition group-hover:text-white">{partner}</span>
-                      <span className="text-[0.5rem] uppercase tracking-[0.2em] text-slate-600">Official</span>
+                      <span className="font-display font-bold text-muted transition group-hover:text-app-fg">{partner}</span>
+                      <span className="text-[0.5rem] uppercase tracking-[0.2em] text-muted/50">Official</span>
                     </div>
                   ))}
                 </div>
@@ -453,10 +449,10 @@ export default function HomePage() {
               {/* FAQ */}
               <section className="mx-auto max-w-3xl py-4">
                 <div className="mb-8 text-center">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-surface-800/60 px-3 py-1 text-[0.65rem] font-bold uppercase tracking-widest text-accent-300">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-hairline/10 bg-panel/60 px-3 py-1 text-[0.65rem] font-bold uppercase tracking-widest text-accent-300">
                     <Sparkles className="h-3 w-3" /> Knowledge base
                   </span>
-                  <h2 className="mt-4 font-display text-3xl font-bold text-white">
+                  <h2 className="mt-4 font-display text-3xl font-bold text-app-fg">
                     Frequently asked <span className="text-gradient-gold">questions</span>
                   </h2>
                 </div>

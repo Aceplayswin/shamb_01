@@ -22,12 +22,12 @@ export function GameCard({ game }) {
         </div>
       </div>
       <div className="p-3">
-        <h3 className="font-medium text-white">{game.name}</h3>
+        <h3 className="font-medium text-app-fg">{game.name}</h3>
         {game.provider_name && (
-          <p className="text-xs text-slate-500">{game.provider_name}</p>
+          <p className="text-xs text-muted/80">{game.provider_name}</p>
         )}
         {game.play_count != null && game.play_count > 0 && (
-          <p className="mt-1 text-xs text-slate-600">{game.play_count} plays</p>
+          <p className="mt-1 text-xs text-muted/60">{game.play_count} plays</p>
         )}
       </div>
     </Link>

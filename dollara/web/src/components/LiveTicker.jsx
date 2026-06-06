@@ -41,18 +41,18 @@ export function LiveTicker() {
 function TickerSection({ title, items, highlight }) {
   return (
     <div>
-      <h4 className="mb-2 text-xs uppercase text-slate-500">{title}</h4>
+      <h4 className="mb-2 text-xs uppercase text-muted/80">{title}</h4>
       <ul className="space-y-2">
         {items.slice(0, 5).map((item, i) => (
           <li
             key={`${item.username}-${i}`}
-            className={`rounded-lg bg-surface-700/50 px-2 py-1.5 text-xs ${
+            className={`rounded-lg bg-panel/50 px-2 py-1.5 text-xs ${
               highlight && item.amount >= 10000 ? 'animate-pulse-glow border border-brand-500/30' : ''
             }`}
           >
-            <span className="text-slate-300">{item.username}</span>
+            <span className="text-app-fg/80">{item.username}</span>
             <span className="ml-1 text-green-400">₹{item.amount.toLocaleString('en-IN')}</span>
-            <span className="block text-slate-500">{item.timestamp}</span>
+            <span className="block text-muted/80">{item.timestamp}</span>
           </li>
         ))}
       </ul>

@@ -3,21 +3,49 @@
 @tailwind utilities;
 
 :root {
-  --background: #0d0b14;
-  --foreground: #f1f5f9;
+  /* ---- Theme tokens (RGB triplets so Tailwind can apply alpha modifiers) ----
+     Dark is the default palette; .light overrides below swap every token. */
+  --color-app-bg: 13 11 20; /* page background, surface-900 */
+  --color-app-fg: 241 245 249; /* primary text, slate-100 */
+  --color-rail: 8 7 13; /* side rail / top bar / bottom nav, surface-950 */
+  --color-panel: 21 19 31; /* cards, glass, surface-800 */
+  --color-panel-strong: 13 11 20; /* stronger glass, surface-900 */
+  --color-muted: 148 163 184; /* secondary text, slate-400 */
+  --color-hairline: 255 255 255; /* border / overlay base — used with low alpha */
+  --ambient-1: rgba(255, 152, 0, 0.12);
+  --ambient-2: rgba(124, 77, 255, 0.14);
+  --ambient-3: rgba(124, 77, 255, 0.08);
+
+  --background: rgb(var(--color-app-bg));
+  --foreground: rgb(var(--color-app-fg));
   /* Ensure native form controls (number spinners, selects) render dark. */
   color-scheme: dark;
+}
+
+:root.light {
+  --color-app-bg: 246 245 250;
+  --color-app-fg: 27 23 38;
+  --color-rail: 255 255 255;
+  --color-panel: 255 255 255;
+  --color-panel-strong: 255 255 255;
+  --color-muted: 100 99 125;
+  --color-hairline: 20 16 36;
+  --ambient-1: rgba(255, 152, 0, 0.08);
+  --ambient-2: rgba(124, 77, 255, 0.08);
+  --ambient-3: rgba(124, 77, 255, 0.05);
+
+  color-scheme: light;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
   min-height: 100vh;
-  /* Layered ambient glows so the page never reads as flat black. */
+  /* Layered ambient glows so the page never reads as flat black (or flat white). */
   background-image:
-    radial-gradient(60% 50% at 12% -5%, rgba(255, 152, 0, 0.12) 0%, transparent 60%),
-    radial-gradient(55% 45% at 100% 0%, rgba(124, 77, 255, 0.14) 0%, transparent 55%),
-    radial-gradient(50% 50% at 50% 120%, rgba(124, 77, 255, 0.08) 0%, transparent 60%);
+    radial-gradient(60% 50% at 12% -5%, var(--ambient-1) 0%, transparent 60%),
+    radial-gradient(55% 45% at 100% 0%, var(--ambient-2) 0%, transparent 55%),
+    radial-gradient(50% 50% at 50% 120%, var(--ambient-3) 0%, transparent 60%);
   background-attachment: fixed;
 }
 
@@ -29,11 +57,12 @@ body {
     @apply bg-gradient-to-br from-brand-200 via-brand-400 to-brand-600 bg-clip-text text-transparent;
   }
   /* Frosted panel used across cards, header, modals. */
-  .glass {
-    @apply rounded-2xl border border-white/[0.07] bg-surface-800/70 backdrop-blur-xl;
+  .glass,
+  .card-glass {
+    @apply rounded-2xl border border-hairline/[0.07] bg-panel/70 backdrop-blur-xl;
   }
   .glass-strong {
-    @apply rounded-2xl border border-white/10 bg-surface-900/80 backdrop-blur-2xl;
+    @apply rounded-2xl border border-hairline/10 bg-panel-strong/80 backdrop-blur-2xl;
   }
   /* Animated gradient border wrapper. */
   .ring-grad {
@@ -81,17 +110,19 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #2a2540;
+  background: rgb(var(--color-hairline) / 0.15);
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a3358;
+  background: rgb(var(--color-hairline) / 0.25);
   background-clip: padding-box;
 }
 
-/* SweetAlert popups should match the dark glass theme */
+/* SweetAlert popups should match the active glass theme */
 .swal2-popup {
   border-radius: 1rem !important;
+  background: rgb(var(--color-panel)) !important;
+  color: rgb(var(--color-app-fg)) !important;
 }

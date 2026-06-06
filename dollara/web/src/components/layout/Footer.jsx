@@ -20,13 +20,13 @@ export function Footer() {
     <footer className="mt-16 px-4 xl:px-6">
       <div className="mx-auto max-w-[1400px]">
         {/* CTA band */}
-        <div className="ring-grad relative overflow-hidden rounded-3xl bg-mesh-violet p-8 text-center sm:p-12">
+        <div className="ring-grad relative overflow-hidden rounded-3xl bg-panel-strong bg-mesh-violet p-8 text-center sm:p-12">
           <div className="pointer-events-none absolute -left-10 top-0 h-40 w-40 rounded-full bg-brand-500/20 blur-3xl" />
           <div className="pointer-events-none absolute -right-10 bottom-0 h-40 w-40 rounded-full bg-accent-500/25 blur-3xl" />
-          <h2 className="relative font-display text-3xl font-black text-white sm:text-4xl">
+          <h2 className="relative font-display text-3xl font-black text-app-fg sm:text-4xl">
             Ready to <span className="text-gradient-gold">win big?</span>
           </h2>
-          <p className="relative mx-auto mt-3 max-w-md text-sm text-slate-300/80">
+          <p className="relative mx-auto mt-3 max-w-md text-sm text-muted">
             Join 1.2M+ players. Sign up in seconds, claim your ₹5,000 welcome bonus, and cash out in minutes.
           </p>
           <div className="relative mt-6 flex flex-wrap items-center justify-center gap-3">
@@ -36,14 +36,14 @@ export function Footer() {
             >
               Create free account <ArrowRight className="h-4 w-4" />
             </Link>
-            <button className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-6 py-3 text-sm font-bold text-white transition hover:bg-white/[0.06]">
+            <button className="inline-flex items-center gap-2 rounded-xl border border-hairline/15 px-6 py-3 text-sm font-bold text-app-fg transition hover:bg-hairline/[0.06]">
               <Download className="h-4 w-4" /> Get the app
             </button>
           </div>
         </div>
 
         {/* Payments marquee */}
-        <div className="mt-8 flex items-center gap-4 overflow-hidden rounded-2xl border border-white/[0.06] bg-surface-900/60 px-4 py-3">
+        <div className="mt-8 flex items-center gap-4 overflow-hidden rounded-2xl border border-hairline/[0.06] bg-panel-strong/60 px-4 py-3">
           <span className="flex shrink-0 items-center gap-2 text-xs font-bold uppercase tracking-widest text-emerald-400">
             <ShieldCheck className="h-4 w-4" /> Instant & secure
           </span>
@@ -52,7 +52,7 @@ export function Footer() {
               {[0, 1].map((dup) => (
                 <span key={dup} className="flex items-center gap-8">
                   {PAYMENTS.map((p) => (
-                    <span key={p} className="font-display text-sm font-bold text-slate-400">{p}</span>
+                    <span key={p} className="font-display text-sm font-bold text-muted">{p}</span>
                   ))}
                 </span>
               ))}
@@ -61,7 +61,7 @@ export function Footer() {
         </div>
 
         {/* Link strip */}
-        <div className="mt-10 grid grid-cols-2 gap-8 border-t border-white/[0.06] pt-10 md:grid-cols-3 lg:grid-cols-6">
+        <div className="mt-10 grid grid-cols-2 gap-8 border-t border-hairline/[0.06] pt-10 md:grid-cols-3 lg:grid-cols-6">
           {/* Brand + support — spans wider */}
           <div className="col-span-2 space-y-4">
             <div className="flex items-center gap-2.5">
@@ -73,14 +73,14 @@ export function Footer() {
                   {brandName.charAt(0).toUpperCase()}
                 </span>
               </span>
-              <span className="font-display text-xl font-extrabold text-white">{brandName}</span>
+              <span className="font-display text-xl font-extrabold text-app-fg">{brandName}</span>
             </div>
-            <p className="max-w-xs text-xs leading-relaxed text-slate-400">
+            <p className="max-w-xs text-xs leading-relaxed text-muted">
               The premier platform for live, uninterrupted betting across Cricket, Soccer, Aviator, Andar Bahar and 2,000+ games.
             </p>
             <Link
               href="/support/chat"
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-white transition hover:border-emerald-400/50 hover:bg-surface-800"
+              className="inline-flex items-center gap-2 rounded-xl border border-hairline/10 px-4 py-2 text-xs font-bold text-app-fg transition hover:border-emerald-400/50 hover:bg-panel"
             >
               <Headset className="h-4 w-4 text-emerald-400" /> 24/7 Live support
             </Link>
@@ -88,11 +88,11 @@ export function Footer() {
 
           {LINK_GROUPS.map((group) => (
             <div key={group.title}>
-              <h3 className="mb-4 text-xs font-bold uppercase tracking-widest text-white">{group.title}</h3>
+              <h3 className="mb-4 text-xs font-bold uppercase tracking-widest text-app-fg">{group.title}</h3>
               <ul className="space-y-2.5 text-sm">
                 {group.links.map((link) => (
                   <li key={link}>
-                    <Link href="#" className="text-slate-400 transition-colors hover:text-brand-400">
+                    <Link href="#" className="text-muted transition-colors hover:text-brand-400">
                       {link}
                     </Link>
                   </li>
@@ -103,9 +103,9 @@ export function Footer() {
         </div>
 
         {/* Slim legal bar */}
-        <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-white/[0.06] py-6 sm:flex-row">
-          <div className="flex items-center gap-3 text-[11px] font-semibold text-slate-500">
-            <span className="rounded-md border border-white/10 bg-surface-800 px-2 py-1 text-red-400">18+</span>
+        <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-hairline/[0.06] py-6 sm:flex-row">
+          <div className="flex items-center gap-3 text-[11px] font-semibold text-muted/80">
+            <span className="rounded-md border border-hairline/10 bg-panel px-2 py-1 text-red-400">18+</span>
             <span>© 2026 {brandName}. All rights reserved.</span>
           </div>
           <p className="text-[11px] font-bold uppercase tracking-widest text-brand-400/80">

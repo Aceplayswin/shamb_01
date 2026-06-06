@@ -72,8 +72,6 @@ const NAV_GROUPS = [
 /* ----------------------------- Feedback helpers ---------------------------- */
 
 const SWAL_THEME = {
-  background: '#15131f',
-  color: '#f1f5f9',
   confirmButtonColor: '#ff9800',
   cancelButtonColor: '#211d30',
 };
