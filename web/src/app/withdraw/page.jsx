@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { api } from '@/lib/api';
+import { api } from '@/services/api';
 
 export default function WithdrawPage() {
   const [wallet, setWallet] = useState(null);

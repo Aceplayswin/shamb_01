@@ -11,6 +11,13 @@ from core.ai import chat_respond, fraud_score, pytorch_version, welcome_call
 from core.geo import detect_geo_from_ip
 from core.middleware import require_auth
 from core.models import AiCallLog, Transaction, User, Wallet
+from services.branding import get_branding_for_slug
+from tenants.state import get_current_tenant_slug
+
+
+def _brand_name() -> str:
+    """Current tenant's product name for white-labelling user-facing copy."""
+    return get_branding_for_slug(get_current_tenant_slug()).get('product_name', 'our platform')
 
 
 def health(request):
@@ -578,6 +585,7 @@ def ai_welcome_call(request):
         user_id=user_id,
         name=user.full_name,
         voice_executive_id=voice_id,
+        brand=_brand_name(),
     )
     AiCallLog.objects.create(
         user_id=user_id,
@@ -597,5 +605,5 @@ def ai_chat(request):
     message = body.get('message', '')
     if not message:
         return _error_response(ValueError('message is required'))
-    data = chat_respond(message=message, language=body.get('language', 'en'))
+    data = chat_respond(message=message, language=body.get('language', 'en'), brand=_brand_name())
     return JsonResponse(data)

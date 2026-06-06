@@ -11,10 +11,14 @@ def _normalize_sub(sub: Any) -> int | str:
     return sub
 
 
-def sign_token(payload: dict[str, Any]) -> str:
+def sign_token(payload: dict[str, Any], tenant: str | None = None) -> str:
     data = dict(payload)
     if 'sub' in data and data['sub'] is not None:
         data['sub'] = str(data['sub'])
+    # Embed the resolved tenant so the API can scope/verify requests even when
+    # the host header is absent (e.g. native mobile clients).
+    if tenant is not None and 'tenant' not in data:
+        data['tenant'] = tenant
     data['exp'] = datetime.now(timezone.utc) + timedelta(days=settings.JWT_EXPIRY_DAYS)
     return jwt.encode(data, settings.JWT_SECRET, algorithm='HS256')
 

@@ -1,6 +1,8 @@
-# DOLLARA Mobile App
+# Mobile App (React Native)
 
-React Native player app for the DOLLARA platform, connected to the Django API.
+White-label React Native player app for the gaming SaaS platform. The same
+codebase ships every product (Dollara, Product B, ...) — only the build-time
+tenant config and the dynamically-loaded branding differ.
 
 ## Features
 
@@ -19,12 +21,19 @@ React Native player app for the DOLLARA platform, connected to the Django API.
 - API running at port **4000** (see `../api`)
 - iOS: Xcode · Android: Android Studio
 
-## API URL
+## White-label / tenant config
 
-Edit `src/config.js` if needed:
+Edit [src/tenant.js](src/tenant.js) per product build:
 
-| Platform | Default host |
-|----------|----------------|
+- `API_URL` — backend base URL
+- `TENANT_SLUG` — product slug sent as the `X-Tenant` header (e.g. `dollara`, `productb`)
+- `DEFAULT_BRANDING` — fallback name/colors shown before `/api/v1/branding` loads
+
+At runtime the app fetches the tenant's branding (name, colors, logo, support)
+and applies it via `src/branding.js`.
+
+| Platform | API host |
+|----------|----------|
 | iOS Simulator | `http://localhost:4000` |
 | Android Emulator | `http://10.0.2.2:4000` |
 | Physical device | Your machine's LAN IP, e.g. `http://192.168.1.x:4000` |
@@ -37,7 +46,7 @@ cd ../api && source .venv/bin/activate
 python manage.py runserver 0.0.0.0:4000
 
 # Mobile app
-cd dollara
+cd mobile
 npm install
 npm start
 

@@ -7,7 +7,6 @@ from decimal import Decimal
 import bcrypt
 from django.conf import settings
 from django.core.cache import cache
-from django.db import transaction
 from django.db.models import Count, F, Q, Sum
 from django.utils import timezone
 
@@ -22,6 +21,7 @@ from core.models import (
     Wallet,
     WithdrawalStage,
 )
+from tenants.state import get_current_tenant_slug, tenant_atomic
 
 
 def _hash_password(password: str) -> str:
@@ -106,7 +106,7 @@ def register_with_otp(full_name: str, phone: str, country_code: str = 'IN') -> d
         phone_verified=True,
         ai_voice_executive_id=voice_id,
     )
-    token = sign_token({'sub': user.id, 'role': User.Role.USER})
+    token = sign_token({'sub': user.id, 'role': User.Role.USER}, tenant=get_current_tenant_slug())
     return {
         'userId': user.id,
         'username': username,
@@ -129,7 +129,10 @@ def create_demo_session() -> dict:
         is_demo=True,
         demo_expires_at=expires_at,
     )
-    token = sign_token({'sub': user.id, 'role': User.Role.USER, 'type': 'demo'})
+    token = sign_token(
+        {'sub': user.id, 'role': User.Role.USER, 'type': 'demo'},
+        tenant=get_current_tenant_slug(),
+    )
     cache.set(
         f'demo:{user.id}',
         {'expiresAt': expires_at.isoformat()},
@@ -152,7 +155,7 @@ def login_user(phone: str, password: str) -> dict:
     prefs = get_user_settings(user)
     if prefs and prefs.is_demo:
         payload['type'] = 'demo'
-    return {'token': sign_token(payload), 'userId': user.id}
+    return {'token': sign_token(payload, tenant=get_current_tenant_slug()), 'userId': user.id}
 
 
 def login_admin(username: str, password: str) -> dict:
@@ -166,7 +169,7 @@ def login_admin(username: str, password: str) -> dict:
     admin.last_login_at = timezone.now()
     admin.save(update_fields=['last_login_at'])
     return {
-        'token': sign_token({'sub': admin.id, 'role': admin.role}),
+        'token': sign_token({'sub': admin.id, 'role': admin.role}, tenant=get_current_tenant_slug()),
         'role': admin.role,
     }
 
@@ -198,7 +201,7 @@ def create_deposit(user_id: int, amount: float, payment_method: str, currency: s
 
 
 def confirm_deposit(transaction_id: int, reference_number: str) -> dict:
-    with transaction.atomic():
+    with tenant_atomic():
         tx = Transaction.objects.select_for_update().get(
             id=transaction_id, type=Transaction.TxType.DEPOSIT
         )
@@ -219,7 +222,7 @@ def create_withdrawal(user_id: int, amount: float, payment_method: str) -> dict:
     if amount < 500:
         raise ValueError('Minimum withdrawal is ₹500')
 
-    with transaction.atomic():
+    with tenant_atomic():
         tx = Transaction.objects.create(
             user_id=user_id,
             type=Transaction.TxType.WITHDRAWAL,
@@ -287,7 +290,7 @@ def list_games(
 
 
 def place_bet(user_id: int, game_id: int, amount: float, odds: float | None = None) -> dict:
-    with transaction.atomic():
+    with tenant_atomic():
         wallet = Wallet.objects.select_for_update().get(user_id=user_id)
         available = wallet.main_balance - wallet.locked_balance
         if available < Decimal(str(amount)):

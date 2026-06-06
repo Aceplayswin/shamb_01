@@ -28,7 +28,8 @@ import {
   Loader2,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
-import { adminApi, clearAdminToken, getAdminRole, getAdminToken } from '@/lib/adminApi';
+import { adminApi, clearAdminToken, getAdminRole, getAdminToken } from '@/services/adminApi';
+import { useBranding } from '@/hooks/useBranding';
 
 const NAV_GROUPS = [
   {
@@ -142,6 +143,7 @@ function NavLink({ href, label, icon: Icon, exact, onNavigate }) {
 }
 
 function SidebarContent({ onNavigate }) {
+  const branding = useBranding();
   return (
     <>
       <Link
@@ -150,15 +152,20 @@ function SidebarContent({ onNavigate }) {
         className="flex shrink-0 items-center gap-3 px-5 py-5"
       >
         <span className="relative grid h-10 w-10 place-items-center">
-          <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-brand-400 to-accent-500 opacity-60 blur-[6px]" />
-          <span className="relative grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-brand-400 via-brand-500 to-accent-600 shadow-glow">
+          <span
+            className="absolute inset-0 rounded-2xl opacity-60 blur-[6px]"
+            style={{ backgroundColor: branding.theme_color }}
+          />
+          <span
+            className="relative grid h-10 w-10 place-items-center rounded-2xl shadow-glow"
+            style={{ background: `linear-gradient(135deg, ${branding.theme_color}, ${branding.secondary_color})` }}
+          >
             <Sparkles className="h-5 w-5 text-surface-950" strokeWidth={2.5} />
           </span>
         </span>
         <span>
-          <span className="block font-display text-lg font-extrabold leading-none">
-            <span className="text-gradient-gold">DOLL</span>
-            <span className="text-white">ARA</span>
+          <span className="block font-display text-lg font-extrabold leading-none text-white">
+            {branding.product_name}
           </span>
           <span className="text-[0.6rem] font-bold uppercase tracking-[0.25em] text-slate-500">
             Admin Console

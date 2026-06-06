@@ -7,6 +7,7 @@ import { useAuthStore } from '../store/auth';
 import { useWalletStore } from '../store/walletStore';
 import { CustomTabBar } from '../components/CustomTabBar';
 import { colors } from '../theme';
+import { useBranding } from '../branding';
 import { LoginScreen } from '../screens/LoginScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
 import { HomeScreen } from '../screens/HomeScreen';
@@ -67,6 +68,7 @@ export function RootNavigator() {
   const isHydrated = useAuthStore((s) => s.isHydrated);
   const hydrateAuth = useAuthStore((s) => s.hydrate);
   const hydrateWallet = useWalletStore((s) => s.hydrate);
+  const branding = useBranding();
 
   useEffect(() => {
     hydrateAuth();
@@ -76,8 +78,8 @@ export function RootNavigator() {
   if (!isHydrated) {
     return (
       <View style={styles.splash}>
-        <Text style={styles.logo}>DOLLARA</Text>
-        <ActivityIndicator color={colors.brand400} style={styles.loader} />
+        <Text style={[styles.logo, { color: branding.theme_color }]}>{branding.product_name}</Text>
+        <ActivityIndicator color={branding.theme_color} style={styles.loader} />
       </View>
     );
   }

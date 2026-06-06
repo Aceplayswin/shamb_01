@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
+import { useBranding } from '@/hooks/useBranding';
 import {
   Play,
   ChevronDown,
@@ -180,6 +181,7 @@ function Accordion({ question, answer, isOpen, onClick }) {
 }
 
 export default function HomePage() {
+  const branding = useBranding();
   const [openFaq, setOpenFaq] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProvider, setSelectedProvider] = useState(null);
@@ -308,7 +310,7 @@ export default function HomePage() {
                 Premier <span className="text-brand-400">betting</span> experience
               </span>
               <span className="hidden h-4 w-px bg-white/15 sm:block" />
-              <span className="font-display text-lg font-extrabold italic text-gradient-gold">DOLLARA</span>
+              <span className="font-display text-lg font-extrabold italic text-gradient-gold">{branding.product_name}</span>
             </div>
             <div className="relative flex w-full items-center sm:w-80">
               <Search className="absolute left-3.5 h-4 w-4 text-slate-400" />
@@ -460,7 +462,7 @@ export default function HomePage() {
                 </div>
                 <div className="space-y-3">
                   {[
-                    { q: 'Why is DOLLARA one of the best betting sites in India?', a: 'A trusted, licensed platform built around fast payouts, fair games and 24/7 human support — without the clutter of typical betting sites.' },
+                    { q: `Why is ${branding.product_name} one of the best betting sites in India?`, a: 'A trusted, licensed platform built around fast payouts, fair games and 24/7 human support — without the clutter of typical betting sites.' },
                     { q: 'Is online betting legal in India?', a: 'There are no federal laws explicitly prohibiting online betting across most of India. We recommend checking your local state regulations.' },
                     { q: 'How do I withdraw my winnings?', a: 'Withdraw instantly to UPI or your bank account. Most cash-outs complete in under five minutes.' },
                     { q: 'Can I actually win in an online casino?', a: 'Yes. Every game uses certified RNG and published RTP so outcomes are genuinely random and verifiable.' },

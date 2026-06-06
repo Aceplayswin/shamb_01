@@ -9,9 +9,30 @@ from core.models import Bonus, Game, GameProvider, PlatformSetting, User
 
 
 class Command(BaseCommand):
-    help = 'Seed database with initial admin, providers, games, and settings'
+    help = 'Seed a tenant database with initial admin, providers, games, and settings'
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--tenant',
+            default=None,
+            help='Product slug to seed. Activates that tenant DB connection before seeding.',
+        )
+        parser.add_argument(
+            '--brand_name',
+            default='DOLLARA',
+            help='Brand name stored in the site_name platform setting.',
+        )
 
     def handle(self, *args, **options):
+        tenant = options.get('tenant')
+        if tenant:
+            # Activate the tenant DB so ORM writes are routed to it.
+            from services.tenant_resolver import resolve_tenant
+
+            resolve_tenant(header_slug=tenant)
+            self.stdout.write(f'Seeding tenant: {tenant}')
+
+        brand_name = options.get('brand_name') or 'DOLLARA'
         password_hash = bcrypt.hashpw(b'Admin@123', bcrypt.gensalt()).decode()
         admin, created = User.objects.get_or_create(
             username='superadmin',
@@ -76,7 +97,7 @@ class Command(BaseCommand):
         )
 
         settings_data = {
-            'site_name': 'DOLLARA',
+            'site_name': brand_name,
             'supported_languages': ['en', 'hi', 'ta', 'te', 'ml'],
             'min_deposit': 100,
             'min_withdrawal': 500,

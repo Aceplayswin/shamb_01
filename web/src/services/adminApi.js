@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+import { API_URL, tenantHeaders } from './tenant';
 
 export function getAdminToken() {
   if (typeof window === 'undefined') return null;
@@ -30,6 +30,7 @@ export async function adminApi(path, options = {}) {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...tenantHeaders(),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
@@ -53,7 +54,7 @@ export async function adminApi(path, options = {}) {
 export async function adminLogin(username, password) {
   const res = await fetch(`${API_URL}/api/v1/admin/auth/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...tenantHeaders() },
     body: JSON.stringify({ username, password }),
   });
   if (!res.ok) {

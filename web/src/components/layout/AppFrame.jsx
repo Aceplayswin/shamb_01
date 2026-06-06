@@ -4,9 +4,9 @@ import { usePathname } from 'next/navigation';
 
 export function AppFrame({ children }) {
   const pathname = usePathname();
-  // The admin console renders its own shell (sidebar + top bar), so it must not
-  // inherit the player-site chrome offsets.
-  if (pathname?.startsWith('/admin')) {
+  // The admin console and super admin portal render their own shells, so they
+  // must not inherit the player-site chrome offsets.
+  if (pathname?.startsWith('/admin') || pathname?.startsWith('/super-admin')) {
     return children;
   }
   // Global app shell offsets: top bar (h-16), desktop side rail (w-[92px]),

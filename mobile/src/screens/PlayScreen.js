@@ -65,7 +65,7 @@ export function PlayScreen({ route, navigation }) {
         </View>
         <Text style={styles.name}>{game.name}</Text>
         <Text style={styles.meta}>
-          {game.provider_name ?? 'DOLLARA'} · RTP {game.rtp ?? '—'}%
+          {game.provider_name ? `${game.provider_name} · ` : ''}RTP {game.rtp ?? '—'}%
         </Text>
         {game.is_provably_fair ? (
           <View style={styles.fairBadge}>

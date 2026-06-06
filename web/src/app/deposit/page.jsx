@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { api } from '@/lib/api';
+import { api } from '@/services/api';
 
 const QUICK_AMOUNTS = [500, 1000, 2500, 5000, 10000];
 const PAYMENT_METHODS = [

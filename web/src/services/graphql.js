@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+import { API_URL, tenantHeaders } from './tenant';
 
 export async function graphql(query, variables = {}) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
@@ -6,6 +6,7 @@ export async function graphql(query, variables = {}) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...tenantHeaders(),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify({ query, variables }),

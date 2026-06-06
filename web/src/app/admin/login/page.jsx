@@ -3,10 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sparkles, Lock, User as UserIcon, Loader2, ShieldCheck, AlertCircle } from 'lucide-react';
-import { adminLogin, getAdminToken } from '@/lib/adminApi';
+import { adminLogin, getAdminToken } from '@/services/adminApi';
+import { useBranding } from '@/hooks/useBranding';
 
 export default function AdminLoginPage() {
   const router = useRouter();
+  const branding = useBranding();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -38,14 +40,19 @@ export default function AdminLoginPage() {
       <div className="relative w-full max-w-sm">
         <div className="mb-7 flex flex-col items-center text-center">
           <span className="relative grid h-14 w-14 place-items-center">
-            <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-brand-400 to-accent-500 opacity-60 blur-md" />
-            <span className="relative grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-brand-400 via-brand-500 to-accent-600 shadow-glow">
+            <span
+              className="absolute inset-0 rounded-2xl opacity-60 blur-md"
+              style={{ backgroundColor: branding.theme_color }}
+            />
+            <span
+              className="relative grid h-14 w-14 place-items-center rounded-2xl shadow-glow"
+              style={{ background: `linear-gradient(135deg, ${branding.theme_color}, ${branding.secondary_color})` }}
+            >
               <Sparkles className="h-7 w-7 text-surface-950" strokeWidth={2.5} />
             </span>
           </span>
-          <h1 className="mt-4 font-display text-2xl font-extrabold">
-            <span className="text-gradient-gold">DOLL</span>
-            <span className="text-white">ARA</span>
+          <h1 className="mt-4 font-display text-2xl font-extrabold text-white">
+            {branding.product_name}
           </h1>
           <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
             <ShieldCheck className="h-3.5 w-3.5" /> Admin Console

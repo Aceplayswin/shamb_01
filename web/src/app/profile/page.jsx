@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { api } from '@/lib/api';
+import { api } from '@/services/api';
 import { useAuthStore } from '@/store/auth';
 
 export default function ProfilePage() {

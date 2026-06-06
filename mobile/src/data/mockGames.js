@@ -22,12 +22,12 @@ export const MOCK_GAMES = {
     { id: 'sl-4', name: 'Cash Multiplier', provider_name: '2J', category: 'slots', rtp: 94, min_bet: 25, max_bet: 15000 },
   ],
   fantasy: [
-    { id: 'fn-1', name: 'Dream11 Style', provider_name: 'DOLLARA', category: 'fantasy', rtp: 90, min_bet: 100, max_bet: 50000 },
-    { id: 'fn-2', name: 'Cricket Fantasy', provider_name: 'DOLLARA', category: 'fantasy', rtp: 88, min_bet: 50, max_bet: 25000 },
+    { id: 'fn-1', name: 'Dream11 Style', provider_name: 'In-House', category: 'fantasy', rtp: 90, min_bet: 100, max_bet: 50000 },
+    { id: 'fn-2', name: 'Cricket Fantasy', provider_name: 'In-House', category: 'fantasy', rtp: 88, min_bet: 50, max_bet: 25000 },
   ],
   ai_games: [
-    { id: 'ai-1', name: 'AI Predictor', provider_name: 'DOLLARA', category: 'ai_games', rtp: 92, min_bet: 100, max_bet: 10000, is_provably_fair: true },
-    { id: 'ai-2', name: 'Smart Dice', provider_name: 'DOLLARA', category: 'ai_games', rtp: 96, min_bet: 50, max_bet: 5000, is_provably_fair: true },
+    { id: 'ai-1', name: 'AI Predictor', provider_name: 'In-House', category: 'ai_games', rtp: 92, min_bet: 100, max_bet: 10000, is_provably_fair: true },
+    { id: 'ai-2', name: 'Smart Dice', provider_name: 'In-House', category: 'ai_games', rtp: 96, min_bet: 50, max_bet: 5000, is_provably_fair: true },
   ],
 };
 

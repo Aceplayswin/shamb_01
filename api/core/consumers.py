@@ -10,7 +10,7 @@ class LiveFeedConsumer(AsyncWebsocketConsumer):
         await self.accept()
         await self.send(text_data=json.dumps({
             'type': 'connected',
-            'message': 'DOLLARA live feed',
+            'message': 'live feed',
         }))
         self._task = asyncio.create_task(self._ticker_loop())
 

@@ -99,10 +99,11 @@ def welcome_call(
     user_id: str,
     name: str,
     voice_executive_id: str = 'AI_EXEC_001',
+    brand: str = 'our platform',
 ) -> dict:
     display = name or 'Player'
     transcript = (
-        f"Hello {display}, how are you? I'm calling on behalf of DOLLARA. "
+        f"Hello {display}, how are you? I'm calling on behalf of {brand}. "
         f"Are you free for a couple of minutes? Which games do you usually play? "
         f"Great news! Free money has been added to your wallet. "
         f"You can play and even withdraw it, {display}! "
@@ -120,7 +121,7 @@ def welcome_call(
     }
 
 
-def chat_respond(*, message: str, language: str = 'en') -> dict:
+def chat_respond(*, message: str, language: str = 'en', brand: str = 'our platform') -> dict:
     lower = message.lower()
     if 'deposit' in lower:
         reply = 'To deposit, go to Wallet > Deposit. UPI is instant. Min ₹100.'
@@ -129,5 +130,5 @@ def chat_respond(*, message: str, language: str = 'en') -> dict:
     elif 'bonus' in lower:
         reply = 'Your welcome bonus of ₹100 is in your bonus wallet. Wagering is 35x.'
     else:
-        reply = "I'm your DOLLARA assistant. How can I help you today?"
+        reply = f"I'm your {brand} assistant. How can I help you today?"
     return {'reply': reply, 'language': language}

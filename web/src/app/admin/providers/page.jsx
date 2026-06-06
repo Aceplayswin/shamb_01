@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Building2, Plus, Pencil } from 'lucide-react';
-import { adminApi } from '@/lib/adminApi';
+import { adminApi } from '@/services/adminApi';
 import {
   AdminShell,
   DataTable,

@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { GameCard } from '@/components/GameCard';
-import { api } from '@/lib/api';
+import { api } from '@/services/api';
 
 const CATEGORY_MAP = {
   lottery: 'lottery',

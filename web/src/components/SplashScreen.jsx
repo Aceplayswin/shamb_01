@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useBranding } from '@/hooks/useBranding';
 
 export function SplashScreen({ onComplete }) {
+  const branding = useBranding();
   const [visible, setVisible] = useState(true);
   const [canSkip, setCanSkip] = useState(false);
 
@@ -30,7 +32,7 @@ export function SplashScreen({ onComplete }) {
       <div className="pointer-events-none absolute left-1/2 top-1/2 h-[40rem] w-[40rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-mesh-amber blur-3xl" />
       <div className="relative animate-fade-up text-center">
         <h1 className="font-display text-6xl font-black tracking-tight md:text-8xl">
-          <span className="shimmer-text">DOLLARA</span>
+          <span className="shimmer-text">{branding.product_name}</span>
         </h1>
         <p className="mt-4 text-sm font-semibold uppercase tracking-[0.4em] text-accent-300/70">Play · Win · Repeat</p>
         <div className="mx-auto mt-8 h-1 w-40 overflow-hidden rounded-full bg-surface-700">

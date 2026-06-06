@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { api } from '@/lib/api';
+import { api } from '@/services/api';
 import { useAuthStore } from '@/store/auth';
 import Link from 'next/link';
 
@@ -67,7 +67,7 @@ export default function PlayPage() {
         <div className="card-glass p-8 text-center">
           <div className="text-6xl">{game.category === 'ai_games' ? '🤖' : '🎮'}</div>
           <h1 className="mt-4 text-2xl font-bold text-white">{game.name}</h1>
-          <p className="text-slate-400">{game.provider_name ?? 'DOLLARA'}</p>
+          {game.provider_name && <p className="text-slate-400">{game.provider_name}</p>}
           {game.is_provably_fair ? (
             <p className="mt-2 text-sm text-green-400">Provably Fair</p>
           ) : null}

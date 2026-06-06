@@ -17,6 +17,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'strawberry.django',
     'channels',
+    'tenants',
     'core',
 ]
 
@@ -24,6 +25,8 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.middleware.common.CommonMiddleware',
+    # Resolve the tenant (and activate its DB) before auth/feature code runs.
+    'middleware.tenant.TenantResolverMiddleware',
     'core.middleware.JWTAuthenticationMiddleware',
 ]
 
@@ -31,32 +34,54 @@ ROOT_URLCONF = 'config.urls'
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
+# --- Multi-tenant database-per-tenant configuration ---
+# `default` is the master / control-plane database (products, domains, branding,
+# super admins). Tenant databases are registered dynamically at runtime by the
+# tenant resolver (see services/tenant_resolver.py + tenants/state.py) and routed
+# via middleware.db_router.TenantRouter.
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.getenv('MYSQL_DATABASE', 'dollara'),
-        'USER': os.getenv('MYSQL_USER', 'dollara'),
-        'PASSWORD': os.getenv('MYSQL_PASSWORD', 'dollara_pass'),
-        'HOST': os.getenv('MYSQL_HOST', 'localhost'),
-        'PORT': os.getenv('MYSQL_PORT', '3306'),
+        'NAME': os.getenv('MASTER_MYSQL_DATABASE', os.getenv('MYSQL_DATABASE', 'dollara_master')),
+        'USER': os.getenv('MASTER_MYSQL_USER', os.getenv('MYSQL_USER', 'root')),
+        'PASSWORD': os.getenv('MASTER_MYSQL_PASSWORD', os.getenv('MYSQL_PASSWORD', '')),
+        'HOST': os.getenv('MASTER_MYSQL_HOST', os.getenv('MYSQL_HOST', 'localhost')),
+        'PORT': os.getenv('MASTER_MYSQL_PORT', os.getenv('MYSQL_PORT', '3306')),
         'OPTIONS': {'charset': 'utf8mb4'},
     }
 }
 
-CACHES = {
-    'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': os.getenv('REDIS_URL', 'redis://localhost:6379/1'),
-        'OPTIONS': {'CLIENT_CLASS': 'django_redis.client.DefaultClient'},
-    }
-}
+DATABASE_ROUTERS = ['middleware.db_router.TenantRouter']
 
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {'hosts': [os.getenv('REDIS_URL', 'redis://localhost:6379/0')]},
+# Default tenant slug used for local development hosts (localhost/127.0.0.1)
+# where no domain/subdomain is available.
+DEFAULT_TENANT = os.getenv('DEFAULT_TENANT', 'dollara')
+
+# Redis is optional in development. When unavailable, fall back to in-process
+# cache and channel layers so the API still runs.
+USE_REDIS = os.getenv('USE_REDIS', '1').lower() not in ('0', 'false', 'no')
+
+if USE_REDIS:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': os.getenv('REDIS_URL', 'redis://localhost:6379/1'),
+            'OPTIONS': {'CLIENT_CLASS': 'django_redis.client.DefaultClient'},
+        }
     }
-}
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {'hosts': [os.getenv('REDIS_URL', 'redis://localhost:6379/0')]},
+        }
+    }
+else:
+    CACHES = {
+        'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}
+    }
+    CHANNEL_LAYERS = {
+        'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'}
+    }
 
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
@@ -65,8 +90,9 @@ USE_TZ = True
 STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Schema is applied via api/database/init.sql (no Django migrations).
-MIGRATION_MODULES = {'core': None}
+# Schema is applied via SQL (database/init.sql per tenant, database/master.sql
+# for the control plane), so Django migrations are disabled for both apps.
+MIGRATION_MODULES = {'core': None, 'tenants': None}
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG
 CORS_ALLOW_CREDENTIALS = True

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { Download, ShieldCheck, ArrowRight, Headset } from 'lucide-react';
+import { useBranding } from '@/hooks/useBranding';
 
 const LINK_GROUPS = [
   { title: 'Play', links: ['Sports', 'Live Casino', 'Slots', 'Crash Games', 'Lottery'] },
@@ -13,6 +14,8 @@ const LINK_GROUPS = [
 const PAYMENTS = ['UPI', 'GPay', 'PhonePe', 'Paytm', 'Visa', 'Mastercard', 'Rupay', 'Net Banking'];
 
 export function Footer() {
+  const branding = useBranding();
+  const brandName = branding.product_name;
   return (
     <footer className="mt-16 px-4 xl:px-6">
       <div className="mx-auto max-w-[1400px]">
@@ -62,13 +65,15 @@ export function Footer() {
           {/* Brand + support — spans wider */}
           <div className="col-span-2 space-y-4">
             <div className="flex items-center gap-2.5">
-              <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-accent-600 text-surface-950 shadow-glow">
-                <span className="font-display text-sm font-black">D</span>
+              <span
+                className="grid h-9 w-9 place-items-center rounded-xl text-surface-950 shadow-glow"
+                style={{ background: `linear-gradient(135deg, ${branding.theme_color}, ${branding.secondary_color})` }}
+              >
+                <span className="font-display text-sm font-black">
+                  {brandName.charAt(0).toUpperCase()}
+                </span>
               </span>
-              <span className="font-display text-xl font-extrabold">
-                <span className="text-gradient-gold">DOLL</span>
-                <span className="text-white">ARA</span>
-              </span>
+              <span className="font-display text-xl font-extrabold text-white">{brandName}</span>
             </div>
             <p className="max-w-xs text-xs leading-relaxed text-slate-400">
               The premier platform for live, uninterrupted betting across Cricket, Soccer, Aviator, Andar Bahar and 2,000+ games.
@@ -101,7 +106,7 @@ export function Footer() {
         <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-white/[0.06] py-6 sm:flex-row">
           <div className="flex items-center gap-3 text-[11px] font-semibold text-slate-500">
             <span className="rounded-md border border-white/10 bg-surface-800 px-2 py-1 text-red-400">18+</span>
-            <span>© 2026 DOLLARA. All rights reserved.</span>
+            <span>© 2026 {brandName}. All rights reserved.</span>
           </div>
           <p className="text-[11px] font-bold uppercase tracking-widest text-brand-400/80">
             Play responsibly · Gambling can be addictive

@@ -13,6 +13,7 @@ import { Icon } from '../components/Icon';
 import { BalanceCard } from '../components/BalanceCard';
 import { useAuthStore } from '../store/auth';
 import { colors, radius, spacing } from '../theme';
+import { useBranding } from '../branding';
 
 const { width } = Dimensions.get('window');
 
@@ -34,7 +35,7 @@ const CASINO_GAMES = [
 const TRENDING_GAMES = [
   { id: 't1', name: 'Crazy Time', provider: 'SMARTSOFT', category: 'live_casino' },
   { id: 't2', name: 'Forest Arrow', provider: 'TURBOGAMES', category: 'slots' },
-  { id: 't3', name: 'AI Predictor', provider: 'DOLLARA', category: 'ai_games' },
+  { id: 't3', name: 'AI Predictor', provider: 'In-House', category: 'ai_games' },
   { id: 't4', name: 'Mega Draw', provider: 'LOTTO', category: 'lottery' },
 ];
 
@@ -99,6 +100,7 @@ function SectionHeader({ icon, title, onSeeAll }) {
 export function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const token = useAuthStore((s) => s.token);
+  const branding = useBranding();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProvider, setSelectedProvider] = useState(null);
 
@@ -131,7 +133,7 @@ export function HomeScreen({ navigation }) {
     <View style={styles.flex}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <View style={styles.headerTop}>
-          <Text style={styles.logo}>DOLLARA</Text>
+          <Text style={[styles.logo, { color: branding.theme_color }]}>{branding.product_name}</Text>
           <View style={styles.headerButtons}>
             <Pressable onPress={() => navigation.navigate('Promotions')} style={styles.iconBtn}>
               <Icon name="gift-outline" size={22} color={colors.text} />

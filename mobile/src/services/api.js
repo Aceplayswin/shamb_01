@@ -1,5 +1,11 @@
-import { API_URL } from '../config';
+import { API_URL, TENANT_SLUG } from '../tenant';
 import { useAuthStore } from '../store/auth';
+
+// Every request carries the X-Tenant header so the backend resolves the right
+// product/database for this white-label build.
+function tenantHeaders(extra = {}) {
+  return { 'X-Tenant': TENANT_SLUG, ...extra };
+}
 
 export async function api(path, options = {}) {
   const token = useAuthStore.getState().token;
@@ -8,6 +14,7 @@ export async function api(path, options = {}) {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...tenantHeaders(),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
@@ -24,6 +31,12 @@ export async function detectGeo() {
   return api('/api/v1/geo/detect');
 }
 
+export async function fetchBranding() {
+  const res = await fetch(`${API_URL}/api/v1/branding`, { headers: tenantHeaders() });
+  if (!res.ok) throw new Error('Failed to load branding');
+  return res.json();
+}
+
 export async function fetchMe() {
   const token = useAuthStore.getState().token;
   if (!token) return null;
@@ -32,6 +45,7 @@ export async function fetchMe() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...tenantHeaders(),
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({

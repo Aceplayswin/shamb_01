@@ -23,7 +23,9 @@ export function GameCard({ game }) {
       </div>
       <div className="p-3">
         <h3 className="font-medium text-white">{game.name}</h3>
-        <p className="text-xs text-slate-500">{game.provider_name ?? 'DOLLARA'}</p>
+        {game.provider_name && (
+          <p className="text-xs text-slate-500">{game.provider_name}</p>
+        )}
         {game.play_count != null && game.play_count > 0 && (
           <p className="mt-1 text-xs text-slate-600">{game.play_count} plays</p>
         )}

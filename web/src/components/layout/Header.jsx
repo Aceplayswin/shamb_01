@@ -27,6 +27,7 @@ import {
   User,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { useBranding } from '@/hooks/useBranding';
 
 const PRIMARY = [
   { label: 'Home', href: '/', icon: Home },
@@ -94,17 +95,30 @@ function RailItem({ item }) {
 }
 
 export function Header() {
+  const branding = useBranding();
+  const brandName = branding.product_name;
   return (
     <>
       {/* ===== Desktop: fixed vertical side rail ===== */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-[92px] flex-col border-r border-white/[0.06] bg-surface-950/90 backdrop-blur-xl lg:flex">
-        <Link href="/" className="flex shrink-0 items-center justify-center py-4">
-          <span className="relative grid h-11 w-11 place-items-center">
-            <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-brand-400 to-accent-500 blur-[7px] opacity-60" />
-            <span className="relative grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-brand-400 via-brand-500 to-accent-600 shadow-glow">
-              <Sparkles className="h-5 w-5 text-surface-950" strokeWidth={2.5} />
+        <Link href="/" title={brandName} className="flex shrink-0 items-center justify-center py-4">
+          {branding.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={branding.logo_url} alt={brandName} className="h-11 w-11 rounded-2xl object-contain" />
+          ) : (
+            <span className="relative grid h-11 w-11 place-items-center">
+              <span
+                className="absolute inset-0 rounded-2xl blur-[7px] opacity-60"
+                style={{ backgroundColor: branding.theme_color }}
+              />
+              <span
+                className="relative grid h-11 w-11 place-items-center rounded-2xl shadow-glow"
+                style={{ background: `linear-gradient(135deg, ${branding.theme_color}, ${branding.secondary_color})` }}
+              >
+                <Sparkles className="h-5 w-5 text-surface-950" strokeWidth={2.5} />
+              </span>
             </span>
-          </span>
+          )}
         </Link>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-3 scrollbar-hide">
@@ -127,13 +141,18 @@ export function Header() {
       <header className="fixed inset-x-0 top-0 z-30 flex h-16 items-center gap-3 border-b border-white/[0.06] bg-surface-900/80 px-4 backdrop-blur-xl lg:left-[92px]">
         {/* Mobile logo */}
         <Link href="/" className="flex items-center gap-2 lg:hidden">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-accent-600 shadow-glow">
-            <Sparkles className="h-4 w-4 text-surface-950" strokeWidth={2.5} />
-          </span>
-          <span className="font-display text-lg font-extrabold">
-            <span className="text-gradient-gold">DOLL</span>
-            <span className="text-white">ARA</span>
-          </span>
+          {branding.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={branding.logo_url} alt={brandName} className="h-9 w-9 rounded-xl object-contain" />
+          ) : (
+            <span
+              className="grid h-9 w-9 place-items-center rounded-xl shadow-glow"
+              style={{ background: `linear-gradient(135deg, ${branding.theme_color}, ${branding.secondary_color})` }}
+            >
+              <Sparkles className="h-4 w-4 text-surface-950" strokeWidth={2.5} />
+            </span>
+          )}
+          <span className="font-display text-lg font-extrabold text-white">{brandName}</span>
         </Link>
 
         {/* Search */}

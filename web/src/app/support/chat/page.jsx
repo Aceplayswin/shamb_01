@@ -3,14 +3,16 @@
 import { useState } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { api } from '@/lib/api';
+import { api } from '@/services/api';
 import { useAuthStore } from '@/store/auth';
+import { useBranding } from '@/hooks/useBranding';
 import Link from 'next/link';
 
 export default function SupportChatPage() {
   const { token, wallet } = useAuthStore();
+  const branding = useBranding();
   const [messages, setMessages] = useState([
-    { role: 'bot', text: "Hi! I'm your DOLLARA assistant. How can I help?" },
+    { role: 'bot', text: `Hi! I'm your ${branding.product_name} assistant. How can I help?` },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);

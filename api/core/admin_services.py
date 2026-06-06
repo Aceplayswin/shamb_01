@@ -3,7 +3,6 @@
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
@@ -20,6 +19,7 @@ from core.models import (
     Wallet,
 )
 from core.services import get_user_settings
+from tenants.state import tenant_atomic
 
 
 def _serialize_user(u: User, wallet: Wallet | None = None, user_settings: UserSetting | None = None) -> dict:
@@ -326,7 +326,7 @@ def list_ai_call_logs(limit: int = 50, offset: int = 0) -> list[dict]:
 
 
 def wallet_adjustment(user_id: int, amount: float, notes: str) -> dict:
-    with transaction.atomic():
+    with tenant_atomic():
         wallet = Wallet.objects.select_for_update().get(user_id=user_id)
         delta = Decimal(str(amount))
         wallet.main_balance += delta

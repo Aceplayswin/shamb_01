@@ -14,9 +14,11 @@ import { Icon } from '../components/Icon';
 import { Input } from '../components/Input';
 import { useAuthStore } from '../store/auth';
 import { colors, spacing } from '../theme';
+import { useBranding } from '../branding';
 
 export function LoginScreen({ navigation }) {
   const setAuth = useAuthStore((s) => s.setAuth);
+  const branding = useBranding();
   const insets = useSafeAreaInsets();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -60,7 +62,7 @@ export function LoginScreen({ navigation }) {
         contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.lg }]}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.logo}>DOLLARA</Text>
+        <Text style={[styles.logo, { color: branding.theme_color }]}>{branding.product_name}</Text>
         <Text style={styles.tagline}>Play · Win · Repeat</Text>
 
         <Card style={styles.card}>

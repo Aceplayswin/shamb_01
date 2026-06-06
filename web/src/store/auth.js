@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { fetchMe } from '@/lib/graphql';
-import { api } from '@/lib/api';
+import { fetchMe } from '@/services/graphql';
+import { api } from '@/services/api';
 
 export const useAuthStore = create((set, get) => ({
   token: null,

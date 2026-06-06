@@ -1,6 +1,9 @@
-# DOLLARA Platform
+# White-Label Gaming SaaS Platform
 
-End-to-end online gambling platform with **90% automated operations**, built per the DOLLARA requirements document.
+A multi-tenant, white-label online gaming platform. One backend, one web app, and
+one mobile codebase serve unlimited products (Dollara, Product B, Product C, ...),
+each with its own **isolated database** and **dynamic branding**. New products are
+onboarded from the Super Admin portal with no code changes.
 
 ## Tech Stack
 
@@ -16,19 +19,35 @@ End-to-end online gambling platform with **90% automated operations**, built per
 ## Project Structure
 
 ```
-games/
-├── api/              # Django API + GraphQL + WebSocket + AI (PyTorch)
-│   ├── core/ai/      # Fraud scoring, welcome calls, chatbot
-│   ├── .env.example
-│   └── database/
-├── web/              # Next.js player + admin UI
-│   └── .env.example
-├── dollara/          # React Native mobile app
-│   └── README.md
+dollara/
+├── api/                 # Django API (multi-tenant)
+│   ├── tenants/         # Control-plane app: products, domains, branding, super admins
+│   ├── services/        # tenant_resolver, tenant_provisioning, branding
+│   ├── middleware/      # TenantResolverMiddleware + TenantRouter (DB-per-tenant)
+│   ├── core/            # Per-tenant features (auth, wallet, games, admin, ai)
+│   └── database/        # master.sql (control plane) + init.sql (per tenant)
+├── web/                 # Next.js player + admin + super-admin UI
+│   └── src/services/    # API layer (tenant-aware) + branding
+├── mobile/              # React Native app (env-driven white-label)
+│   └── src/branding.js  # Dynamic branding + theme
 └── package.json
 ```
 
 Each app loads its own `.env` from its directory.
+
+## Multi-tenant model
+
+- **Master DB** holds the catalog of products, their domains, isolated database
+  connection details, branding, and Super Admin accounts.
+- **Each product** has a completely isolated tenant database (same schema,
+  `database/init.sql`). No data is shared between products.
+- The **Tenant Resolver** picks the tenant per request from the domain/subdomain,
+  the `X-Tenant` header (mobile), or the JWT `tenant` claim, and the **TenantRouter**
+  switches the database connection at runtime.
+- The **branding engine** (`GET /api/v1/branding`) drives the product name, colors,
+  logo, and support details on web and mobile — no hardcoded brand in source.
+
+See [api/README.md](api/README.md) for the full backend architecture.
 
 ## Features (Phase 1)
 
@@ -60,22 +79,15 @@ brew services start mysql
 brew services start redis
 ```
 
-Create the database and user:
+Create and load the **master** (control-plane) database:
 
 ```bash
-mysql -u root -e "
-  CREATE DATABASE IF NOT EXISTS dollara;
-  CREATE USER IF NOT EXISTS 'dollara'@'localhost' IDENTIFIED BY 'dollara_pass';
-  GRANT ALL PRIVILEGES ON dollara.* TO 'dollara'@'localhost';
-  FLUSH PRIVILEGES;
-"
+mysql -u root -e "CREATE DATABASE IF NOT EXISTS dollara_master CHARACTER SET utf8mb4;"
+mysql -u root dollara_master < api/database/master.sql
 ```
 
-Load the database schema:
-
-```bash
-mysql -u dollara -pdollara_pass dollara < api/database/init.sql
-```
+The per-tenant databases (`dollara_db`, `productb_db`, `productc_db`) are created
+automatically by `seed_master` (see step 3).
 
 ### 1. Environment
 
@@ -100,24 +112,28 @@ cd ..
 npm install
 ```
 
-### 3. Database
+### 3. Seed master + provision tenant databases
 
-Import the schema (see step above), then seed (with the API venv activated):
+With the API venv activated, this creates the Super Admin and provisions the
+three initial products (each gets its own isolated database, schema, and seed
+data). `USE_REDIS=0` lets it run without a local Redis:
 
 ```bash
-cd api && python manage.py seed
+cd api && USE_REDIS=0 python manage.py seed_master
 ```
 
 ### 4. Mobile app (optional)
 
 ```bash
-cd dollara
+cd mobile
 npm install
 npm start
 # npm run ios   or   npm run android
 ```
 
-See [dollara/README.md](dollara/README.md) for API host configuration on emulators vs devices.
+The mobile build is white-labelled via [mobile/src/tenant.js](mobile/src/tenant.js)
+(`API_URL`, `TENANT_SLUG`, brand defaults). See [mobile/README.md](mobile/README.md)
+for API host configuration on emulators vs devices.
 
 ### 5. Run locally
 
@@ -141,17 +157,23 @@ npm run dev:web
 
 | Service | URL |
 |---------|-----|
-| Web | http://localhost:3000 |
+| Web (player) | http://localhost:3000 |
+| Product Admin UI | http://localhost:3000/admin/login |
+| Super Admin portal | http://localhost:3000/super-admin/login |
 | API (REST) | http://localhost:4000 |
+| Branding (per tenant) | http://localhost:4000/api/v1/branding |
 | GraphQL | http://localhost:4000/graphql |
 | WebSocket | ws://localhost:4000/ws |
-| Admin UI | http://localhost:3000/admin/login |
+
+Switch tenants in local dev with `?tenant=productb` (sets the `x-tenant` cookie)
+or by using a subdomain host such as `productb.localhost:3000`.
 
 ## Default credentials
 
-| Role | Username | Password |
-|------|----------|----------|
-| Admin | `superadmin` | `Admin@123` |
+| Role | Username | Password | Where |
+|------|----------|----------|-------|
+| Super Admin | `superadmin` | `Admin@123` | Master DB (`/super-admin/login`) |
+| Product Admin | `superadmin` | `Admin@123` | Each tenant DB (`/admin/login`) |
 
 Change these before any production deployment.
 

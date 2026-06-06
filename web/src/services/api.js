@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+import { API_URL, tenantHeaders } from './tenant';
 
 export async function api(path, options = {}) {
   const token =
@@ -8,6 +8,7 @@ export async function api(path, options = {}) {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...tenantHeaders(),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },

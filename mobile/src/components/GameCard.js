@@ -37,7 +37,7 @@ export function GameCard({ game, onPress }) {
         {game.name}
       </Text>
       <Text style={styles.provider} numberOfLines={1}>
-        {game.provider_name ?? 'DOLLARA'}
+        {game.provider_name ?? ''}
       </Text>
     </Pressable>
   );

@@ -14,7 +14,7 @@ import {
   Plus,
   RotateCcw,
 } from 'lucide-react';
-import { adminApi } from '@/lib/adminApi';
+import { adminApi } from '@/services/adminApi';
 import {
   AdminShell,
   Card,

@@ -12,6 +12,7 @@ import {
 import { Icon } from '../components/Icon';
 import { useAuthStore } from '../store/auth';
 import { colors, radius, spacing } from '../theme';
+import { useBranding } from '../branding';
 
 const SUGGESTIONS = ['How do I deposit?', 'Withdrawal time?', 'Welcome bonus?', 'KYC verification'];
 
@@ -35,8 +36,9 @@ function getReply(message) {
 
 export function SupportScreen() {
   const token = useAuthStore((s) => s.token);
+  const branding = useBranding();
   const [messages, setMessages] = useState([
-    { role: 'bot', text: "Hi! I'm your DOLLARA assistant. How can I help you today?" },
+    { role: 'bot', text: `Hi! I'm your ${branding.product_name} assistant. How can I help you today?` },
   ]);
   const [input, setInput] = useState('');
 

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Gamepad2, Plus, Pencil, Star } from 'lucide-react';
-import { adminApi } from '@/lib/adminApi';
+import { adminApi } from '@/services/adminApi';
 import {
   AdminShell,
   DataTable,
