@@ -98,29 +98,33 @@ export function Header() {
   const brandName = branding.product_name;
   return (
     <>
-      {/* ===== Desktop: fixed vertical side rail ===== */}
+      {/* ===== Desktop: full-height side rail (crosses under navbar) ===== */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-[92px] flex-col border-r border-hairline/[0.06] bg-rail/90 backdrop-blur-xl lg:flex">
-        <Link href="/" title={brandName} className="flex shrink-0 items-center justify-center py-4">
+        <Link
+          href="/"
+          title={brandName}
+          className="flex h-16 shrink-0 items-center justify-center border-b border-hairline/[0.06]"
+        >
           {branding.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={branding.logo_url} alt={brandName} className="h-11 w-11 rounded-2xl object-contain" />
+            <img src={branding.logo_url} alt={brandName} className="h-10 w-10 rounded-xl object-contain" />
           ) : (
-            <span className="relative grid h-11 w-11 place-items-center">
+            <span className="relative grid h-10 w-10 place-items-center">
               <span
-                className="absolute inset-0 rounded-2xl blur-[7px] opacity-60"
+                className="absolute inset-0 rounded-xl blur-[6px] opacity-60"
                 style={{ backgroundColor: branding.theme_color }}
               />
               <span
-                className="relative grid h-11 w-11 place-items-center rounded-2xl shadow-glow"
+                className="relative grid h-10 w-10 place-items-center rounded-xl shadow-glow"
                 style={{ background: `linear-gradient(135deg, ${branding.theme_color}, ${branding.secondary_color})` }}
               >
-                <Sparkles className="h-5 w-5 text-surface-950" strokeWidth={2.5} />
+                <Sparkles className="h-4 w-4 text-surface-950" strokeWidth={2.5} />
               </span>
             </span>
           )}
         </Link>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-3 scrollbar-hide">
+        <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-3 pt-3 scrollbar-hide">
           {PRIMARY.map((item) => (
             <RailItem key={item.label} item={item} />
           ))}
@@ -136,15 +140,15 @@ export function Header() {
         </div>
       </aside>
 
-      {/* Where the side rail's edge crosses the top bar's edge, mark the intersection with a "+" */}
+      {/* Where the side rail's edge crosses the top bar's edge */}
       <span className="pointer-events-none fixed left-[92px] top-16 z-50 hidden h-4 w-4 -translate-x-1/2 -translate-y-1/2 lg:block">
         <span className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-hairline/25" />
         <span className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-hairline/25" />
       </span>
 
-      {/* ===== Top utility bar: spans the full width, over the rail ===== */}
-      <header className="fixed inset-x-0 top-0 z-30 flex h-16 items-center gap-3 border-b border-hairline/[0.06] bg-panel-strong/80 px-4 backdrop-blur-xl lg:pl-[92px]">
-        <div className="pointer-events-none absolute inset-x-0 hidden justify-center px-4 sm:flex lg:left-[92px]">
+      {/* ===== Top bar: starts after side rail on desktop ===== */}
+      <header className="fixed inset-x-0 top-0 z-30 flex h-16 items-center gap-3 border-b border-hairline/[0.06] bg-panel-strong/80 px-4 backdrop-blur-xl lg:left-[92px]">
+        <div className="pointer-events-none absolute inset-x-0 hidden justify-center px-4 sm:flex">
           <div className="pointer-events-auto relative w-full max-w-md">
             <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <input
@@ -154,8 +158,8 @@ export function Header() {
           </div>
         </div>
 
-        {/* Brand logo: shown on every breakpoint */}
-        <Link href="/" className="flex items-center gap-2">
+        {/* Brand: logo + name on mobile; name only on desktop (logo lives in side rail) */}
+        <Link href="/" className="flex items-center gap-2 lg:hidden">
           {branding.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={branding.logo_url} alt={brandName} className="h-9 w-9 rounded-xl object-contain" />
@@ -168,6 +172,9 @@ export function Header() {
             </span>
           )}
           <span className="font-display text-lg font-extrabold text-app-fg">{brandName}</span>
+        </Link>
+        <Link href="/" className="hidden font-display text-lg font-extrabold text-app-fg lg:block">
+          {brandName}
         </Link>
 
         <div className="ml-auto flex items-center gap-2.5">

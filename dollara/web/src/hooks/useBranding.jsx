@@ -5,7 +5,7 @@ import { fetchBranding } from '@/services/tenant';
 
 // Neutral defaults so the UI never hardcodes a brand and never flashes empty.
 const DEFAULT_BRANDING = {
-  product_name: 'Gaming Platform',
+  product_name: '',
   logo_url: '',
   favicon_url: '',
   theme_color: '#ff9800',
