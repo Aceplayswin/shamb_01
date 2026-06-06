@@ -13,24 +13,20 @@ onboarded from the Super Admin portal with no code changes.
 | **Backend** | Django 5, Django REST Framework, Strawberry GraphQL, Django Channels |
 | **AI** | PyTorch (in-process in the API) |
 | **Database** | MySQL 8 |
-| **Cache / realtime** | Redis 7 |
+| **Realtime** | Django Channels (in-process) |
 | **Infrastructure** | AWS (manual setup) |
 
 ## Project Structure
 
 ```
-dollara/
-├── api/                 # Django API (multi-tenant)
-│   ├── tenants/         # Control-plane app: products, domains, branding, super admins
-│   ├── services/        # tenant_resolver, tenant_provisioning, branding
-│   ├── middleware/      # TenantResolverMiddleware + TenantRouter (DB-per-tenant)
-│   ├── core/            # Per-tenant features (auth, wallet, games, admin, ai)
-│   └── database/        # master.sql (control plane) + init.sql (per tenant)
-├── web/                 # Next.js player + admin + super-admin UI
-│   └── src/services/    # API layer (tenant-aware) + branding
-├── mobile/              # React Native app (env-driven white-label)
-│   └── src/branding.js  # Dynamic branding + theme
-└── package.json
+white_level_gamming/
+├── super_admin/         # Platform control plane (separate deployment)
+│   ├── api/             # Master DB API — products, provisioning, analytics
+│   └── web/             # Super Admin console (admin.ultraconic.com)
+├── dollara/             # Product codebase (shared by all tenants)
+│   ├── api/             # Multi-tenant Django API (tenant resolver + features)
+│   ├── web/             # Next.js player + per-tenant admin UI
+│   └── mobile/          # React Native white-label app
 ```
 
 Each app loads its own `.env` from its directory.
@@ -69,57 +65,64 @@ See [api/README.md](api/README.md) for API setup and endpoints.
 
 - Python 3.11+
 - Node.js 20+
-- MySQL 8 and Redis 7 running locally
+- MySQL 8 running locally
 
 **macOS (Homebrew):**
 
 ```bash
-brew install mysql redis
+brew install mysql
 brew services start mysql
-brew services start redis
 ```
 
 Create and load the **master** (control-plane) database:
 
 ```bash
 mysql -u root -e "CREATE DATABASE IF NOT EXISTS dollara_master CHARACTER SET utf8mb4;"
-mysql -u root dollara_master < api/database/master.sql
+mysql -u root dollara_master < super_admin/api/database/master.sql
 ```
 
 The per-tenant databases (`dollara_db`, `productb_db`, `productc_db`) are created
-automatically by `seed_master` (see step 3).
+automatically by `seed_master` in the Super Admin API (see step 3).
 
 ### 1. Environment
 
 ```bash
-cp api/.env.example api/.env
-cp web/.env.example web/.env
+cp dollara/api/.env.example dollara/api/.env
+cp dollara/web/.env.example dollara/web/.env
+cp super_admin/api/.env.example super_admin/api/.env
+cp super_admin/web/.env.example super_admin/web/.env
 ```
 
-Edit `api/.env` for database credentials and secrets. Edit `web/.env` if the API is not on `localhost:4000`.
+Edit env files for database credentials and secrets.
 
 ### 2. Install dependencies
 
 ```bash
-# API (includes PyTorch for fraud detection)
-cd api
+# Super Admin API
+cd super_admin/api
 python3 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
-cd ..
+cd ../..
 
-# Web (npm workspace from repo root)
-npm install
+# Dollara API (includes PyTorch for fraud detection)
+cd dollara/api
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cd ../..
+
+# Web apps
+cd super_admin/web && npm install && cd ../..
+cd dollara/web && npm install && cd ../..
 ```
 
 ### 3. Seed master + provision tenant databases
 
-With the API venv activated, this creates the Super Admin and provisions the
-three initial products (each gets its own isolated database, schema, and seed
-data). `USE_REDIS=0` lets it run without a local Redis:
+With the Super Admin API venv activated:
 
 ```bash
-cd api && USE_REDIS=0 python manage.py seed_master
+cd super_admin/api && python manage.py seed_master
 ```
 
 ### 4. Mobile app (optional)
@@ -137,30 +140,35 @@ for API host configuration on emulators vs devices.
 
 ### 5. Run locally
 
-**API + web together:**
+**Super Admin (control plane):**
 
 ```bash
-npm run dev
+# Terminal 1 — Super Admin API (port 5000)
+cd super_admin/api && source .venv/bin/activate && python manage.py runserver 0.0.0.0:5000
+
+# Terminal 2 — Super Admin console (port 3001)
+cd super_admin/web && npm run dev
 ```
 
-**Or separate terminals:**
+**Dollara product (player + tenant admin):**
 
 ```bash
-# Terminal 1 — Django API (port 4000, includes AI)
-npm run dev:api
+# Terminal 3 — Product API (port 4000)
+cd dollara/api && source .venv/bin/activate && python manage.py runserver 0.0.0.0:4000
 
-# Terminal 2 — Next.js (port 3000)
-npm run dev:web
+# Terminal 4 — Product web (port 3000)
+cd dollara/web && npm run dev
 ```
 
 ## URLs
 
 | Service | URL |
 |---------|-----|
-| Web (player) | http://localhost:3000 |
+| Super Admin console | http://localhost:3001/login |
+| Super Admin API | http://localhost:5000 |
+| Dollara web (player) | http://localhost:3000 |
 | Product Admin UI | http://localhost:3000/admin/login |
-| Super Admin portal | http://localhost:3000/super-admin/login |
-| API (REST) | http://localhost:4000 |
+| Product API (REST) | http://localhost:4000 |
 | Branding (per tenant) | http://localhost:4000/api/v1/branding |
 | GraphQL | http://localhost:4000/graphql |
 | WebSocket | ws://localhost:4000/ws |
@@ -172,7 +180,7 @@ or by using a subdomain host such as `productb.localhost:3000`.
 
 | Role | Username | Password | Where |
 |------|----------|----------|-------|
-| Super Admin | `superadmin` | `Admin@123` | Master DB (`/super-admin/login`) |
+| Super Admin | `superadmin` | `Admin@123` | Super Admin console (`/login` on port 3001) |
 | Product Admin | `superadmin` | `Admin@123` | Each tenant DB (`/admin/login`) |
 
 Change these before any production deployment.
@@ -225,8 +233,10 @@ curl -X POST http://localhost:4000/api/v1/ai/chat \
 
 | Service | Config | Example |
 |---------|--------|---------|
-| API | `api/.env` | [api/.env.example](api/.env.example) |
-| Web | `web/.env` | [web/.env.example](web/.env.example) |
+| Super Admin API | `super_admin/api/.env` | [super_admin/api/.env.example](super_admin/api/.env.example) |
+| Super Admin Web | `super_admin/web/.env` | [super_admin/web/.env.example](super_admin/web/.env.example) |
+| Product API | `dollara/api/.env` | [dollara/api/.env.example](dollara/api/.env.example) |
+| Product Web | `dollara/web/.env` | [dollara/web/.env.example](dollara/web/.env.example) |
 
 **Web (`web/.env`)**
 
@@ -237,28 +247,26 @@ curl -X POST http://localhost:4000/api/v1/ai/chat \
 **API (`api/.env`)**
 
 - `DJANGO_SECRET_KEY`, `JWT_SECRET`, `JWT_REFRESH_SECRET`
-- `MYSQL_*`, `REDIS_URL`
+- `MYSQL_*`
 - `AWS_*`, Twilio/WhatsApp/MSG91 keys (production)
 
 ## AWS (manual setup)
 
-Provision RDS (MySQL), ElastiCache (Redis), S3, and compute as needed. Set production values in `api/.env`:
+Provision RDS (MySQL), S3, and compute as needed. Set production values in `dollara/api/.env`:
 
 - `MYSQL_HOST`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`
-- `REDIS_URL`
 - `AWS_REGION`, `AWS_S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
 
-Point `web/.env` `NEXT_PUBLIC_*` URLs at your deployed API.
+Point `dollara/web/.env` `NEXT_PUBLIC_*` URLs at your deployed product API.
 
 ## NPM scripts
 
+Each app has its own `package.json`. From `super_admin/web` or `dollara/web`:
+
 | Script | Description |
 |--------|-------------|
-| `npm run dev` | API + web concurrently |
-| `npm run dev:api` | Django on port 4000 |
-| `npm run dev:web` | Next.js on port 3000 |
-| `npm run db:seed` | Seed admin and sample data (after `init.sql`) |
-| `npm run build` | Production Next.js build |
+| `npm run dev` | Start Next.js dev server |
+| `npm run build` | Production build |
 | `npm run lint` | Lint web app |
 
 ## Roadmap
