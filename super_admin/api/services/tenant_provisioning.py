@@ -16,7 +16,7 @@ from django.conf import settings
 from django.core.management import call_command
 from django.db import connections
 
-from tenants.models import Branding, Domain, Product, Subscription, TenantDatabase
+from tenants.models import Database, Product, Url
 from tenants.state import register_tenant_connection, tenant_db_alias_for, use_tenant
 
 INIT_SQL = Path(getattr(settings, 'TENANT_SCHEMA_PATH', settings.BASE_DIR / 'database' / 'init.sql'))
@@ -49,7 +49,6 @@ def _run_mysql(args: list[str], password: str, stdin_path: Path | None = None) -
 
 
 def create_database(*, db_name: str, host: str, port: str, user: str, password: str) -> None:
-    """Create the tenant's MySQL database if it does not already exist."""
     args = _mysql_base_args(host=host, port=port, user=user) + [
         '-e',
         f'CREATE DATABASE IF NOT EXISTS `{db_name}` '
@@ -59,7 +58,6 @@ def create_database(*, db_name: str, host: str, port: str, user: str, password: 
 
 
 def apply_schema(*, db_name: str, host: str, port: str, user: str, password: str) -> None:
-    """Apply the per-tenant schema (init.sql) to the tenant database."""
     if not INIT_SQL.exists():
         raise ProvisioningError(f'Schema file not found: {INIT_SQL}')
     args = _mysql_base_args(host=host, port=port, user=user) + [db_name]
@@ -75,8 +73,8 @@ def provision_product(
     db_port: str | None = None,
     db_user: str | None = None,
     db_password: str | None = None,
-    branding: dict | None = None,
-    domains: list[str] | None = None,
+    fe_url: str = '',
+    be_url: str = '',
     seed: bool = True,
     stdout=None,
 ) -> Product:
@@ -96,12 +94,12 @@ def provision_product(
         slug=slug, defaults={'name': name, 'status': Product.Status.ACTIVE}
     )
 
-    branding = branding or {}
-    branding.setdefault('product_name', name)
-    Branding.objects.update_or_create(product=product, defaults=branding)
-    Subscription.objects.get_or_create(product=product)
+    Url.objects.update_or_create(
+        product=product,
+        defaults={'fe_url': fe_url, 'be_url': be_url},
+    )
 
-    tenant_db, _ = TenantDatabase.objects.update_or_create(
+    tenant_db, _ = Database.objects.update_or_create(
         product=product,
         defaults={
             'db_name': db_name,
@@ -113,13 +111,6 @@ def provision_product(
         },
     )
 
-    for index, host in enumerate(domains or []):
-        Domain.objects.update_or_create(
-            host=host.strip().lower(),
-            defaults={'product': product, 'is_primary': index == 0},
-        )
-
-    # Physical database + schema.
     if stdout:
         stdout(f'  creating database {db_name} on {db_host}:{db_port} ...')
     create_database(db_name=db_name, host=db_host, port=db_port, user=db_user, password=db_password)
@@ -127,7 +118,6 @@ def provision_product(
         stdout('  applying tenant schema (init.sql) ...')
     apply_schema(db_name=db_name, host=db_host, port=db_port, user=db_user, password=db_password)
 
-    # Register connection + seed inside the tenant context.
     alias = tenant_db_alias_for(slug)
     register_tenant_connection(
         alias, name=db_name, host=db_host, port=db_port, user=db_user, password=db_password
@@ -136,7 +126,7 @@ def provision_product(
         if stdout:
             stdout('  seeding tenant data ...')
         with use_tenant(slug, alias):
-            call_command('seed', tenant=slug, brand_name=branding.get('product_name', name))
+            call_command('seed', tenant=slug, brand_name=name)
 
     tenant_db.is_provisioned = True
     tenant_db.save(update_fields=['is_provisioned', 'updated_at'])

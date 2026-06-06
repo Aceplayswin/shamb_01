@@ -75,18 +75,20 @@ export const deleteProduct = (slug) =>
   superAdminApi(`/api/v1/super-admin/products/${slug}/delete`, { method: 'DELETE' });
 export const provisionProduct = (slug) =>
   superAdminApi(`/api/v1/super-admin/products/${slug}/provision`, { method: 'POST' });
-export const updateBranding = (slug, payload) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/branding`, {
+export const getUrls = (slug) =>
+  superAdminApi(`/api/v1/super-admin/products/${slug}/urls`);
+export const updateDatabase = (slug, payload) =>
+  superAdminApi(`/api/v1/super-admin/products/${slug}/database`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+export const updateUrls = (slug, payload) =>
+  superAdminApi(`/api/v1/super-admin/products/${slug}/urls`, {
     method: 'PUT',
     body: JSON.stringify(payload),
   });
-export const addDomain = (slug, payload) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/domains`, {
+export const testConnection = (payload) =>
+  superAdminApi('/api/v1/super-admin/test-connection', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
-export const deleteDomain = (slug, domainId) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/domains/${domainId}`, {
-    method: 'DELETE',
-  });
-export const getAnalytics = () => superAdminApi('/api/v1/super-admin/analytics');

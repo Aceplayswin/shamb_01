@@ -13,11 +13,12 @@ urlpatterns = [
     path('super-admin/products/<slug:slug>/disable', views.product_disable),
     path('super-admin/products/<slug:slug>/delete', views.product_delete),
     path('super-admin/products/<slug:slug>/provision', views.product_provision),
-    # Branding & domains
-    path('super-admin/products/<slug:slug>/branding', views.product_branding),
-    path('super-admin/products/<slug:slug>/domains', views.product_domains),
-    path('super-admin/products/<slug:slug>/domains/<int:domain_id>', views.domain_delete),
-    # Cross-tenant inspection & analytics
+    # Database update
+    path('super-admin/products/<slug:slug>/database', views.product_database_update),
+    # URLs
+    path('super-admin/products/<slug:slug>/urls', views.product_urls),
+    # Connection testing
+    path('super-admin/test-connection', views.test_connection),
+    # Cross-tenant inspection
     path('super-admin/products/<slug:slug>/users', views.product_users),
-    path('super-admin/analytics', views.analytics_summary),
 ]

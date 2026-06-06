@@ -43,6 +43,5 @@ python manage.py runserver 0.0.0.0:5000
 | GET | `/health` | Health check |
 | POST | `/api/v1/super-admin/auth/login` | Super Admin login |
 | GET/POST | `/api/v1/super-admin/products...` | Product CRUD, provision, branding, domains |
-| GET | `/api/v1/super-admin/analytics` | Per-product metrics |
 
 Default credentials after `seed_master`: `superadmin` / `Admin@123`

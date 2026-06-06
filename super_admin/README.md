@@ -1,7 +1,7 @@
 # Platform Super Admin
 
 Standalone control plane for the white-label multi-tenant gaming platform. Manages
-products, domains, branding, tenant database provisioning, and cross-tenant analytics
+products, domains, branding, and tenant database provisioning
 via the **master database** — completely separate from any product deployment (Dollara, etc.).
 
 ```

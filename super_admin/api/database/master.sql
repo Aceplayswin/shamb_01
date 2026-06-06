@@ -1,8 +1,6 @@
--- DOLLARA SaaS Platform - Master / Control-Plane MySQL Schema
--- Holds the catalog of products (tenants), their domains, isolated database
--- connection details, white-label branding, subscriptions/licenses, and the
--- platform Super Admin accounts. This database is completely separate from any
--- tenant database (see database/init.sql for the per-tenant schema).
+-- Super Admin Platform - Master / Control-Plane MySQL Schema
+-- Holds the catalog of products (tenants), their URLs, isolated database
+-- connection details, and the platform Super Admin accounts.
 
 SET NAMES utf8mb4;
 
@@ -16,18 +14,18 @@ CREATE TABLE IF NOT EXISTS products (
   INDEX idx_products_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS domains (
+CREATE TABLE IF NOT EXISTS urls (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  product_id BIGINT UNSIGNED NOT NULL,
-  host VARCHAR(255) NOT NULL UNIQUE,
-  is_primary BOOLEAN NOT NULL DEFAULT 0,
+  product_id BIGINT UNSIGNED NOT NULL UNIQUE,
+  fe_url VARCHAR(500) NOT NULL DEFAULT '',
+  be_url VARCHAR(500) NOT NULL DEFAULT '',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_domains_product (product_id),
-  CONSTRAINT fk_domains_product FOREIGN KEY (product_id)
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_urls_product FOREIGN KEY (product_id)
     REFERENCES products (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS tenant_databases (
+CREATE TABLE IF NOT EXISTS `databases` (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   product_id BIGINT UNSIGNED NOT NULL UNIQUE,
   db_name VARCHAR(120) NOT NULL,
@@ -38,54 +36,11 @@ CREATE TABLE IF NOT EXISTS tenant_databases (
   is_provisioned BOOLEAN NOT NULL DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_tenant_db_product FOREIGN KEY (product_id)
+  CONSTRAINT fk_db_product FOREIGN KEY (product_id)
     REFERENCES products (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS branding (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  product_id BIGINT UNSIGNED NOT NULL UNIQUE,
-  product_name VARCHAR(150) NOT NULL,
-  logo_url VARCHAR(500) NOT NULL DEFAULT '',
-  favicon_url VARCHAR(500) NOT NULL DEFAULT '',
-  theme_color VARCHAR(20) NOT NULL DEFAULT '#ff9800',
-  secondary_color VARCHAR(20) NOT NULL DEFAULT '#a78bfa',
-  splash_url VARCHAR(500) NOT NULL DEFAULT '',
-  app_icon_url VARCHAR(500) NOT NULL DEFAULT '',
-  support_email VARCHAR(150) NOT NULL DEFAULT '',
-  support_phone VARCHAR(50) NOT NULL DEFAULT '',
-  terms_url VARCHAR(500) NOT NULL DEFAULT '',
-  privacy_url VARCHAR(500) NOT NULL DEFAULT '',
-  extra JSON,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_branding_product FOREIGN KEY (product_id)
-    REFERENCES products (id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS subscriptions (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  product_id BIGINT UNSIGNED NOT NULL UNIQUE,
-  plan VARCHAR(50) NOT NULL DEFAULT 'standard',
-  status ENUM('trial', 'active', 'past_due', 'cancelled') NOT NULL DEFAULT 'trial',
-  started_at DATETIME,
-  expires_at DATETIME,
-  CONSTRAINT fk_subscriptions_product FOREIGN KEY (product_id)
-    REFERENCES products (id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS licenses (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  product_id BIGINT UNSIGNED NOT NULL,
-  `key` VARCHAR(120) NOT NULL UNIQUE,
-  status ENUM('active', 'revoked', 'expired') NOT NULL DEFAULT 'active',
-  issued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  expires_at DATETIME,
-  INDEX idx_licenses_product (product_id),
-  CONSTRAINT fk_licenses_product FOREIGN KEY (product_id)
-    REFERENCES products (id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS super_admin_users (
+CREATE TABLE IF NOT EXISTS users (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   username VARCHAR(50) NOT NULL UNIQUE,
   email VARCHAR(255),
@@ -94,3 +49,31 @@ CREATE TABLE IF NOT EXISTS super_admin_users (
   last_login_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS user_sessions (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  session_token VARCHAR(500) NOT NULL UNIQUE,
+  ip_address VARCHAR(45),
+  user_agent TEXT,
+  device_type VARCHAR(50),
+  country_code VARCHAR(10),
+  is_active BOOLEAN NOT NULL DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  expires_at DATETIME,
+  last_activity_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_sessions_user (user_id),
+  INDEX idx_sessions_active (is_active),
+  CONSTRAINT fk_sessions_user FOREIGN KEY (user_id)
+    REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Default Super Admin (login: superadmin / Admin@123)
+INSERT INTO users (username, email, password_hash, is_active)
+VALUES (
+  'superadmin',
+  'superadmin@platform.local',
+  '$2b$12$C9ZVRYJkjISgdOHdF/wTIeoWNhC80WWiYrvlJenWGI9pAxSjFqcxm',
+  1
+)
+ON DUPLICATE KEY UPDATE username = username;

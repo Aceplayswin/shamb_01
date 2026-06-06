@@ -1,8 +1,8 @@
 """Seed the master/control-plane database and provision the initial products.
 
 Creates the platform Super Admin and onboards the three initial products
-(Dollara, Product B, Product C), each with its own isolated tenant database,
-white-label branding, and domains. Re-runnable (idempotent).
+(Dollara, Product B, Product C), each with its own isolated tenant database.
+Re-runnable (idempotent).
 
 Prerequisite: the master schema must exist (apply database/master.sql first).
 """
@@ -11,44 +11,26 @@ import bcrypt
 from django.core.management.base import BaseCommand
 
 from services.tenant_provisioning import ProvisioningError, provision_product
-from tenants.models import SuperAdminUser
+from tenants.models import User
 
 INITIAL_PRODUCTS = [
     {
         'slug': 'dollara',
         'name': 'Dollara',
-        'domains': ['dollara.com', 'dollara.localhost'],
-        'branding': {
-            'product_name': 'Dollara',
-            'theme_color': '#ff9800',
-            'secondary_color': '#a78bfa',
-            'support_email': 'support@dollara.com',
-            'support_phone': '+91-00000-00000',
-        },
+        'fe_url': 'https://dollara.com',
+        'be_url': 'https://api.dollara.com',
     },
     {
         'slug': 'productb',
         'name': 'Product B',
-        'domains': ['productb.com', 'productb.localhost'],
-        'branding': {
-            'product_name': 'Product B',
-            'theme_color': '#22c55e',
-            'secondary_color': '#0ea5e9',
-            'support_email': 'support@productb.com',
-            'support_phone': '+91-11111-11111',
-        },
+        'fe_url': 'https://productb.com',
+        'be_url': 'https://api.productb.com',
     },
     {
         'slug': 'productc',
         'name': 'Product C',
-        'domains': ['productc.com', 'productc.localhost'],
-        'branding': {
-            'product_name': 'Product C',
-            'theme_color': '#ef4444',
-            'secondary_color': '#f59e0b',
-            'support_email': 'support@productc.com',
-            'support_phone': '+91-22222-22222',
-        },
+        'fe_url': 'https://productc.com',
+        'be_url': 'https://api.productc.com',
     },
 ]
 
@@ -65,7 +47,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         password_hash = bcrypt.hashpw(b'Admin@123', bcrypt.gensalt()).decode()
-        admin, created = SuperAdminUser.objects.get_or_create(
+        admin, created = User.objects.get_or_create(
             username='superadmin',
             defaults={'email': 'superadmin@platform.local', 'password_hash': password_hash},
         )
@@ -84,8 +66,8 @@ class Command(BaseCommand):
                 provision_product(
                     slug=product['slug'],
                     name=product['name'],
-                    branding=dict(product['branding']),
-                    domains=product['domains'],
+                    fe_url=product['fe_url'],
+                    be_url=product['be_url'],
                     seed=True,
                     stdout=lambda m: self.stdout.write(m),
                 )
