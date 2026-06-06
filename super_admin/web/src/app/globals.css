@@ -3,53 +3,33 @@
 @tailwind utilities;
 
 :root {
-  --background: #0d0b14;
+  --background: #f9fafb;
+  --foreground: #111827;
+  color-scheme: light;
+}
+
+.dark {
+  --background: #0f172a;
   --foreground: #f1f5f9;
-  /* Ensure native form controls (number spinners, selects) render dark. */
   color-scheme: dark;
+}
+
+* {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
   min-height: 100vh;
-  /* Layered ambient glows so the page never reads as flat black. */
-  background-image:
-    radial-gradient(60% 50% at 12% -5%, rgba(255, 152, 0, 0.12) 0%, transparent 60%),
-    radial-gradient(55% 45% at 100% 0%, rgba(124, 77, 255, 0.14) 0%, transparent 55%),
-    radial-gradient(50% 50% at 50% 120%, rgba(124, 77, 255, 0.08) 0%, transparent 60%);
-  background-attachment: fixed;
 }
 
 @layer utilities {
-  .text-gradient {
-    @apply bg-gradient-to-r from-brand-300 via-brand-500 to-accent-400 bg-clip-text text-transparent;
-  }
-  .text-gradient-gold {
-    @apply bg-gradient-to-br from-brand-200 via-brand-400 to-brand-600 bg-clip-text text-transparent;
-  }
-  /* Frosted panel used across cards, header, modals. */
   .glass {
-    @apply rounded-2xl border border-white/[0.07] bg-surface-800/70 backdrop-blur-xl;
+    @apply rounded-2xl border border-gray-200 bg-white dark:border-gray-700/60 dark:bg-gray-800;
   }
   .glass-strong {
-    @apply rounded-2xl border border-white/10 bg-surface-900/80 backdrop-blur-2xl;
-  }
-  /* Animated gradient border wrapper. */
-  .ring-grad {
-    position: relative;
-  }
-  .ring-grad::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    padding: 1px;
-    background: linear-gradient(135deg, rgba(255, 152, 0, 0.6), rgba(124, 77, 255, 0.5), transparent 70%);
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    pointer-events: none;
+    @apply rounded-2xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900;
   }
   .scrollbar-hide {
     -ms-overflow-style: none;
@@ -58,40 +38,35 @@ body {
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
-  /* Soft fade on the right edge of horizontal scrollers. */
   .edge-fade-x {
     -webkit-mask-image: linear-gradient(to right, #000 92%, transparent 100%);
     mask-image: linear-gradient(to right, #000 92%, transparent 100%);
   }
-  .shimmer-text {
-    background: linear-gradient(90deg, #ffb218 0%, #fff 50%, #ffb218 100%);
-    background-size: 200% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
 }
 
-/* Slim custom scrollbar for the page itself */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #2a2540;
+  background: #cbd5e1;
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a3358;
-  background-clip: padding-box;
+  background: #94a3b8;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }
 
-/* SweetAlert popups should match the dark glass theme */
 .swal2-popup {
   border-radius: 1rem !important;
 }
