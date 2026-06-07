@@ -141,15 +141,16 @@ export function Header() {
       </aside>
 
       {/* Where the side rail's edge crosses the top bar's edge */}
-      <span className="pointer-events-none fixed left-[92px] top-16 z-50 hidden h-4 w-4 -translate-x-1/2 -translate-y-1/2 lg:block">
+      {/* <span className="pointer-events-none fixed left-[92px] top-16 z-50 hidden h-4 w-4 -translate-x-1/2 -translate-y-1/2 lg:block">
         <span className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-hairline/25" />
         <span className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-hairline/25" />
-      </span>
+      </span> */}
 
       {/* ===== Top bar: starts after side rail on desktop ===== */}
       <header className="fixed inset-x-0 top-0 z-30 flex h-16 items-center gap-3 border-b border-hairline/[0.06] bg-panel-strong/80 px-4 backdrop-blur-xl lg:left-[92px]">
-        <div className="pointer-events-none absolute inset-x-0 hidden justify-center px-4 sm:flex">
-          <div className="pointer-events-auto relative w-full max-w-md">
+        {/* Centered on full viewport width (from screen left), not the header area */}
+        <div className="pointer-events-none fixed left-[45%] top-0 hidden h-16 w-[min(calc(100vw-2rem),28rem)] -translate-x-1/2 items-center sm:flex">
+          <div className="pointer-events-auto relative w-full">
             <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <input
               placeholder="Search 2,000+ games, sports & providers…"

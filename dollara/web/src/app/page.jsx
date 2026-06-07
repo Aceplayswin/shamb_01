@@ -299,32 +299,6 @@ export default function HomePage() {
             </>
           )}
 
-          {/* Search + brand strip */}
-          <div className="glass sticky top-[4.5rem] z-20 flex flex-col items-center justify-between gap-4 p-4 sm:flex-row">
-            <div className="flex items-center gap-3 text-app-fg">
-              <span className="hidden text-xs font-bold uppercase tracking-[0.2em] text-muted sm:block">
-                Premier <span className="text-brand-400">betting</span> experience
-              </span>
-              <span className="hidden h-4 w-px bg-hairline/15 sm:block" />
-              <span className="font-display text-lg font-extrabold italic text-gradient-gold">{branding.product_name}</span>
-            </div>
-            <div className="relative flex w-full items-center sm:w-80">
-              <Search className="absolute left-3.5 h-4 w-4 text-muted" />
-              <input
-                type="text"
-                placeholder="Search 2,000+ games…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-xl border border-hairline/10 bg-rail/60 p-2.5 pl-10 pr-10 text-sm text-app-fg placeholder-muted/70 transition-colors focus:border-brand-400 focus:outline-none"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="absolute right-3.5">
-                  <X className="h-4 w-4 text-muted hover:text-app-fg" />
-                </button>
-              )}
-            </div>
-          </div>
-
           {/* Providers */}
           <div>
             <div className="mb-4 flex items-center justify-between">
