@@ -2,19 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  /* Scales every rem-based Tailwind text-* utility down proportionally. */
+  font-size: 14px;
+}
+
 :root {
   /* ---- Theme tokens (RGB triplets so Tailwind can apply alpha modifiers) ----
      Dark is the default palette; .light overrides below swap every token. */
-  --color-app-bg: 13 11 20; /* page background, surface-900 */
-  --color-app-fg: 241 245 249; /* primary text, slate-100 */
-  --color-rail: 8 7 13; /* side rail / top bar / bottom nav, surface-950 */
-  --color-panel: 21 19 31; /* cards, glass, surface-800 */
-  --color-panel-strong: 13 11 20; /* stronger glass, surface-900 */
-  --color-muted: 148 163 184; /* secondary text, slate-400 */
+  --color-app-bg: 11 15 20; /* page background, #0B0F14 */
+  --color-app-fg: 255 255 255; /* primary text, #FFFFFF */
+  --color-rail: 11 15 20; /* side rail / top bar / bottom nav, #0B0F14 */
+  --color-panel: 21 26 33; /* cards, glass, #151A21 */
+  --color-panel-strong: 11 15 20; /* stronger glass, #0B0F14 */
+  --color-muted: 156 163 175; /* secondary text, #9CA3AF */
   --color-hairline: 255 255 255; /* border / overlay base — used with low alpha */
-  --ambient-1: rgba(255, 152, 0, 0.12);
-  --ambient-2: rgba(124, 77, 255, 0.14);
-  --ambient-3: rgba(124, 77, 255, 0.08);
+  --ambient-1: rgba(245, 197, 66, 0.12);
+  --ambient-2: rgba(255, 184, 0, 0.1);
+  --ambient-3: rgba(245, 197, 66, 0.05);
 
   --background: rgb(var(--color-app-bg));
   --foreground: rgb(var(--color-app-fg));
@@ -30,9 +35,9 @@
   --color-panel-strong: 255 255 255;
   --color-muted: 100 99 125;
   --color-hairline: 20 16 36;
-  --ambient-1: rgba(255, 152, 0, 0.08);
-  --ambient-2: rgba(124, 77, 255, 0.08);
-  --ambient-3: rgba(124, 77, 255, 0.05);
+  --ambient-1: rgba(245, 197, 66, 0.08);
+  --ambient-2: rgba(255, 184, 0, 0.06);
+  --ambient-3: rgba(245, 197, 66, 0.04);
 
   color-scheme: light;
 }
@@ -51,7 +56,7 @@ body {
 
 @layer utilities {
   .text-gradient {
-    @apply bg-gradient-to-r from-brand-300 via-brand-500 to-accent-400 bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-brand-300 via-brand-500 to-brand-600 bg-clip-text text-transparent;
   }
   .text-gradient-gold {
     @apply bg-gradient-to-br from-brand-200 via-brand-400 to-brand-600 bg-clip-text text-transparent;
@@ -74,7 +79,7 @@ body {
     inset: 0;
     border-radius: inherit;
     padding: 1px;
-    background: linear-gradient(135deg, rgba(255, 152, 0, 0.6), rgba(124, 77, 255, 0.5), transparent 70%);
+    background: linear-gradient(135deg, rgba(245, 197, 66, 0.6), rgba(255, 184, 0, 0.45), transparent 70%);
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
@@ -93,7 +98,7 @@ body {
     mask-image: linear-gradient(to right, #000 92%, transparent 100%);
   }
   .shimmer-text {
-    background: linear-gradient(90deg, #ffb218 0%, #fff 50%, #ffb218 100%);
+    background: linear-gradient(90deg, #ffb800 0%, #fff 50%, #ffb800 100%);
     background-size: 200% 100%;
     -webkit-background-clip: text;
     background-clip: text;

@@ -72,8 +72,8 @@ const NAV_GROUPS = [
 /* ----------------------------- Feedback helpers ---------------------------- */
 
 const SWAL_THEME = {
-  confirmButtonColor: '#ff9800',
-  cancelButtonColor: '#211d30',
+  confirmButtonColor: '#F5C542',
+  cancelButtonColor: '#1E252E',
 };
 
 const toastMixin = () =>
@@ -107,7 +107,7 @@ export async function confirmDialog({
     confirmButtonText: confirmText,
     cancelButtonText: 'Cancel',
     ...SWAL_THEME,
-    confirmButtonColor: danger ? '#ef4444' : '#ff9800',
+    confirmButtonColor: danger ? '#FF4D4F' : '#F5C542',
   });
   return res.isConfirmed;
 }
@@ -123,16 +123,13 @@ function NavLink({ href, label, icon: Icon, exact, onNavigate }) {
       onClick={onNavigate}
       className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
         active
-          ? 'bg-gradient-to-r from-brand-500/20 to-accent-500/10 text-white'
+          ? 'bg-brand-500 text-surface-950'
           : 'text-slate-400 hover:bg-white/[0.04] hover:text-white'
       }`}
     >
-      {active && (
-        <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-gradient-to-b from-brand-400 to-brand-600" />
-      )}
       <Icon
         className={`h-[18px] w-[18px] shrink-0 transition ${
-          active ? 'text-brand-400' : 'text-slate-500 group-hover:text-slate-300'
+          active ? 'text-surface-950' : 'text-slate-500 group-hover:text-slate-300'
         }`}
       />
       {label}
@@ -276,7 +273,7 @@ export function AdminShell({ children, title, subtitle, actions }) {
               <ExternalLink className="h-3.5 w-3.5" /> View site
             </Link>
             <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-surface-800/60 py-1.5 pl-1.5 pr-3">
-              <span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-brand-400 to-accent-600 text-xs font-bold text-surface-950">
+              <span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 text-xs font-bold text-surface-950">
                 {roleLabel.slice(0, 1).toUpperCase()}
               </span>
               <span className="hidden text-xs font-semibold capitalize text-slate-300 sm:block">
@@ -307,7 +304,6 @@ export function Card({ children, className = '' }) {
 
 const ACCENTS = {
   brand: { ring: 'text-brand-400', bg: 'from-brand-500/20 to-brand-500/5' },
-  accent: { ring: 'text-accent-400', bg: 'from-accent-500/20 to-accent-500/5' },
   emerald: { ring: 'text-emerald-400', bg: 'from-emerald-500/20 to-emerald-500/5' },
   rose: { ring: 'text-rose-400', bg: 'from-rose-500/20 to-rose-500/5' },
   sky: { ring: 'text-sky-400', bg: 'from-sky-500/20 to-sky-500/5' },

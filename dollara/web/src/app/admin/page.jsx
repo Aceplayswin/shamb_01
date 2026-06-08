@@ -27,7 +27,7 @@ import {
 
 const SERIES = [
   { key: 'deposits', label: 'Deposits', color: 'bg-gradient-to-t from-brand-600 to-brand-400' },
-  { key: 'withdrawals', label: 'Withdrawals', color: 'bg-gradient-to-t from-accent-600 to-accent-400' },
+  { key: 'withdrawals', label: 'Withdrawals', color: 'bg-gradient-to-t from-brand-600 to-brand-400' },
 ];
 
 export default function AdminDashboardPage() {
@@ -40,7 +40,7 @@ export default function AdminDashboardPage() {
         { label: 'Total Users', value: stats.totalUsers, icon: Users, accent: 'brand' },
         { label: 'Active Players', value: stats.activePlayers, icon: Activity, accent: 'emerald', hint: 'Last 15 min' },
         { label: 'Signups Today', value: stats.signupsToday, icon: UserPlus, accent: 'sky' },
-        { label: 'Total Liability', value: inr(stats.totalLiability), icon: Wallet, accent: 'accent', hint: 'Player balances' },
+        { label: 'Total Liability', value: inr(stats.totalLiability), icon: Wallet, accent: 'sky', hint: 'Player balances' },
         { label: 'Deposits Today', value: inr(stats.depositsToday.amount), icon: ArrowDownToLine, accent: 'emerald', hint: `${stats.depositsToday.count} transactions` },
         { label: 'Withdrawals Today', value: inr(stats.withdrawalsToday.amount), icon: ArrowUpFromLine, accent: 'rose', hint: `${stats.withdrawalsToday.count} transactions` },
       ]
@@ -171,7 +171,7 @@ export default function AdminDashboardPage() {
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-surface-700">
                       <div
-                        className="h-full rounded-full bg-gradient-to-r from-brand-400 to-accent-500"
+                        className="h-full rounded-full bg-gradient-to-r from-brand-400 to-brand-500"
                         style={{ width: `${(c.volume / maxVol) * 100}%` }}
                       />
                     </div>

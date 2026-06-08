@@ -154,7 +154,7 @@ export default function AdminUsersPage() {
         ) : (
           <div className="space-y-5">
             <div className="flex items-center gap-4">
-              <span className="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-brand-400 to-accent-600 font-display text-xl font-black text-surface-950">
+              <span className="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 font-display text-xl font-black text-surface-950">
                 {(detail.full_name || detail.username || '?').slice(0, 1).toUpperCase()}
               </span>
               <div>

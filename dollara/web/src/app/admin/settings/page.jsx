@@ -64,7 +64,7 @@ const SETTING_META = {
 const GROUPS = {
   General: { icon: SlidersHorizontal, accent: 'text-brand-400' },
   Limits: { icon: Wallet, accent: 'text-emerald-400' },
-  Localization: { icon: Languages, accent: 'text-accent-400' },
+  Localization: { icon: Languages, accent: 'text-brand-400' },
   Security: { icon: Globe, accent: 'text-sky-400' },
   Other: { icon: SettingsIcon, accent: 'text-slate-400' },
 };

@@ -66,17 +66,16 @@ const PARTNERS = ['Caleta', 'CQ9', 'Endorphina', 'Evolution', 'Evoplay', 'PG Sof
 
 // Per-section theming so the page reads as designed rather than a stock template.
 const THEMES = {
-  sports: { ring: 'from-emerald-400/40', glow: 'shadow-[0_18px_50px_-22px_rgba(16,210,122,0.7)]', dot: 'bg-emerald-400', chip: 'text-emerald-300' },
-  casino: { ring: 'from-brand-400/40', glow: 'shadow-[0_18px_50px_-22px_rgba(255,152,0,0.7)]', dot: 'bg-brand-400', chip: 'text-brand-300' },
+  sports: { ring: 'from-emerald-400/40', glow: 'shadow-[0_18px_50px_-22px_rgba(0,210,106,0.7)]', dot: 'bg-emerald-400', chip: 'text-emerald-300' },
+  casino: { ring: 'from-brand-400/40', glow: 'shadow-[0_18px_50px_-22px_rgba(245,197,66,0.7)]', dot: 'bg-brand-400', chip: 'text-brand-300' },
   trending: { ring: 'from-rose-400/40', glow: 'shadow-[0_18px_50px_-22px_rgba(244,63,94,0.7)]', dot: 'bg-rose-400', chip: 'text-rose-300' },
-  slots: { ring: 'from-accent-400/40', glow: 'shadow-[0_18px_50px_-22px_rgba(124,77,255,0.7)]', dot: 'bg-accent-400', chip: 'text-accent-300' },
+  slots: { ring: 'from-brand-600/40', glow: 'shadow-[0_18px_50px_-22px_rgba(255,184,0,0.7)]', dot: 'bg-brand-600', chip: 'text-brand-300' },
 };
 
 const ACCENT_TEXT = {
   brand: 'text-brand-400',
   emerald: 'text-emerald-400',
   rose: 'text-rose-400',
-  accent: 'text-accent-400',
 };
 
 function SectionHeader({ title, kicker, Icon, onSeeAll, accent = 'brand' }) {
@@ -143,7 +142,7 @@ function GameCard({ item, onPlay, theme = THEMES.casino, rank }) {
 
       {/* Hover play overlay — sits over the art placeholder, stays on the fixed dark scale */}
       <div className="absolute inset-0 z-20 flex items-center justify-center bg-surface-950/55 opacity-0 backdrop-blur-[2px] transition-opacity duration-300 group-hover:opacity-100">
-        <span className="flex h-14 w-14 scale-90 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-accent-500 shadow-glow transition-transform duration-300 group-hover:scale-100">
+        <span className="flex h-14 w-14 scale-90 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-brand-500 shadow-glow transition-transform duration-300 group-hover:scale-100">
           <Play className="h-6 w-6 fill-surface-950 text-surface-950" />
         </span>
       </div>
@@ -192,8 +191,8 @@ export default function HomePage() {
       html: `<p style="margin:0;color:rgb(var(--color-muted))">Launching <b style="color:rgb(var(--color-app-fg))">${game.name}</b> by ${game.provider}</p>`,
       icon: 'question',
       showCancelButton: true,
-      confirmButtonColor: '#ff9800',
-      cancelButtonColor: '#211d30',
+      confirmButtonColor: '#F5C542',
+      cancelButtonColor: '#1E252E',
       confirmButtonText: 'Play now',
       cancelButtonText: 'Cancel',
     }).then((result) => {
@@ -202,7 +201,7 @@ export default function HomePage() {
           title: 'Loading…',
           text: `${game.name} is starting up.`,
           icon: 'success',
-          confirmButtonColor: '#ff9800',
+          confirmButtonColor: '#F5C542',
         });
       }
     });
@@ -257,10 +256,10 @@ export default function HomePage() {
                 {/* Side stack */}
                 <div className="flex flex-col gap-4">
                   <div className="relative flex flex-1 flex-col justify-center overflow-hidden rounded-3xl border border-hairline/[0.07] bg-panel-strong bg-mesh-violet p-6">
-                    <div className="pointer-events-none absolute -right-6 -top-6 h-32 w-32 rounded-full bg-accent-500/25 blur-2xl" />
-                    <p className="text-xs font-bold uppercase tracking-widest text-accent-300">Deposit bonus</p>
+                    <div className="pointer-events-none absolute -right-6 -top-6 h-32 w-32 rounded-full bg-brand-500/25 blur-2xl" />
+                    <p className="text-xs font-bold uppercase tracking-widest text-brand-300">Deposit bonus</p>
                     <p className="mt-2 font-display text-5xl font-black text-app-fg">
-                      ₹100<span className="text-2xl text-accent-300">/-</span>
+                      ₹100<span className="text-2xl text-brand-300">/-</span>
                     </p>
                     <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-muted">Extra · No wagering</p>
                   </div>
@@ -368,7 +367,7 @@ export default function HomePage() {
               </section>
 
               <section>
-                <SectionHeader title="Trending Slots" kicker="Big multipliers" Icon={Sparkles} accent="accent" onSeeAll />
+                <SectionHeader title="Trending Slots" kicker="Big multipliers" Icon={Sparkles} accent="brand" onSeeAll />
                 <Carousel items={TRENDING_SLOTS} onPlay={handlePlayGame} theme={THEMES.slots} ranked />
               </section>
 
@@ -423,7 +422,7 @@ export default function HomePage() {
               {/* FAQ */}
               <section className="mx-auto max-w-3xl py-4">
                 <div className="mb-8 text-center">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-hairline/10 bg-panel/60 px-3 py-1 text-[0.65rem] font-bold uppercase tracking-widest text-accent-300">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-hairline/10 bg-panel/60 px-3 py-1 text-[0.65rem] font-bold uppercase tracking-widest text-brand-300">
                     <Sparkles className="h-3 w-3" /> Knowledge base
                   </span>
                   <h2 className="mt-4 font-display text-3xl font-bold text-app-fg">

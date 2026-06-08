@@ -47,7 +47,7 @@ const CATEGORIES = [
   { label: 'Baccarat', href: '#', icon: Diamond, color: 'text-sky-400' },
   { label: 'Dragon', href: '#', icon: Crown, color: 'text-brand-300' },
   { label: 'Teen Patti', href: '#', icon: Coins, color: 'text-amber-400' },
-  { label: 'Poker', href: '#', icon: Spade, color: 'text-accent-300' },
+  { label: 'Poker', href: '#', icon: Spade, color: 'text-brand-300' },
   { label: 'Shows', href: '#', icon: Tv, color: 'text-emerald-400' },
   { label: 'Andar', href: '#', icon: HeartHandshake, color: 'text-rose-400' },
 ];
@@ -65,7 +65,7 @@ const fire = (title, text, icon = 'info') =>
     title,
     text,
     icon,
-    confirmButtonColor: '#ff9800',
+    confirmButtonColor: '#F5C542',
     timer: icon === 'info' ? 1100 : undefined,
     showConfirmButton: icon !== 'info',
   });

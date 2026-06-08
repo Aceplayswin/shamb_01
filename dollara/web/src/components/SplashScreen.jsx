@@ -34,9 +34,9 @@ export function SplashScreen({ onComplete }) {
         <h1 className="font-display text-6xl font-black tracking-tight md:text-8xl">
           <span className="shimmer-text">{branding.product_name}</span>
         </h1>
-        <p className="mt-4 text-sm font-semibold uppercase tracking-[0.4em] text-accent-300/70">Play · Win · Repeat</p>
+        <p className="mt-4 text-sm font-semibold uppercase tracking-[0.4em] text-brand-300/70">Play · Win · Repeat</p>
         <div className="mx-auto mt-8 h-1 w-40 overflow-hidden rounded-full bg-surface-700">
-          <div className="h-full w-1/2 animate-marquee bg-gradient-to-r from-brand-400 to-accent-400" />
+          <div className="h-full w-1/2 animate-marquee bg-gradient-to-r from-brand-400 to-brand-600" />
         </div>
       </div>
       {canSkip && (

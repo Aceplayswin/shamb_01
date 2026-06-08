@@ -18,7 +18,7 @@ export default function AdminStaffPage() {
       label: 'Administrator',
       render: (r) => (
         <div className="flex items-center gap-3">
-          <span className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-brand-400 to-accent-600 text-xs font-bold text-surface-950">
+          <span className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 text-xs font-bold text-surface-950">
             {r.username.slice(0, 1).toUpperCase()}
           </span>
           <div>

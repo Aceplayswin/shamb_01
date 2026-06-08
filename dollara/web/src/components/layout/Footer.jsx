@@ -13,34 +13,36 @@ const LINK_GROUPS = [
 
 const PAYMENTS = ['UPI', 'GPay', 'PhonePe', 'Paytm', 'Visa', 'Mastercard', 'Rupay', 'Net Banking'];
 
-export function Footer() {
+export function Footer({ showCta = true }) {
   const branding = useBranding();
   const brandName = branding.product_name;
   return (
     <footer className="mt-16 px-4 xl:px-6">
       <div className="mx-auto max-w-[1400px]">
         {/* CTA band */}
-        <div className="ring-grad relative overflow-hidden rounded-3xl bg-panel-strong bg-mesh-violet p-8 text-center sm:p-12">
-          <div className="pointer-events-none absolute -left-10 top-0 h-40 w-40 rounded-full bg-brand-500/20 blur-3xl" />
-          <div className="pointer-events-none absolute -right-10 bottom-0 h-40 w-40 rounded-full bg-accent-500/25 blur-3xl" />
-          <h2 className="relative font-display text-3xl font-black text-app-fg sm:text-4xl">
-            Ready to <span className="text-gradient-gold">win big?</span>
-          </h2>
-          <p className="relative mx-auto mt-3 max-w-md text-sm text-muted">
-            Join 1.2M+ players. Sign up in seconds, claim your ₹5,000 welcome bonus, and cash out in minutes.
-          </p>
-          <div className="relative mt-6 flex flex-wrap items-center justify-center gap-3">
-            <Link
-              href="/register"
-              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-400 to-brand-600 px-7 py-3 text-sm font-bold text-surface-950 shadow-glow transition hover:from-brand-300 hover:to-brand-500"
-            >
-              Create free account <ArrowRight className="h-4 w-4" />
-            </Link>
-            <button className="inline-flex items-center gap-2 rounded-xl border border-hairline/15 px-6 py-3 text-sm font-bold text-app-fg transition hover:bg-hairline/[0.06]">
-              <Download className="h-4 w-4" /> Get the app
-            </button>
+        {showCta && (
+          <div className="ring-grad relative overflow-hidden rounded-3xl bg-panel-strong bg-mesh-violet p-8 text-center sm:p-12">
+            <div className="pointer-events-none absolute -left-10 top-0 h-40 w-40 rounded-full bg-brand-500/20 blur-3xl" />
+            <div className="pointer-events-none absolute -right-10 bottom-0 h-40 w-40 rounded-full bg-brand-500/25 blur-3xl" />
+            <h2 className="relative font-display text-3xl font-black text-app-fg sm:text-4xl">
+              Ready to <span className="text-gradient-gold">win big?</span>
+            </h2>
+            <p className="relative mx-auto mt-3 max-w-md text-sm text-muted">
+              Join 1.2M+ players. Sign up in seconds, claim your ₹5,000 welcome bonus, and cash out in minutes.
+            </p>
+            <div className="relative mt-6 flex flex-wrap items-center justify-center gap-3">
+              <Link
+                href="/register"
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-400 to-brand-600 px-7 py-3 text-sm font-bold text-surface-950 shadow-glow transition hover:from-brand-300 hover:to-brand-500"
+              >
+                Create free account <ArrowRight className="h-4 w-4" />
+              </Link>
+              <button className="inline-flex items-center gap-2 rounded-xl border border-hairline/15 px-6 py-3 text-sm font-bold text-app-fg transition hover:bg-hairline/[0.06]">
+                <Download className="h-4 w-4" /> Get the app
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Payments marquee */}
         <div className="mt-8 flex items-center gap-4 overflow-hidden rounded-2xl border border-hairline/[0.06] bg-panel-strong/60 px-4 py-3">
