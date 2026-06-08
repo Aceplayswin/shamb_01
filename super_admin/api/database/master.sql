@@ -9,6 +9,10 @@ CREATE TABLE IF NOT EXISTS products (
   slug VARCHAR(63) NOT NULL UNIQUE,
   name VARCHAR(150) NOT NULL,
   status ENUM('active', 'disabled') NOT NULL DEFAULT 'active',
+  -- Which full UI theme/skin the product's frontend renders. The catalog of
+  -- valid keys is code-defined in dollara/web (src/themes) and mirrored in the
+  -- super_admin API (AVAILABLE_THEMES in tenants/views.py). Keep them in sync.
+  active_theme VARCHAR(63) NOT NULL DEFAULT 'theme1',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_products_status (status)
@@ -77,3 +81,22 @@ VALUES (
   1
 )
 ON DUPLICATE KEY UPDATE username = username;
+
+-- ── Idempotent migrations for already-provisioned databases ──
+-- The CREATE TABLE above only runs on fresh installs; existing master DBs need
+-- the column added without erroring if it is already present. This guarded
+-- prepared statement is safe to re-run.
+SET @add_active_theme := (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE products ADD COLUMN active_theme VARCHAR(63) NOT NULL DEFAULT ''theme1'' AFTER status',
+    'SELECT 1'
+  )
+  FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'products'
+    AND COLUMN_NAME = 'active_theme'
+);
+PREPARE stmt FROM @add_active_theme;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;

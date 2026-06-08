@@ -3,6 +3,7 @@ import { AuthHydrate } from '@/components/AuthHydrate';
 import { ThemeHydrate, themeInitScript } from '@/components/ThemeHydrate';
 import { AppFrame } from '@/components/layout/AppFrame';
 import { BrandProvider } from '@/hooks/useBranding';
+import { ActiveThemeProvider } from '@/hooks/useActiveTheme';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
@@ -23,9 +24,11 @@ export default function RootLayout({ children }) {
       <body className="font-sans antialiased">
         <ThemeHydrate>
           <BrandProvider>
-            <AuthHydrate>
-              <AppFrame>{children}</AppFrame>
-            </AuthHydrate>
+            <ActiveThemeProvider>
+              <AuthHydrate>
+                <AppFrame>{children}</AppFrame>
+              </AuthHydrate>
+            </ActiveThemeProvider>
           </BrandProvider>
         </ThemeHydrate>
       </body>

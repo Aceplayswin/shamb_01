@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Swal from 'sweetalert2';
 import {
   Box, CheckCircle2, Database, Eye, EyeOff, Globe, Loader2,
-  MinusCircle, Pencil, Plus, Power, Server, Trash2, Wifi, X, XCircle,
+  MinusCircle, Palette, Pencil, Plus, Power, Server, Trash2, Wifi, X, XCircle,
 } from 'lucide-react';
 import {
   listProducts, disableProduct, updateProduct, deleteProduct,
@@ -12,6 +12,18 @@ import {
 } from '@/services/api';
 import { useTheme } from '../providers';
 import DashboardLayout, { useDashboard } from '../components/DashboardLayout';
+
+// Selectable UI themes for a product's frontend. Mirrors AVAILABLE_THEMES in
+// super_admin/api (tenants/views.py) and the registry in dollara/web (src/themes);
+// keep all three in sync. The API still validates the chosen key on save.
+const AVAILABLE_THEMES = [
+  { key: 'theme1', label: 'Theme 1 — Aurora (default)' },
+  { key: 'theme2', label: 'Theme 2 — Midnight' },
+];
+
+function themeLabel(key) {
+  return AVAILABLE_THEMES.find((t) => t.key === key)?.label ?? key;
+}
 
 function swalThemed(opts, theme) {
   const isDark = theme === 'dark';
@@ -305,6 +317,17 @@ function ProductsContent() {
     } finally { setBusy(null); }
   };
 
+  const changeTheme = async (p, theme) => {
+    if (theme === p.active_theme) return;
+    setBusy(`${p.slug}:theme`);
+    try {
+      await updateProduct(p.slug, { active_theme: theme });
+      await load();
+    } catch (err) {
+      swal({ icon: 'error', title: 'Theme update failed', text: err.message });
+    } finally { setBusy(null); }
+  };
+
   const confirmDelete = async (p) => {
     const res = await swal({
       icon: 'warning', title: `Delete ${p.name}?`,
@@ -379,7 +402,25 @@ function ProductsContent() {
                     <span className={`rounded-full px-2.5 py-0.5 text-[0.6rem] font-bold uppercase ${p.status === 'active' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}`}>
                       {p.status}
                     </span>
-                    <div className="ml-auto flex flex-wrap gap-2">
+                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                      <div className="relative flex items-center">
+                        <Palette className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-gray-400" />
+                        <select
+                          value={p.active_theme ?? 'theme1'}
+                          onChange={(e) => changeTheme(p, e.target.value)}
+                          disabled={busy === `${p.slug}:theme`}
+                          title="Active frontend theme"
+                          aria-label={`Active theme for ${p.name}`}
+                          className="appearance-none rounded-lg border border-gray-200 bg-white py-1.5 pl-8 pr-7 text-xs font-semibold text-gray-700 hover:bg-gray-100 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                        >
+                          {AVAILABLE_THEMES.map((t) => (
+                            <option key={t.key} value={t.key}>{t.label}</option>
+                          ))}
+                        </select>
+                        {busy === `${p.slug}:theme` && (
+                          <Loader2 className="pointer-events-none absolute right-2 h-3.5 w-3.5 animate-spin text-indigo-500" />
+                        )}
+                      </div>
                       <button onClick={() => setEditTarget(p)} className={actionBtn}>
                         <Pencil className="h-3.5 w-3.5" /> Edit
                       </button>
@@ -405,7 +446,14 @@ function ProductsContent() {
                   </div>
 
                   {/* Info cards */}
-                  <div className="mt-4 grid gap-3 text-xs sm:grid-cols-3">
+                  <div className="mt-4 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-900/60">
+                      <p className="flex items-center gap-1.5 font-medium text-gray-500 dark:text-gray-400">
+                        <Palette className="h-3.5 w-3.5" /> Active Theme
+                      </p>
+                      <p className="mt-1 font-semibold text-gray-900 dark:text-white">{themeLabel(p.active_theme ?? 'theme1')}</p>
+                      <p className="text-emerald-600 dark:text-emerald-400">live on frontend</p>
+                    </div>
                     <div className="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-900/60">
                       <p className="flex items-center gap-1.5 font-medium text-gray-500 dark:text-gray-400">
                         <Database className="h-3.5 w-3.5" /> Database
