@@ -19,9 +19,6 @@ class Product(models.Model):
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.ACTIVE, db_index=True
     )
-    # Which full UI theme/skin the product's frontend renders. Catalog of valid
-    # keys is code-defined (dollara/web src/themes + AVAILABLE_THEMES in views.py).
-    active_theme = models.CharField(max_length=63, default='theme1')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

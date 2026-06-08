@@ -25,27 +25,6 @@ from tenants.models import Database, Product, Url, User, UserSession
 from tenants.state import tenant_db_alias_for, use_tenant
 
 
-# Canonical catalog of selectable UI themes. The actual rendering catalog lives
-# in dollara/web (src/themes); these keys MUST stay in sync with that registry.
-# 'theme1' is the default and reproduces the current design.
-AVAILABLE_THEMES = [
-    {'key': 'theme1', 'label': 'Theme 1 — Aurora (default)'},
-    {'key': 'theme2', 'label': 'Theme 2 — Midnight'},
-]
-THEME_KEYS = {t['key'] for t in AVAILABLE_THEMES}
-DEFAULT_THEME = 'theme1'
-
-
-def _normalize_theme(value) -> str | None:
-    """Return a valid theme key, or None if the value is unusable."""
-    if not isinstance(value, str):
-        return None
-    key = value.strip()
-    if not key or len(key) > 63 or key not in THEME_KEYS:
-        return None
-    return key
-
-
 def _json_body(request) -> dict:
     if not request.body:
         return {}
@@ -64,7 +43,6 @@ def _serialize_product(product: Product) -> dict:
         'slug': product.slug,
         'name': product.name,
         'status': product.status,
-        'active_theme': product.active_theme,
         'created_at': product.created_at.isoformat(),
         'urls': {
             'fe_url': url_obj.fe_url if url_obj else '',
@@ -133,30 +111,6 @@ def _detect_device_type(user_agent: str) -> str:
     if 'tablet' in ua or 'ipad' in ua:
         return 'tablet'
     return 'desktop'
-
-
-# --- Public theme (no auth) ---
-@require_http_methods(['GET'])
-def public_active_theme(request):
-    """Public, tenant-resolved active-theme lookup for product frontends.
-
-    Read path for dollara/web (and other product frontends): given a product
-    slug (``?slug=`` or the ``X-Tenant`` header) it returns which UI theme is
-    active plus the catalog of selectable themes. Unauthenticated by design,
-    mirroring the product APIs' ``public_branding``. Always falls back to the
-    default theme so a missing/unknown slug never breaks the frontend.
-    """
-    slug = (request.GET.get('slug') or request.headers.get('X-Tenant') or '').strip()
-    active_theme = DEFAULT_THEME
-    if slug:
-        product = Product.objects.filter(slug=slug).only('active_theme').first()
-        if product:
-            active_theme = _normalize_theme(product.active_theme) or DEFAULT_THEME
-    return JsonResponse({
-        'slug': slug or None,
-        'active_theme': active_theme,
-        'available': AVAILABLE_THEMES,
-    })
 
 
 # --- Products ---
@@ -228,12 +182,7 @@ def product_update(request, slug):
         product.name = body['name']
     if 'status' in body and body['status'] in dict(Product.Status.choices):
         product.status = body['status']
-    if 'active_theme' in body:
-        theme = _normalize_theme(body['active_theme'])
-        if theme is None:
-            return _error('Invalid theme')
-        product.active_theme = theme
-    product.save(update_fields=['slug', 'name', 'status', 'active_theme', 'updated_at'])
+    product.save(update_fields=['slug', 'name', 'status', 'updated_at'])
     invalidate_tenant_cache(old_slug)
     invalidate_tenant_cache(product.slug)
     return JsonResponse(_serialize_product(product))

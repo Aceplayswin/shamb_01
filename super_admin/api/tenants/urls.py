@@ -5,8 +5,6 @@ from tenants import views
 urlpatterns = [
     # Super Admin auth
     path('super-admin/auth/login', views.super_admin_login),
-    # Public (no auth): active UI theme for a product frontend
-    path('super-admin/public/theme', views.public_active_theme),
     # Products
     path('super-admin/products', views.products_list),
     path('super-admin/products/create', views.products_create),

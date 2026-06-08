@@ -92,12 +92,3 @@ export const testConnection = (payload) =>
     method: 'POST',
     body: JSON.stringify(payload),
   });
-
-// Public (no auth): active UI theme + the catalog of selectable themes for a
-// product. Used to populate the theme dropdown on the Products page.
-export const getPublicTheme = (slug) =>
-  fetch(`${API_URL}/api/v1/super-admin/public/theme?slug=${encodeURIComponent(slug ?? '')}`)
-    .then((res) => {
-      if (!res.ok) throw new Error('Failed to load themes');
-      return res.json();
-    });

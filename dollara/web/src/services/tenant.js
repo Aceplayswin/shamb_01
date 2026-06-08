@@ -4,8 +4,6 @@
 // the configured default) so every API call can carry an `X-Tenant` header.
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
-// Super Admin control plane — source of truth for which UI theme is active.
-export const SUPER_ADMIN_URL = process.env.NEXT_PUBLIC_SUPER_ADMIN_URL ?? 'http://localhost:5000';
 export const DEFAULT_TENANT = process.env.NEXT_PUBLIC_DEFAULT_TENANT ?? 'dollara';
 
 const RESERVED_SUBDOMAINS = new Set(['www', 'api', 'admin']);
@@ -48,27 +46,4 @@ export async function fetchBranding() {
   });
   if (!res.ok) throw new Error('Failed to load branding');
   return res.json();
-}
-
-// Which full UI theme/skin this product renders, decided by the Super Admin and
-// served by the control plane. Returns the active theme key, falling back to
-// 'theme1' on any error so the site always renders the default skin. A short
-// timeout guards against a slow/hanging control plane blocking first paint.
-export async function fetchActiveTheme() {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3000);
-  try {
-    const slug = getTenantSlug();
-    const res = await fetch(
-      `${SUPER_ADMIN_URL}/api/v1/super-admin/public/theme?slug=${encodeURIComponent(slug)}`,
-      { signal: controller.signal },
-    );
-    if (!res.ok) return 'theme1';
-    const data = await res.json();
-    return data?.active_theme || 'theme1';
-  } catch {
-    return 'theme1';
-  } finally {
-    clearTimeout(timeout);
-  }
 }
