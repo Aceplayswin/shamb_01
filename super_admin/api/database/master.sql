@@ -9,10 +9,19 @@ CREATE TABLE IF NOT EXISTS products (
   slug VARCHAR(63) NOT NULL UNIQUE,
   name VARCHAR(150) NOT NULL,
   status ENUM('active', 'disabled') NOT NULL DEFAULT 'active',
+  -- Themes the super admin has activated for this product (JSON array of theme
+  -- keys), and which one is currently live. See tenants/themes.py for the catalog.
+  available_themes JSON NULL,
+  active_theme VARCHAR(63) NOT NULL DEFAULT 'theme1',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_products_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Migration for existing databases (no-op if columns already present):
+--   ALTER TABLE products
+--     ADD COLUMN available_themes JSON NULL,
+--     ADD COLUMN active_theme VARCHAR(63) NOT NULL DEFAULT 'theme1';
 
 CREATE TABLE IF NOT EXISTS urls (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,

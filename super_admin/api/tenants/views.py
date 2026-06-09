@@ -23,6 +23,9 @@ from services.tenant_provisioning import ProvisioningError, provision_product
 from services.tenant_resolver import invalidate_tenant_cache
 from tenants.models import Database, Product, Url, User, UserSession
 from tenants.state import tenant_db_alias_for, use_tenant
+from tenants.themes import (
+    DEFAULT_THEME, THEME_CATALOG, THEME_KEYS, normalize_themes,
+)
 
 
 def _json_body(request) -> dict:
@@ -35,15 +38,25 @@ def _error(message, status=400):
     return JsonResponse({'error': str(message)}, status=status)
 
 
+def _product_themes(product: Product) -> tuple[list, str]:
+    """Normalized (available, active) themes for a product, tolerating legacy
+    rows where the columns are still NULL/default."""
+    available, active = normalize_themes(product.available_themes, product.active_theme)
+    return available, active
+
+
 def _serialize_product(product: Product) -> dict:
     db = Database.objects.filter(product=product).first()
     url_obj = Url.objects.filter(product=product).first()
+    available, active = _product_themes(product)
     return {
         'id': product.id,
         'slug': product.slug,
         'name': product.name,
         'status': product.status,
         'created_at': product.created_at.isoformat(),
+        'available_themes': available,
+        'active_theme': active,
         'urls': {
             'fe_url': url_obj.fe_url if url_obj else '',
             'be_url': url_obj.be_url if url_obj else '',
@@ -295,6 +308,67 @@ def product_urls(request, slug):
     return JsonResponse({
         'fe_url': url_obj.fe_url,
         'be_url': url_obj.be_url,
+    })
+
+
+# --- Themes ---
+@require_auth(['super_admin'])
+@require_http_methods(['GET'])
+def themes_catalog(request):
+    """The full catalog of themes a product may render. Drives the super-admin UI."""
+    return JsonResponse({'themes': THEME_CATALOG, 'default': DEFAULT_THEME}, safe=False)
+
+
+@csrf_exempt
+@require_auth(['super_admin'])
+@require_http_methods(['PUT'])
+def product_themes(request, slug):
+    """Set which themes are activated for a product and which one is live.
+
+    Body: {"available_themes": ["theme1", ...], "active_theme": "theme1"}
+    Either field may be omitted; omitted values fall back to the product's
+    current selection (or the catalog default).
+    """
+    product = Product.objects.filter(slug=slug).first()
+    if not product:
+        return _error('Product not found', 404)
+    body = _json_body(request)
+
+    cur_available, cur_active = _product_themes(product)
+    available_in = body.get('available_themes', cur_available)
+    active_in = body.get('active_theme', cur_active)
+    try:
+        available, active = normalize_themes(available_in, active_in)
+    except ValueError as e:
+        return _error(e)
+
+    product.available_themes = available
+    product.active_theme = active
+    product.save(update_fields=['available_themes', 'active_theme', 'updated_at'])
+    invalidate_tenant_cache(product.slug)
+    return JsonResponse({'available_themes': available, 'active_theme': active})
+
+
+# --- Public (unauthenticated) theme resolution for product frontends ---
+@require_http_methods(['GET'])
+def public_product_theme(request, slug):
+    """Public endpoint a product frontend calls to learn its live theme.
+
+    Returns only the active theme key (and the catalog so the frontend can guard
+    against rendering a theme it doesn't ship). No auth: this is read-only,
+    non-sensitive presentation config. Disabled products report no theme so the
+    frontend can show a maintenance state."""
+    product = Product.objects.filter(slug=slug).first()
+    if not product:
+        return _error('Product not found', 404)
+    if not product.is_active:
+        return JsonResponse({'slug': slug, 'active_theme': None, 'status': product.status})
+    _available, active = _product_themes(product)
+    return JsonResponse({
+        'slug': slug,
+        'active_theme': active,
+        'status': product.status,
+        'known_themes': THEME_KEYS,
     })
 
 

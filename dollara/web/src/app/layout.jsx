@@ -1,8 +1,9 @@
 import { Inter, Outfit } from 'next/font/google';
 import { AuthHydrate } from '@/components/AuthHydrate';
 import { ThemeHydrate, themeInitScript } from '@/components/ThemeHydrate';
-import { AppFrame } from '@/components/layout/AppFrame';
 import { BrandProvider } from '@/hooks/useBranding';
+import { ProductThemeProvider } from '@/hooks/useProductTheme';
+import { ThemeShell } from '@/themes/ThemeShell';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
@@ -23,9 +24,11 @@ export default function RootLayout({ children }) {
       <body className="font-sans antialiased">
         <ThemeHydrate>
           <BrandProvider>
-            <AuthHydrate>
-              <AppFrame>{children}</AppFrame>
-            </AuthHydrate>
+            <ProductThemeProvider>
+              <AuthHydrate>
+                <ThemeShell>{children}</ThemeShell>
+              </AuthHydrate>
+            </ProductThemeProvider>
           </BrandProvider>
         </ThemeHydrate>
       </body>

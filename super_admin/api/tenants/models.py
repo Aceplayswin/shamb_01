@@ -19,6 +19,10 @@ class Product(models.Model):
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.ACTIVE, db_index=True
     )
+    # Themes the super admin has activated for this product, and which is live.
+    # The catalog of valid keys lives in tenants/themes.py.
+    available_themes = models.JSONField(null=True, blank=True, default=None)
+    active_theme = models.CharField(max_length=63, default='theme1')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

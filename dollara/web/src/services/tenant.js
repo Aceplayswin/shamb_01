@@ -4,6 +4,8 @@
 // the configured default) so every API call can carry an `X-Tenant` header.
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+export const PLATFORM_API_URL =
+  process.env.NEXT_PUBLIC_PLATFORM_API_URL ?? 'http://localhost:5000';
 export const DEFAULT_TENANT = process.env.NEXT_PUBLIC_DEFAULT_TENANT ?? 'dollara';
 
 const RESERVED_SUBDOMAINS = new Set(['www', 'api', 'admin']);
@@ -46,4 +48,20 @@ export async function fetchBranding() {
   });
   if (!res.ok) throw new Error('Failed to load branding');
   return res.json();
+}
+
+// The super admin chooses which theme this product renders. We resolve it from
+// the platform control-plane's public (unauthenticated) theme endpoint, keyed by
+// the current tenant slug. Returns the active theme key, or null if the product
+// is disabled / unreachable (callers fall back to the default theme).
+export async function fetchActiveTheme() {
+  const slug = getTenantSlug();
+  try {
+    const res = await fetch(`${PLATFORM_API_URL}/api/v1/public/products/${slug}/theme`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.active_theme ?? null;
+  } catch {
+    return null;
+  }
 }

@@ -92,3 +92,10 @@ export const testConnection = (payload) =>
     method: 'POST',
     body: JSON.stringify(payload),
   });
+
+export const listThemes = () => superAdminApi('/api/v1/super-admin/themes');
+export const updateProductThemes = (slug, payload) =>
+  superAdminApi(`/api/v1/super-admin/products/${slug}/themes`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
