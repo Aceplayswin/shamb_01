@@ -120,6 +120,24 @@ def login(request):
         return _error_response(e, 401)
 
 
+# --- Settings / preferences ---
+@csrf_exempt
+@require_auth(['user'])
+@require_http_methods(['GET', 'PUT', 'PATCH'])
+def user_settings(request):
+    try:
+        if request.method == 'GET':
+            return JsonResponse(services.get_user_preferences(request.auth.sub))
+        body = _json_body(request)
+        return JsonResponse(services.update_user_preferences(request.auth.sub, body))
+    except json.JSONDecodeError as e:
+        return _error_response(e)
+    except User.DoesNotExist:
+        return JsonResponse({'error': 'User not found'}, status=404)
+    except Exception as e:
+        return _error_response(e)
+
+
 # --- Wallet ---
 @require_auth(['user'])
 @require_http_methods(['GET'])

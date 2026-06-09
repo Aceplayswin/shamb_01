@@ -2,25 +2,21 @@
 
 import Link from 'next/link';
 import {
-  Home, Dices, Trophy, Tv, Gift, Crown, Medal, Ticket, Users, LifeBuoy,
+  Home, Dices, Trophy, Tv, Gift, Crown, Medal, Ticket, LifeBuoy,
 } from 'lucide-react';
-import Swal from 'sweetalert2';
+import { NAV_GAME_LINKS } from '@/lib/gameRoutes';
 
 const NAV = [
   { label: 'Home', href: '/', icon: Home },
-  { label: 'Casino', href: '#', icon: Dices },
-  { label: 'Sports', href: '#', icon: Trophy },
-  { label: 'Live Casino', href: '#', icon: Tv },
-  { label: 'Promotions', href: '#', icon: Gift },
-  { label: 'VIP Club', href: '#', icon: Crown },
-  { label: 'Tournaments', href: '#', icon: Medal },
-  { label: 'Lottery', href: '#', icon: Ticket },
-  { label: 'Affiliate', href: '#', icon: Users },
+  { label: 'Casino', href: NAV_GAME_LINKS.casino, icon: Dices },
+  { label: 'Sports', href: NAV_GAME_LINKS.sports, icon: Trophy },
+  { label: 'Live Casino', href: NAV_GAME_LINKS.liveCasino, icon: Tv },
+  { label: 'Slots', href: NAV_GAME_LINKS.slots, icon: Gift },
+  { label: 'Crash', href: NAV_GAME_LINKS.crash, icon: Crown },
+  { label: 'Lottery', href: NAV_GAME_LINKS.lottery, icon: Ticket },
+  { label: 'Fantasy', href: NAV_GAME_LINKS.fantasy, icon: Medal },
   { label: 'Support', href: '/support/chat', icon: LifeBuoy },
 ];
-
-const stub = (label) =>
-  Swal.fire({ title: label, text: `Opening ${label}…`, icon: 'info', timer: 1000, showConfirmButton: false, confirmButtonColor: '#F5C542' });
 
 export function Theme2Sidebar({ open, onClose }) {
   return (
@@ -48,13 +44,10 @@ export function Theme2Sidebar({ open, onClose }) {
 
         {/* Nav */}
         <nav className="space-y-1 px-3 py-4">
-          {NAV.map(({ label, href, icon: Icon }) => {
-            const onClick = (e) => { if (href === '#') { e.preventDefault(); stub(label); } };
-            return (
+          {NAV.map(({ label, href, icon: Icon }) => (
               <Link
                 key={label}
                 href={href}
-                onClick={onClick}
                 title={label}
                 className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-400 transition-colors hover:bg-white/5 hover:text-white ${
                   label === 'Home' ? 'bg-amber-500/10 text-amber-400' : ''
@@ -65,8 +58,7 @@ export function Theme2Sidebar({ open, onClose }) {
                   {label}
                 </span>
               </Link>
-            );
-          })}
+          ))}
         </nav>
       </aside>
     </>

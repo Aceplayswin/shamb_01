@@ -89,6 +89,61 @@ def get_user_settings(user: User) -> UserSetting | None:
         return None
 
 
+# Player-editable preference fields exposed by the settings page. Anything not in
+# this set (kyc_status, fraud_score, demo flags, …) is read-only / system-owned.
+_EDITABLE_PREFERENCES = {
+    'website_language',
+    'communication_language',
+    'currency',
+    'notifications_enabled',
+    'marketing_opt_in',
+}
+
+
+def _serialize_preferences(user: User, prefs: UserSetting | None) -> dict:
+    return {
+        'full_name': user.full_name,
+        'username': user.username,
+        'phone': user.phone,
+        'email': user.email,
+        'kyc_status': prefs.kyc_status if prefs else UserSetting.KycStatus.NONE,
+        'account_status': user.account_status,
+        'website_language': prefs.website_language if prefs else 'en',
+        'communication_language': prefs.communication_language if prefs else 'en',
+        'currency': prefs.currency if prefs else 'INR',
+        'notifications_enabled': prefs.notifications_enabled if prefs else True,
+        'marketing_opt_in': prefs.marketing_opt_in if prefs else False,
+    }
+
+
+def get_user_preferences(user_id: int) -> dict:
+    """Read the player's profile + editable preferences for the settings page."""
+    user = User.objects.select_related('usersetting').get(id=user_id)
+    return _serialize_preferences(user, get_user_settings(user))
+
+
+def update_user_preferences(user_id: int, changes: dict) -> dict:
+    """Persist player-editable preferences, ignoring unknown/read-only keys."""
+    user = User.objects.select_related('usersetting').get(id=user_id)
+    prefs = get_user_settings(user)
+    if prefs is None:
+        prefs = _create_user_settings(user)
+
+    applied = {k: v for k, v in changes.items() if k in _EDITABLE_PREFERENCES}
+    bool_fields = {'notifications_enabled', 'marketing_opt_in'}
+    for field, value in applied.items():
+        if field in bool_fields:
+            value = bool(value)
+        else:
+            value = str(value).strip()
+            if not value:
+                continue
+        setattr(prefs, field, value)
+    if applied:
+        prefs.save(update_fields=list(applied.keys()) + ['updated_at'])
+    return _serialize_preferences(user, prefs)
+
+
 def register_with_otp(
     full_name: str,
     phone: str,

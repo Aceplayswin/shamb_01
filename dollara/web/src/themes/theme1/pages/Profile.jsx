@@ -136,10 +136,17 @@ export default function Theme1Profile() {
         </ul>
       </section>
 
+      <Link
+        href="/settings"
+        className="mt-8 flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 py-3 text-sm font-semibold text-white transition hover:bg-white/5"
+      >
+        Settings
+      </Link>
+
       <button
         type="button"
         onClick={logout}
-        className="mt-8 w-full rounded-xl border border-red-500/30 py-3 text-sm font-semibold text-red-400 transition hover:bg-red-500/10"
+        className="mt-3 w-full rounded-xl border border-red-500/30 py-3 text-sm font-semibold text-red-400 transition hover:bg-red-500/10"
       >
         Logout
       </button>

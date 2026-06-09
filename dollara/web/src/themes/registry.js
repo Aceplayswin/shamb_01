@@ -21,6 +21,7 @@ import Theme1Register from './theme1/pages/Register';
 import Theme1Deposit from './theme1/pages/Deposit';
 import Theme1Withdraw from './theme1/pages/Withdraw';
 import Theme1Profile from './theme1/pages/Profile';
+import Theme1Settings from './theme1/pages/settings';
 import Theme1Onboarding from './theme1/pages/Onboarding';
 import Theme1Support from './theme1/pages/Support';
 import Theme1Games from './theme1/pages/Games';
@@ -50,6 +51,7 @@ const THEMES = {
       deposit: Theme1Deposit,
       withdraw: Theme1Withdraw,
       profile: Theme1Profile,
+      settings: Theme1Settings,
       onboarding: Theme1Onboarding,
       support: Theme1Support,
       games: Theme1Games,

@@ -1,7 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useBranding } from '@/hooks/useBranding';
+import { useGameCatalog } from '@/hooks/useGameCatalog';
+import {
+  filterByCategory,
+  filterByProvider,
+  filterFeatured,
+  NAV_GAME_LINKS,
+  playPath,
+  searchGames,
+} from '@/lib/gameRoutes';
 import {
   Play,
   ChevronDown,
@@ -20,45 +31,6 @@ import {
   CreditCard,
   UserPlus,
 } from 'lucide-react';
-import Swal from 'sweetalert2';
-import 'sweetalert2/dist/sweetalert2.min.css';
-
-const PROVIDERS = ['MAC88', '18PEACHES', 'VELIPLAY', 'AVIATRIX', 'INOUT', 'GALAXSYS', 'SMARTSOFT', '2J', 'TURBOGAMES WORLD', 'AURA GAMING', 'LOTTO', 'PGGAMING', 'ODIN COCKFIGHTING'];
-
-const LIVE_SPORTS = [
-  { id: 's1', name: 'Lucky Sports', provider: 'MAC88', tag: 'LIVE' },
-  { id: 's2', name: 'E-Sports', provider: 'VELIPLAY', tag: 'LIVE' },
-  { id: 's3', name: 'Football', provider: '18PEACHES', tag: 'LIVE' },
-];
-
-const CASINO_GAMES = [
-  { id: 'c1', name: 'Microgaming', provider: 'MAC88' },
-  { id: 'c2', name: 'Aviator', provider: 'AVIATRIX', tag: 'HOT' },
-  { id: 'c3', name: 'Live Dealer', provider: 'INOUT' },
-  { id: 'c4', name: 'Mines', provider: 'GALAXSYS' },
-  { id: 'c5', name: 'Crazy Time', provider: 'SMARTSOFT', tag: 'HOT' },
-  { id: 'c6', name: 'Go Rush', provider: '2J' },
-];
-
-const TRENDING_GAMES = [
-  { id: 't1', name: 'Crazy Time', provider: 'SMARTSOFT' },
-  { id: 't2', name: 'Forest Arrow', provider: 'TURBOGAMES WORLD' },
-  { id: 't3', name: 'Monopoly Live', provider: 'AURA GAMING' },
-  { id: 't4', name: 'Super Andar Bahar', provider: 'LOTTO' },
-  { id: 't5', name: 'Crazy Pachinko', provider: 'PGGAMING' },
-  { id: 't6', name: 'Fan Tan', provider: 'ODIN COCKFIGHTING' },
-];
-
-const TRENDING_SLOTS = [
-  { id: 'sl1', name: 'Cockfighting', provider: 'ODIN COCKFIGHTING' },
-  { id: 'sl2', name: 'WCC Live', provider: 'PGGAMING' },
-  { id: 'sl3', name: 'WGC', provider: 'LOTTO' },
-  { id: 'sl4', name: 'Admiral Wild', provider: 'AURA GAMING' },
-  { id: 'sl5', name: 'Brazilian Mask', provider: 'TURBOGAMES WORLD' },
-  { id: 'sl6', name: 'Cash Multiplier', provider: '2J' },
-];
-
-const ALL_GAMES = [...LIVE_SPORTS, ...CASINO_GAMES, ...TRENDING_GAMES, ...TRENDING_SLOTS];
 
 const PARTNERS = ['Caleta', 'CQ9', 'Endorphina', 'Evolution', 'Evoplay', 'PG Soft', 'Pragmatic', 'Saba Sports'];
 
@@ -76,7 +48,7 @@ const ACCENT_TEXT = {
   rose: 'text-rose-400',
 };
 
-function SectionHeader({ title, kicker, Icon, onSeeAll, accent = 'brand' }) {
+function SectionHeader({ title, kicker, Icon, seeAllHref, accent = 'brand' }) {
   return (
     <div className="mb-5 flex items-end justify-between gap-4">
       <div className="flex items-center gap-3">
@@ -97,10 +69,13 @@ function SectionHeader({ title, kicker, Icon, onSeeAll, accent = 'brand' }) {
         <button className="grid h-8 w-8 place-items-center rounded-lg border border-hairline/10 text-muted transition hover:bg-panel hover:text-app-fg">
           <ChevronRight className="h-4 w-4" />
         </button>
-        {onSeeAll && (
-          <button className="ml-1 hidden items-center gap-1 rounded-lg border border-hairline/10 px-3 py-1.5 text-xs font-bold text-app-fg/70 transition hover:border-brand-400/50 hover:text-app-fg sm:flex">
+        {seeAllHref && (
+          <Link
+            href={seeAllHref}
+            className="ml-1 hidden items-center gap-1 rounded-lg border border-hairline/10 px-3 py-1.5 text-xs font-bold text-app-fg/70 transition hover:border-brand-400/50 hover:text-app-fg sm:flex"
+          >
             See all <ArrowRight className="h-3.5 w-3.5" />
-          </button>
+          </Link>
         )}
       </div>
     </div>
@@ -119,10 +94,10 @@ function GameCard({ item, onPlay, theme = THEMES.casino, rank }) {
 
       {/* Top badges */}
       <div className="absolute left-3 right-3 top-3 flex items-center justify-between">
-        {item.tag ? (
+        {(item.tag || item.category === 'sports' || item.category === 'virtual_sports' || item.is_featured) ? (
           <span className={`flex items-center gap-1 rounded-full bg-surface-950/70 px-2 py-0.5 text-[0.55rem] font-bold uppercase tracking-wider backdrop-blur ${theme.chip}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${theme.dot} ${item.tag === 'LIVE' ? 'animate-pulse' : ''}`} />
-            {item.tag}
+            <span className={`h-1.5 w-1.5 rounded-full ${theme.dot} ${(item.tag === 'LIVE' || item.category === 'sports' || item.category === 'virtual_sports') ? 'animate-pulse' : ''}`} />
+            {item.tag ?? ((item.category === 'sports' || item.category === 'virtual_sports') ? 'LIVE' : 'HOT')}
           </span>
         ) : (
           <span />
@@ -134,7 +109,7 @@ function GameCard({ item, onPlay, theme = THEMES.casino, rank }) {
 
       {/* Title block */}
       <div className="relative z-10 p-3.5">
-        <p className={`text-[0.6rem] font-bold uppercase tracking-widest ${theme.chip}`}>{item.provider}</p>
+        <p className={`text-[0.6rem] font-bold uppercase tracking-widest ${theme.chip}`}>{item.provider_name ?? item.provider}</p>
         <h3 className="mt-0.5 font-display text-base font-bold leading-tight text-white">{item.name}</h3>
       </div>
 
@@ -152,7 +127,7 @@ function Carousel({ items, onPlay, theme, ranked }) {
   return (
     <div className="edge-fade-x flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
       {items.map((item, i) => (
-        <GameCard key={item.id} item={item} onPlay={onPlay} theme={theme} rank={ranked ? i + 1 : undefined} />
+        <GameCard key={item.id ?? item.slug} item={item} onPlay={onPlay} theme={theme} rank={ranked ? i + 1 : undefined} />
       ))}
     </div>
   );
@@ -179,39 +154,42 @@ function Accordion({ question, answer, isOpen, onClick }) {
 
 export default function Theme1Home() {
   const branding = useBranding();
+  const router = useRouter();
+  const { games, loading, error } = useGameCatalog();
   const [openFaq, setOpenFaq] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProvider, setSelectedProvider] = useState(null);
 
+  const providers = useMemo(
+    () => [...new Set(games.map((g) => g.provider_name).filter(Boolean))].sort(),
+    [games],
+  );
+
+  const liveSports = useMemo(
+    () => filterByCategory(games, ['sports', 'virtual_sports']).slice(0, 10),
+    [games],
+  );
+  const casinoGames = useMemo(
+    () => filterByCategory(games, ['live_casino', 'ai_games']).slice(0, 10),
+    [games],
+  );
+  const trendingGames = useMemo(() => filterFeatured(games, 10), [games]);
+  const trendingSlots = useMemo(
+    () => filterByCategory(games, 'slots').slice(0, 10),
+    [games],
+  );
+
   const handlePlayGame = (game) => {
-    Swal.fire({
-      title: 'Ready to play?',
-      html: `<p style="margin:0;color:rgb(var(--color-muted))">Launching <b style="color:rgb(var(--color-app-fg))">${game.name}</b> by ${game.provider}</p>`,
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonColor: '#F5C542',
-      cancelButtonColor: '#1E252E',
-      confirmButtonText: 'Play now',
-      cancelButtonText: 'Cancel',
-    }).then((result) => {
-      if (result.isConfirmed) {
-        Swal.fire({
-          title: 'Loading…',
-          text: `${game.name} is starting up.`,
-          icon: 'success',
-          confirmButtonColor: '#F5C542',
-        });
-      }
-    });
+    if (game?.slug) router.push(playPath(game));
   };
 
-  const filteredGames = ALL_GAMES.filter((game) => {
-    const matchesSearch = game.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesProvider = selectedProvider ? game.provider === selectedProvider : true;
-    return matchesSearch && matchesProvider;
-  });
+  const filteredGames = useMemo(() => {
+    let list = searchGames(games, searchQuery);
+    if (selectedProvider) list = filterByProvider(list, selectedProvider);
+    return list;
+  }, [games, searchQuery, selectedProvider]);
 
-  const uniqueFilteredGames = Array.from(new Map(filteredGames.map((item) => [item.id, item])).values());
+  const uniqueFilteredGames = filteredGames;
   const isFiltering = searchQuery !== '' || selectedProvider !== null;
 
   return (
@@ -309,7 +287,7 @@ export default function Theme1Home() {
               )}
             </div>
             <div className="edge-fade-x flex gap-2.5 overflow-x-auto pb-1 scrollbar-hide">
-              {PROVIDERS.map((p) => (
+              {providers.map((p) => (
                 <button
                   key={p}
                   onClick={() => setSelectedProvider(p === selectedProvider ? null : p)}
@@ -346,26 +324,32 @@ export default function Theme1Home() {
                 </div>
               )}
             </section>
+          ) : loading ? (
+            <p className="py-16 text-center text-muted">Loading games…</p>
+          ) : error ? (
+            <p className="py-16 text-center text-red-400">{error}. Start the API and run seed_games.</p>
+          ) : games.length === 0 ? (
+            <p className="py-16 text-center text-muted">No games in catalog. Run seed_games on the API.</p>
           ) : (
             <>
               <section>
-                <SectionHeader title="Live Sports" kicker="In play now" Icon={Trophy} accent="emerald" onSeeAll />
-                <Carousel items={LIVE_SPORTS} onPlay={handlePlayGame} theme={THEMES.sports} />
+                <SectionHeader title="Live Sports" kicker="In play now" Icon={Trophy} accent="emerald" seeAllHref={NAV_GAME_LINKS.sports} />
+                <Carousel items={liveSports} onPlay={handlePlayGame} theme={THEMES.sports} />
               </section>
 
               <section>
-                <SectionHeader title="Casino Lobby" kicker="Top providers" Icon={Dices} accent="brand" onSeeAll />
-                <Carousel items={CASINO_GAMES} onPlay={handlePlayGame} theme={THEMES.casino} />
+                <SectionHeader title="Casino Lobby" kicker="Top providers" Icon={Dices} accent="brand" seeAllHref={NAV_GAME_LINKS.casino} />
+                <Carousel items={casinoGames} onPlay={handlePlayGame} theme={THEMES.casino} />
               </section>
 
               <section>
-                <SectionHeader title="Trending Games" kicker="Player favourites" Icon={Flame} accent="rose" onSeeAll />
-                <Carousel items={TRENDING_GAMES} onPlay={handlePlayGame} theme={THEMES.trending} ranked />
+                <SectionHeader title="Trending Games" kicker="Player favourites" Icon={Flame} accent="rose" seeAllHref={NAV_GAME_LINKS.crash} />
+                <Carousel items={trendingGames} onPlay={handlePlayGame} theme={THEMES.trending} ranked />
               </section>
 
               <section>
-                <SectionHeader title="Trending Slots" kicker="Big multipliers" Icon={Sparkles} accent="brand" onSeeAll />
-                <Carousel items={TRENDING_SLOTS} onPlay={handlePlayGame} theme={THEMES.slots} ranked />
+                <SectionHeader title="Trending Slots" kicker="Big multipliers" Icon={Sparkles} accent="brand" seeAllHref={NAV_GAME_LINKS.slots} />
+                <Carousel items={trendingSlots} onPlay={handlePlayGame} theme={THEMES.slots} ranked />
               </section>
 
               {/* Why choose — feature row */}

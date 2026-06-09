@@ -19,16 +19,17 @@ export default function Theme1Shell({ children }) {
     return children;
   }
 
-  const showCta = !NO_CTA.some((p) => pathname === p || pathname?.startsWith(p + '/'));
+  const isPlayRoute = pathname?.startsWith('/play/');
+  const showCta = !isPlayRoute && !NO_CTA.some((p) => pathname === p || pathname?.startsWith(p + '/'));
 
   return (
     <>
       <Header />
       {/* Global app shell offsets: top bar (h-16), desktop side rail (w-[92px]),
           and mobile bottom tab bar. */}
-      <div className="min-h-screen pt-16 pb-20 lg:pb-0 lg:pl-[92px]">
+      <div className={`min-h-screen pt-16 lg:pl-[92px] ${isPlayRoute ? 'pb-0' : 'pb-20 lg:pb-0'}`}>
         {children}
-        <Footer showCta={showCta} />
+        {!isPlayRoute && <Footer showCta={showCta} />}
       </div>
     </>
   );

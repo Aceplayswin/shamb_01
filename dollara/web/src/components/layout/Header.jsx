@@ -26,63 +26,46 @@ import {
   Sparkles,
   User,
 } from 'lucide-react';
-import Swal from 'sweetalert2';
 import { useBranding } from '@/hooks/useBranding';
+import { NAV_GAME_LINKS } from '@/lib/gameRoutes';
 import { ThemeToggleButton } from '@/components/ThemeToggle';
 import { UserAuthActions } from '@/components/UserAuthActions';
 import { useAuthStore } from '@/store/auth';
 
 const PRIMARY = [
   { label: 'Home', href: '/', icon: Home },
-  { label: 'Sports', href: '#', icon: Trophy },
-  { label: 'Casino', href: '#', icon: Dices },
-  { label: 'Slots', href: '#', icon: Cherry },
-  { label: 'Fantasy', href: '#', icon: Gamepad2 },
+  { label: 'Sports', href: NAV_GAME_LINKS.sports, icon: Trophy },
+  { label: 'Casino', href: NAV_GAME_LINKS.casino, icon: Dices },
+  { label: 'Slots', href: NAV_GAME_LINKS.slots, icon: Cherry },
+  { label: 'Fantasy', href: NAV_GAME_LINKS.fantasy, icon: Gamepad2 },
   { label: 'Promos', href: '#', icon: Gift },
 ];
 
 const CATEGORIES = [
-  { label: 'Lottery', href: '#', icon: Ticket, color: 'text-pink-400' },
-  { label: 'Crash', href: '#', icon: Rocket, color: 'text-brand-400' },
-  { label: 'Roulette', href: '#', icon: CircleDot, color: 'text-red-400' },
-  { label: 'Blackjack', href: '#', icon: WalletCards, color: 'text-slate-200' },
-  { label: 'Baccarat', href: '#', icon: Diamond, color: 'text-sky-400' },
-  { label: 'Dragon', href: '#', icon: Crown, color: 'text-brand-300' },
-  { label: 'Teen Patti', href: '#', icon: Coins, color: 'text-amber-400' },
-  { label: 'Poker', href: '#', icon: Spade, color: 'text-brand-300' },
-  { label: 'Shows', href: '#', icon: Tv, color: 'text-emerald-400' },
-  { label: 'Andar', href: '#', icon: HeartHandshake, color: 'text-rose-400' },
+  { label: 'Lottery', href: NAV_GAME_LINKS.lottery, icon: Ticket, color: 'text-pink-400' },
+  { label: 'Crash', href: NAV_GAME_LINKS.crash, icon: Rocket, color: 'text-brand-400' },
+  { label: 'Roulette', href: NAV_GAME_LINKS.liveCasino, icon: CircleDot, color: 'text-red-400' },
+  { label: 'Blackjack', href: NAV_GAME_LINKS.liveCasino, icon: WalletCards, color: 'text-slate-200' },
+  { label: 'Baccarat', href: NAV_GAME_LINKS.liveCasino, icon: Diamond, color: 'text-sky-400' },
+  { label: 'Dragon', href: NAV_GAME_LINKS.slots, icon: Crown, color: 'text-brand-300' },
+  { label: 'Teen Patti', href: NAV_GAME_LINKS.liveCasino, icon: Coins, color: 'text-amber-400' },
+  { label: 'Poker', href: NAV_GAME_LINKS.liveCasino, icon: Spade, color: 'text-brand-300' },
+  { label: 'Shows', href: NAV_GAME_LINKS.liveCasino, icon: Tv, color: 'text-emerald-400' },
+  { label: 'Andar', href: NAV_GAME_LINKS.liveCasino, icon: HeartHandshake, color: 'text-rose-400' },
 ];
 
 const MOBILE_TABS_BASE = [
   { label: 'Home', href: '/', icon: Home },
-  { label: 'Casino', href: '#', icon: Dices },
-  { label: 'Sports', href: '#', icon: Trophy },
+  { label: 'Casino', href: NAV_GAME_LINKS.casino, icon: Dices },
+  { label: 'Sports', href: NAV_GAME_LINKS.sports, icon: Trophy },
   { label: 'Promos', href: '#', icon: Gift },
 ];
 
-const fire = (title, text, icon = 'info') =>
-  Swal.fire({
-    title,
-    text,
-    icon,
-    confirmButtonColor: '#F5C542',
-    timer: icon === 'info' ? 1100 : undefined,
-    showConfirmButton: icon !== 'info',
-  });
-
 function RailItem({ item }) {
   const Icon = item.icon;
-  const onClick = (e) => {
-    if (item.href === '#') {
-      e.preventDefault();
-      fire(item.label, `Opening ${item.label}…`);
-    }
-  };
   return (
     <Link
       href={item.href}
-      onClick={onClick}
       title={item.label}
       className="group flex flex-col items-center gap-1 rounded-xl py-2 text-muted transition-colors hover:bg-hairline/[0.04] hover:text-app-fg"
     >
@@ -144,7 +127,7 @@ export function Header() {
 
         <div className="shrink-0 space-y-1 border-t border-hairline/[0.06] px-2 py-3">
           <RailItem item={{ label: 'Support', href: '/support/chat', icon: LifeBuoy }} />
-          <RailItem item={{ label: 'Settings', href: '#', icon: Settings }} />
+          <RailItem item={{ label: 'Settings', href: token ? '/settings' : '/login', icon: Settings }} />
         </div>
       </aside>
 
@@ -223,17 +206,10 @@ export function Header() {
         {mobileTabs.map((item, i) => {
           const Icon = item.icon;
           const isCenter = i === 2;
-          const onClick = (e) => {
-            if (item.href === '#') {
-              e.preventDefault();
-              fire(item.label, `Opening ${item.label}…`);
-            }
-          };
           return (
             <Link
               key={item.label}
               href={item.href}
-              onClick={onClick}
               className="flex flex-1 flex-col items-center justify-center gap-1 py-2.5 text-muted transition-colors hover:text-app-fg"
             >
               <span

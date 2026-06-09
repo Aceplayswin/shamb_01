@@ -20,6 +20,8 @@ export default function Theme2Shell({ children }) {
     return children;
   }
 
+  const isPlayRoute = pathname?.startsWith('/play/');
+
   return (
     // `theme2-root` scopes theme2's dark palette regardless of the light/dark toggle.
     <div className="theme2-root min-h-screen bg-[#070d16] text-slate-200">
@@ -28,8 +30,8 @@ export default function Theme2Shell({ children }) {
       {/* Content column offset by the collapsed sidebar on desktop. */}
       <div className="lg:pl-[88px]">
         <Theme2TopBar onMenu={() => setNavOpen(true)} />
-        <main className="min-h-[calc(100vh-4rem)]">{children}</main>
-        <Theme2Footer />
+        <main className={isPlayRoute ? 'min-h-[calc(100vh-4rem)]' : 'min-h-[calc(100vh-4rem)]'}>{children}</main>
+        {!isPlayRoute && <Theme2Footer />}
       </div>
     </div>
   );

@@ -9,6 +9,8 @@ urlpatterns = [
     path('auth/register/otp', views.register_otp),
     path('auth/demo', views.demo_session),
     path('auth/login', views.login),
+    # Settings / preferences
+    path('settings', views.user_settings),
     # Wallet
     path('wallet', views.wallet_get),
     path('wallet/deposit', views.wallet_deposit),

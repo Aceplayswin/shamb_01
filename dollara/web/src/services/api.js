@@ -16,7 +16,12 @@ export async function api(path, options = {}) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error ?? 'Request failed');
+    const message =
+      err.error ??
+      err.message ??
+      (err.status_code ? `${err.status_code.replace(/_/g, ' ')}` : null) ??
+      'Request failed';
+    throw new Error(message);
   }
   return res.json();
 }
