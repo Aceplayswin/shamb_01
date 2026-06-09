@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 const TOKEN_KEY = 'super_admin_token';
 
@@ -94,8 +94,17 @@ export const testConnection = (payload) =>
   });
 
 export const listThemes = () => superAdminApi('/api/v1/super-admin/themes');
-export const updateProductThemes = (slug, payload) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/themes`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
+
+// Per-product theme table.
+export const getProductThemes = (slug) =>
+  superAdminApi(`/api/v1/super-admin/products/${slug}/themes`);
+export const activateProductTheme = (slug, themeKey) =>
+  superAdminApi(`/api/v1/super-admin/products/${slug}/themes/activate`, {
+    method: 'POST',
+    body: JSON.stringify({ theme_key: themeKey }),
+  });
+export const setProductThemeEnabled = (slug, themeKey, isEnabled) =>
+  superAdminApi(`/api/v1/super-admin/products/${slug}/themes/${themeKey}/enabled`, {
+    method: 'PATCH',
+    body: JSON.stringify({ is_enabled: isEnabled }),
   });

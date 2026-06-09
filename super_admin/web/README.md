@@ -19,4 +19,4 @@ npm run dev
 
 Open http://localhost:3001/login
 
-Configure `NEXT_PUBLIC_API_URL` to point at the Super Admin API (default `http://localhost:5000`).
+Configure `NEXT_PUBLIC_API_URL` to point at the Super Admin API (default `http://localhost:8000`).

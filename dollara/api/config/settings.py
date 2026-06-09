@@ -92,4 +92,4 @@ WELCOME_BONUS = float(os.getenv('WELCOME_BONUS', '100'))
 OTP_EXPIRY_MINUTES = 5
 OTP_MAX_ATTEMPTS = 3
 DEMO_SESSION_MINUTES = 30
-API_PORT = int(os.getenv('PORT', '4000'))
+API_PORT = int(os.getenv('PORT', '5000'))

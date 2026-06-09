@@ -5,12 +5,12 @@
 // `react-native-config` and expose the same keys via `process.env`; until then
 // edit the defaults below or set them at build time.
 //
-// Note: on the Android emulator use http://10.0.2.2:4000 to reach a host machine
+// Note: on the Android emulator use http://10.0.2.2:5000 to reach a host machine
 // API; on a physical device use your machine's LAN IP.
 
 const ENV = (typeof process !== 'undefined' && process.env) || {};
 
-export const API_URL = ENV.API_URL || 'http://localhost:4000';
+export const API_URL = ENV.API_URL || 'http://localhost:5000';
 export const TENANT_SLUG = ENV.TENANT_SLUG || 'dollara';
 
 // Fallback branding shown before the remote /api/v1/branding response arrives.

@@ -143,8 +143,8 @@ for API host configuration on emulators vs devices.
 **Super Admin (control plane):**
 
 ```bash
-# Terminal 1 — Super Admin API (port 5000)
-cd super_admin/api && source .venv/bin/activate && python manage.py runserver 0.0.0.0:5000
+# Terminal 1 — Super Admin API (port 8000)
+cd super_admin/api && source .venv/bin/activate && python manage.py runserver 0.0.0.0:8000
 
 # Terminal 2 — Super Admin console (port 3001)
 cd super_admin/web && npm run dev
@@ -153,8 +153,8 @@ cd super_admin/web && npm run dev
 **Dollara product (player + tenant admin):**
 
 ```bash
-# Terminal 3 — Product API (port 4000)
-cd dollara/api && source .venv/bin/activate && python manage.py runserver 0.0.0.0:4000
+# Terminal 3 — Product API (port 5000)
+cd dollara/api && source .venv/bin/activate && python manage.py runserver 0.0.0.0:5000
 
 # Terminal 4 — Product web (port 3000)
 cd dollara/web && npm run dev
@@ -165,13 +165,13 @@ cd dollara/web && npm run dev
 | Service | URL |
 |---------|-----|
 | Super Admin console | http://localhost:3001/login |
-| Super Admin API | http://localhost:5000 |
+| Super Admin API | http://localhost:8000 |
 | Dollara web (player) | http://localhost:3000 |
 | Product Admin UI | http://localhost:3000/admin/login |
-| Product API (REST) | http://localhost:4000 |
-| Branding (per tenant) | http://localhost:4000/api/v1/branding |
-| GraphQL | http://localhost:4000/graphql |
-| WebSocket | ws://localhost:4000/ws |
+| Product API (REST) | http://localhost:5000 |
+| Branding (per tenant) | http://localhost:5000/api/v1/branding |
+| GraphQL | http://localhost:5000/graphql |
+| WebSocket | ws://localhost:5000/ws |
 
 Switch tenants in local dev with `?tenant=productb` (sets the `x-tenant` cookie)
 or by using a subdomain host such as `productb.localhost:3000`.
@@ -203,27 +203,27 @@ Admin auth uses a separate `admin_token` in localStorage (not the player JWT).
 
 ```bash
 # Health (includes pytorch_version)
-curl http://localhost:4000/health
+curl http://localhost:5000/health
 
 # Send OTP (dev: OTP printed in API console)
-curl -X POST http://localhost:4000/api/v1/auth/otp/send \
+curl -X POST http://localhost:5000/api/v1/auth/otp/send \
   -H "Content-Type: application/json" \
   -d '{"phone":"9876543210","channel":"sms"}'
 
 # Demo account
-curl -X POST http://localhost:4000/api/v1/auth/demo
+curl -X POST http://localhost:5000/api/v1/auth/demo
 
 # Geo detection
-curl http://localhost:4000/api/v1/geo/detect
+curl http://localhost:5000/api/v1/geo/detect
 
 # Fraud score (admin JWT required)
-curl -X POST http://localhost:4000/api/v1/ai/fraud-score \
+curl -X POST http://localhost:5000/api/v1/ai/fraud-score \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <admin-token>" \
   -d '{"userId":"test","amount":5000}'
 
 # Support chatbot (user or admin JWT)
-curl -X POST http://localhost:4000/api/v1/ai/chat \
+curl -X POST http://localhost:5000/api/v1/ai/chat \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <token>" \
   -d '{"message":"How do I deposit?"}'

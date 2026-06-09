@@ -6,7 +6,7 @@ via the **master database** — completely separate from any product deployment 
 
 ```
 super_admin/
-├── api/     # Django control-plane API (port 5000)
+├── api/     # Django control-plane API (port 8000)
 └── web/     # Next.js console (port 3001 → admin.ultraconic.com)
 ```
 
@@ -43,7 +43,7 @@ npm run dev
 | Service | URL |
 |---------|-----|
 | Super Admin console | http://localhost:3001/login |
-| Super Admin API | http://localhost:5000 |
+| Super Admin API | http://localhost:8000 |
 
 Default login: `superadmin` / `Admin@123`
 

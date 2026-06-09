@@ -57,7 +57,7 @@ CORS_ALLOW_CREDENTIALS = True
 
 JWT_SECRET = os.getenv('JWT_SECRET', 'dev-secret-change-in-production')
 JWT_EXPIRY_DAYS = 7
-API_PORT = int(os.getenv('PORT', '5000'))
+API_PORT = int(os.getenv('PORT', '8000'))
 
 # Path to the shared per-tenant schema applied when provisioning products.
 TENANT_SCHEMA_PATH = os.getenv(

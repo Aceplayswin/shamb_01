@@ -5,11 +5,12 @@ import Swal from 'sweetalert2';
 import {
   Box, CheckCircle2, Database, Eye, EyeOff, Globe, Loader2,
   MinusCircle, Palette, Pencil, Plus, Power, Server, Trash2, Wifi, X, XCircle,
+  Check, Circle,
 } from 'lucide-react';
 import {
   listProducts, disableProduct, updateProduct, deleteProduct,
   provisionProduct, updateUrls, updateDatabase, testConnection,
-  listThemes, updateProductThemes,
+  getProductThemes, activateProductTheme, setProductThemeEnabled,
 } from '@/services/api';
 import { useTheme } from '../providers';
 import DashboardLayout, { useDashboard } from '../components/DashboardLayout';
@@ -277,61 +278,61 @@ function EditProductModal({ product, onClose, onSaved, theme }) {
 }
 
 /* ── Themes Modal ──
-   Super admin activates a subset of catalog themes for the product and picks
-   exactly one of those as the live theme. active ∈ available is enforced. */
+   Per-product Themes table. All catalog themes appear as rows; exactly one is the
+   live (active) theme. Activating a theme deactivates the rest. A theme can be
+   enabled/disabled to control whether it may be activated. */
 function ThemesModal({ product, onClose, onSaved, theme }) {
   const swal = (opts) => swalThemed(opts, theme);
 
-  const [catalog, setCatalog] = useState([]);
-  const [available, setAvailable] = useState(product.available_themes || []);
-  const [active, setActive] = useState(product.active_theme || '');
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [busyKey, setBusyKey] = useState(null);
 
-  useEffect(() => {
-    let alive = true;
-    listThemes()
-      .then((res) => { if (alive) setCatalog(res.themes || []); })
-      .catch((e) => swal({ icon: 'error', title: 'Failed to load themes', text: e.message }))
-      .finally(() => { if (alive) setLoading(false); });
-    return () => { alive = false; };
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await getProductThemes(product.slug);
+      setRows(res.themes || []);
+    } catch (e) {
+      swal({ icon: 'error', title: 'Failed to load themes', text: e.message });
+    } finally {
+      setLoading(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [product.slug]);
 
-  const toggleAvailable = (key) => {
-    setAvailable((prev) => {
-      if (prev.includes(key)) {
-        // Deactivating: keep at least one, and never orphan the live theme.
-        if (prev.length === 1) return prev;
-        const next = prev.filter((k) => k !== key);
-        if (active === key) setActive(next[0]);
-        return next;
-      }
-      return [...prev, key];
-    });
+  useEffect(() => { load(); }, [load]);
+
+  const activate = async (key) => {
+    setBusyKey(`${key}:activate`);
+    try {
+      const res = await activateProductTheme(product.slug, key);
+      setRows(res.themes || []);
+      onSaved?.();
+    } catch (e) {
+      swal({ icon: 'error', title: 'Activate failed', text: e.message });
+    } finally {
+      setBusyKey(null);
+    }
   };
 
-  const handleSave = async () => {
-    if (available.length === 0) return;
-    const liveTheme = available.includes(active) ? active : available[0];
-    setSaving(true);
+  const toggleEnabled = async (key, next) => {
+    setBusyKey(`${key}:enabled`);
     try {
-      await updateProductThemes(product.slug, {
-        available_themes: available,
-        active_theme: liveTheme,
-      });
-      onSaved();
-    } catch (err) {
-      swal({ icon: 'error', title: 'Save failed', text: err.message });
+      const res = await setProductThemeEnabled(product.slug, key, next);
+      setRows(res.themes || []);
+      onSaved?.();
+    } catch (e) {
+      swal({ icon: 'error', title: 'Update failed', text: e.message });
     } finally {
-      setSaving(false);
+      setBusyKey(null);
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-2xl rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800">
+      <div className="relative z-10 w-full max-w-3xl rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800">
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4 dark:border-gray-700">
           <div className="flex items-center gap-2.5">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600">
@@ -341,7 +342,7 @@ function ThemesModal({ product, onClose, onSaved, theme }) {
               <h2 className="font-display text-sm font-bold text-gray-900 dark:text-white">
                 Themes — {product.name}
               </h2>
-              <p className="text-xs text-gray-400">Activate themes, then pick the live one</p>
+              <p className="text-xs text-gray-400">Activate one theme as live; enable/disable the rest</p>
             </div>
           </div>
           <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-200">
@@ -353,64 +354,95 @@ function ThemesModal({ product, onClose, onSaved, theme }) {
           {loading ? (
             <div className="flex items-center gap-2 p-6 text-gray-400"><Loader2 className="h-5 w-5 animate-spin" /> Loading themes…</div>
           ) : (
-            <>
-              <div className="space-y-3">
-                {catalog.map((t) => {
-                  const isAvailable = available.includes(t.key);
-                  const isActive = active === t.key;
-                  return (
-                    <div
-                      key={t.key}
-                      className={`flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
-                        isAvailable
-                          ? 'border-indigo-300 bg-indigo-50/60 dark:border-indigo-800 dark:bg-indigo-950/30'
-                          : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isAvailable}
-                        onChange={() => toggleAvailable(t.key)}
-                        className="h-4 w-4 shrink-0 accent-indigo-600"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-semibold text-gray-900 dark:text-white">{t.name}</p>
-                        <p className="truncate text-xs text-gray-400">{t.description}</p>
-                      </div>
-                      <label className={`flex shrink-0 items-center gap-1.5 text-xs font-bold ${isAvailable ? 'cursor-pointer text-gray-600 dark:text-gray-300' : 'cursor-not-allowed text-gray-300 dark:text-gray-600'}`}>
-                        <input
-                          type="radio"
-                          name="active_theme"
-                          checked={isActive}
-                          disabled={!isAvailable}
-                          onChange={() => setActive(t.key)}
-                          className="h-4 w-4 accent-emerald-600"
-                        />
-                        {isActive ? 'Live' : 'Set live'}
-                      </label>
-                    </div>
-                  );
-                })}
-              </div>
+            <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-400">
+                    <th className="px-4 py-3">Theme</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {rows.map((t) => {
+                    const activating = busyKey === `${t.theme_key}:activate`;
+                    const togglingEnabled = busyKey === `${t.theme_key}:enabled`;
+                    return (
+                      <tr key={t.theme_key} className={t.is_active ? 'bg-emerald-50/40 dark:bg-emerald-950/20' : ''}>
+                        {/* Theme */}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <span className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-black ${t.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-300'}`}>
+                              {t.theme_key.replace(/\D/g, '') || t.name.charAt(0)}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold text-gray-900 dark:text-white">{t.name}</p>
+                              <p className="truncate text-xs text-gray-400">{t.description || t.theme_key}</p>
+                            </div>
+                          </div>
+                        </td>
 
-              <div className="my-4 border-t border-gray-100 dark:border-gray-700" />
+                        {/* Status */}
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {t.is_active ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[0.6rem] font-bold uppercase text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">
+                                <CheckCircle2 className="h-3 w-3" /> Live
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-0.5 text-[0.6rem] font-bold uppercase text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+                                <Circle className="h-3 w-3" /> Inactive
+                              </span>
+                            )}
+                            {!t.is_enabled && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-[0.6rem] font-bold uppercase text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
+                                Disabled
+                              </span>
+                            )}
+                          </div>
+                        </td>
 
-              <div className="flex items-center justify-end gap-3">
-                <button type="button" onClick={onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700">
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={saving || available.length === 0}
-                  className="flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-60 transition-colors"
-                >
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Palette className="h-4 w-4" />}
-                  Save Themes
-                </button>
-              </div>
-            </>
+                        {/* Actions */}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-2">
+                            {t.is_active ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-bold text-emerald-600 dark:border-emerald-900 dark:text-emerald-400">
+                                <Check className="h-3.5 w-3.5" /> Active
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => activate(t.theme_key)}
+                                disabled={!t.is_enabled || activating || togglingEnabled}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                              >
+                                {activating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5" />}
+                                Activate
+                              </button>
+                            )}
+                            <button
+                              onClick={() => toggleEnabled(t.theme_key, !t.is_enabled)}
+                              disabled={t.is_active || activating || togglingEnabled}
+                              title={t.is_active ? 'Deactivate it first to disable' : (t.is_enabled ? 'Disable' : 'Enable')}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-100 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
+                            >
+                              {togglingEnabled ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                              {t.is_enabled ? 'Disable' : 'Enable'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
+
+          <div className="mt-5 flex items-center justify-end">
+            <button type="button" onClick={onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700">
+              Done
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -479,7 +511,9 @@ function ProductsContent() {
           product={themeTarget}
           theme={theme}
           onClose={() => setThemeTarget(null)}
-          onSaved={async () => { setThemeTarget(null); await load(); }}
+          // Refresh the product list (Live Theme card) after each change, but keep
+          // the modal open so the operator can make several changes in one sitting.
+          onSaved={() => { load(); }}
         />
       )}
 
@@ -566,7 +600,7 @@ function ProductsContent() {
                         <Palette className="h-3.5 w-3.5" /> Live Theme
                       </p>
                       <p className="mt-1 font-semibold text-gray-900 dark:text-white">{p.active_theme || '—'}</p>
-                      <p className="text-gray-400">{(p.available_themes?.length ?? 0)} activated</p>
+                      <p className="text-gray-400">{(p.themes?.filter((t) => t.is_enabled).length ?? 0)} enabled</p>
                     </div>
                     <div className="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-900/60">
                       <p className="flex items-center gap-1.5 font-medium text-gray-500 dark:text-gray-400">

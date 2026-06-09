@@ -18,7 +18,7 @@ tenant config and the dynamically-loaded branding differ.
 ## Prerequisites
 
 - Node.js 22+
-- API running at port **4000** (see `../api`)
+- API running at port **5000** (see `../api`)
 - iOS: Xcode · Android: Android Studio
 
 ## White-label / tenant config
@@ -34,16 +34,16 @@ and applies it via `src/branding.js`.
 
 | Platform | API host |
 |----------|----------|
-| iOS Simulator | `http://localhost:4000` |
-| Android Emulator | `http://10.0.2.2:4000` |
-| Physical device | Your machine's LAN IP, e.g. `http://192.168.1.x:4000` |
+| iOS Simulator | `http://localhost:5000` |
+| Android Emulator | `http://10.0.2.2:5000` |
+| Physical device | Your machine's LAN IP, e.g. `http://192.168.1.x:5000` |
 
 ## Setup
 
 ```bash
 # Start MySQL + API (from repo root)
 cd ../api && source .venv/bin/activate
-python manage.py runserver 0.0.0.0:4000
+python manage.py runserver 0.0.0.0:5000
 
 # Mobile app
 cd mobile

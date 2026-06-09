@@ -20,6 +20,8 @@ urlpatterns = [
     # Themes
     path('super-admin/themes', views.themes_catalog),
     path('super-admin/products/<slug:slug>/themes', views.product_themes),
+    path('super-admin/products/<slug:slug>/themes/activate', views.product_theme_activate),
+    path('super-admin/products/<slug:slug>/themes/<str:theme_key>/enabled', views.product_theme_set_enabled),
     # Connection testing
     path('super-admin/test-connection', views.test_connection),
     # Cross-tenant inspection

@@ -9,19 +9,33 @@ CREATE TABLE IF NOT EXISTS products (
   slug VARCHAR(63) NOT NULL UNIQUE,
   name VARCHAR(150) NOT NULL,
   status ENUM('active', 'disabled') NOT NULL DEFAULT 'active',
-  -- Themes the super admin has activated for this product (JSON array of theme
-  -- keys), and which one is currently live. See tenants/themes.py for the catalog.
-  available_themes JSON NULL,
-  active_theme VARCHAR(63) NOT NULL DEFAULT 'theme1',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_products_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Migration for existing databases (no-op if columns already present):
---   ALTER TABLE products
---     ADD COLUMN available_themes JSON NULL,
---     ADD COLUMN active_theme VARCHAR(63) NOT NULL DEFAULT 'theme1';
+-- Theme selection moved to the product_themes table (below). For databases that
+-- still have the old columns, drop them:
+--   ALTER TABLE products DROP COLUMN available_themes, DROP COLUMN active_theme;
+
+-- One row per theme per product. The catalog of valid theme keys lives in
+-- tenants/themes.py; each product gets a row for every catalog theme (auto-seeded
+-- on create). Exactly one row per product has is_active = 1 (the live theme the
+-- product frontend renders); the rest are inactive. is_enabled lets an operator
+-- hide a theme from activation without deleting the row.
+CREATE TABLE IF NOT EXISTS product_themes (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  product_id BIGINT UNSIGNED NOT NULL,
+  theme_key VARCHAR(63) NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT 0,
+  is_enabled BOOLEAN NOT NULL DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_product_theme (product_id, theme_key),
+  INDEX idx_product_themes_active (product_id, is_active),
+  CONSTRAINT fk_product_themes_product FOREIGN KEY (product_id)
+    REFERENCES products (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS urls (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,

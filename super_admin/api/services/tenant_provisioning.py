@@ -94,6 +94,10 @@ def provision_product(
         slug=slug, defaults={'name': name, 'status': Product.Status.ACTIVE}
     )
 
+    # Seed one theme row per catalog theme (theme1 active by default). Idempotent.
+    from tenants.themes import ensure_product_themes
+    ensure_product_themes(product)
+
     Url.objects.update_or_create(
         product=product,
         defaults={'fe_url': fe_url, 'be_url': be_url},

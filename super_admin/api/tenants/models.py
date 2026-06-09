@@ -19,10 +19,7 @@ class Product(models.Model):
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.ACTIVE, db_index=True
     )
-    # Themes the super admin has activated for this product, and which is live.
-    # The catalog of valid keys lives in tenants/themes.py.
-    available_themes = models.JSONField(null=True, blank=True, default=None)
-    active_theme = models.CharField(max_length=63, default='theme1')
+    # Theme selection lives in the ProductTheme table (one row per theme), not here.
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -33,6 +30,27 @@ class Product(models.Model):
     @property
     def is_active(self) -> bool:
         return self.status == self.Status.ACTIVE
+
+
+class ProductTheme(models.Model):
+    """One row per theme per product. Exactly one row per product is active (the
+    live theme the product frontend renders). Valid ``theme_key`` values come from
+    the catalog in ``tenants/themes.py``."""
+
+    id = models.BigAutoField(primary_key=True)
+    product = models.ForeignKey(
+        Product, on_delete=models.CASCADE, db_column='product_id', related_name='themes'
+    )
+    theme_key = models.CharField(max_length=63)
+    is_active = models.BooleanField(default=False)
+    is_enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = 'tenants'
+        db_table = 'product_themes'
+        unique_together = (('product', 'theme_key'),)
 
 
 class Url(models.Model):

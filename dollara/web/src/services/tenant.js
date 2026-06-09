@@ -3,9 +3,9 @@
 // the request host/subdomain; here we read it (falling back to the hostname or
 // the configured default) so every API call can carry an `X-Tenant` header.
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
 export const PLATFORM_API_URL =
-  process.env.NEXT_PUBLIC_PLATFORM_API_URL ?? 'http://localhost:5000';
+  process.env.NEXT_PUBLIC_PLATFORM_API_URL ?? 'http://localhost:8000';
 export const DEFAULT_TENANT = process.env.NEXT_PUBLIC_DEFAULT_TENANT ?? 'dollara';
 
 const RESERVED_SUBDOMAINS = new Set(['www', 'api', 'admin']);

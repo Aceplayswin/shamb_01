@@ -63,7 +63,7 @@ cp .env.example .env
 ### Run
 
 ```bash
-python manage.py runserver 0.0.0.0:4000
+python manage.py runserver 0.0.0.0:5000
 ```
 
 ## Endpoints
@@ -81,8 +81,8 @@ python manage.py runserver 0.0.0.0:4000
 Example — branding differs per tenant:
 
 ```bash
-curl -s http://localhost:4000/api/v1/branding -H 'Host: dollara.localhost'
-curl -s http://localhost:4000/api/v1/branding -H 'X-Tenant: productb'
+curl -s http://localhost:5000/api/v1/branding -H 'Host: dollara.localhost'
+curl -s http://localhost:5000/api/v1/branding -H 'X-Tenant: productb'
 ```
 
 ## Default credentials (after seed_master)
