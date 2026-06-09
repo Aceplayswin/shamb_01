@@ -74,9 +74,16 @@ python manage.py runserver 0.0.0.0:5000
 | `GET /api/v1/branding` | White-label branding for the resolved tenant (public) |
 | `POST /api/v1/auth/...` | Per-tenant auth (login, OTP, demo) |
 | `GET/POST /api/v1/wallet...`, `/games...` | Per-tenant features |
+| `POST /api/v1/games/launch` | Launch an aggregator game (see [docs/GAMES.md](docs/GAMES.md)) |
+| `POST /api/v1/games/callback` | Aggregator bet/win settlement callback |
 | `POST /api/v1/admin/...` | Per-tenant product-admin panel |
 | `POST /graphql` | GraphQL (Strawberry) |
 | `WS /ws` | Live ticker WebSocket |
+
+The external game aggregator integration (launch flow, AES-encrypted callbacks,
+wallet settlement, the 263-game catalog, and admin controls) is documented in
+**[docs/GAMES.md](docs/GAMES.md)**. Seed the catalog with
+`python manage.py seed_games --tenant <slug>`.
 
 Example — branding differs per tenant:
 

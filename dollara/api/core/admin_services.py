@@ -130,6 +130,8 @@ def list_admin_games(limit: int = 200, offset: int = 0) -> list[dict]:
             'name': g.name,
             'slug': g.slug,
             'category': g.category,
+            'game_uid': g.game_uid,
+            'game_type': g.game_type,
             'provider_id': g.provider_id,
             'provider_name': g.provider.name if g.provider else None,
             'thumbnail_url': g.thumbnail_url,
@@ -138,6 +140,7 @@ def list_admin_games(limit: int = 200, offset: int = 0) -> list[dict]:
             'max_bet': float(g.max_bet),
             'is_featured': g.is_featured,
             'is_active_web': g.is_active_web,
+            'is_active': g.is_active,
             'is_provably_fair': g.is_provably_fair,
             'sort_order': g.sort_order,
             'play_count': g.play_count,
@@ -152,12 +155,15 @@ def create_game(data: dict) -> dict:
         name=data['name'],
         slug=data['slug'],
         category=data['category'],
+        game_uid=data.get('game_uid') or None,
+        game_type=data.get('game_type') or None,
         thumbnail_url=data.get('thumbnail_url'),
         rtp=Decimal(str(data['rtp'])) if data.get('rtp') is not None else None,
         min_bet=Decimal(str(data.get('min_bet', 10))),
         max_bet=Decimal(str(data.get('max_bet', 100000))),
         is_featured=bool(data.get('is_featured', False)),
         is_active_web=bool(data.get('is_active_web', True)),
+        is_active=bool(data.get('is_active', True)),
         is_provably_fair=bool(data.get('is_provably_fair', False)),
         sort_order=int(data.get('sort_order', 0)),
     )
@@ -168,7 +174,7 @@ def update_game(game_id: int, data: dict) -> dict:
     allowed = {
         'name', 'slug', 'category', 'provider_id', 'thumbnail_url',
         'rtp', 'min_bet', 'max_bet', 'is_featured', 'is_active_web',
-        'is_provably_fair', 'sort_order',
+        'is_active', 'is_provably_fair', 'sort_order', 'game_uid', 'game_type',
     }
     updates = {k: v for k, v in data.items() if k in allowed}
     if 'provider_id' in updates and updates['provider_id'] == '':

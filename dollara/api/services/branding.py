@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+from django.db.utils import OperationalError, ProgrammingError
+
 from tenants.models import Branding, Product
+
+# The optional `branding` control-plane table is absent in single-tenant
+# deployments; fall back to defaults instead of raising a 500.
+_MISSING_TABLE_ERRORS = (ProgrammingError, OperationalError)
 
 # Neutral fallback so the apps never hard-fail and never hardcode a brand name.
 DEFAULT_BRANDING = {
@@ -48,8 +54,14 @@ def serialize_branding(product: Product, branding: Branding | None) -> dict:
 def get_branding_for_slug(slug: str | None) -> dict:
     if not slug:
         return dict(DEFAULT_BRANDING)
-    product = Product.objects.filter(slug=slug).first()
+    try:
+        product = Product.objects.filter(slug=slug).first()
+    except _MISSING_TABLE_ERRORS:
+        product = None
     if not product:
         return dict(DEFAULT_BRANDING)
-    branding = Branding.objects.filter(product=product).first()
+    try:
+        branding = Branding.objects.filter(product=product).first()
+    except _MISSING_TABLE_ERRORS:
+        branding = None
     return serialize_branding(product, branding)

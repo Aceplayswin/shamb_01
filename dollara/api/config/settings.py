@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+from corsheaders.defaults import default_headers
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -78,6 +79,11 @@ MIGRATION_MODULES = {'core': None, 'tenants': None}
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = (
+    *default_headers,
+    'x-tenant',
+    'x-tenant-id',
+)
 
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
@@ -93,3 +99,21 @@ OTP_EXPIRY_MINUTES = 5
 OTP_MAX_ATTEMPTS = 3
 DEMO_SESSION_MINUTES = 30
 API_PORT = int(os.getenv('PORT', '5000'))
+
+# --- Game aggregator / provider integration ---
+# All values come from the environment so credentials, keys, and URLs are never
+# committed to source. See services/game_provider.py for how they are consumed.
+GAME_PROVIDER = {
+    'AGENCY_UID': os.getenv('GAME_AGENCY_UID', ''),
+    'AES_SECRET_KEY': os.getenv('GAME_AES_SECRET_KEY', ''),
+    'PLAYER_PREFIX': os.getenv('GAME_PLAYER_PREFIX', ''),
+    'SERVER_URL': os.getenv('GAME_SERVER_URL', '').rstrip('/'),
+    'CALLBACK_BASE_URL': os.getenv('GAME_CALLBACK_BASE_URL', 'http://localhost:5000').rstrip('/'),
+    'HOME_URL': os.getenv('GAME_HOME_URL', 'http://localhost:3000'),
+    'CURRENCY_CODE': os.getenv('GAME_CURRENCY_CODE', 'INR'),
+    'DEFAULT_LANGUAGE': os.getenv('GAME_DEFAULT_LANGUAGE', 'en'),
+    'HTTP_TIMEOUT': int(os.getenv('GAME_HTTP_TIMEOUT', '15')),
+}
+# Minimum main-wallet balance required to launch a game (currency units, string
+# so the service layer can build a Decimal without float rounding).
+GAME_MIN_LAUNCH_BALANCE = os.getenv('GAME_MIN_LAUNCH_BALANCE', '100')

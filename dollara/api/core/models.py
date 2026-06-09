@@ -101,6 +101,10 @@ class Wallet(models.Model):
     bonus_balance = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     exposure_balance = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     locked_balance = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    # Outstanding wagering requirement (legacy tbl_requiredplay_balance). Must be
+    # cleared by net gameplay before the user can withdraw. Updated by game
+    # callback settlement; see core/game_services.py.
+    wagering_balance = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     currency = models.CharField(max_length=10, default='INR')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -204,12 +208,20 @@ class Game(models.Model):
     name = models.CharField(max_length=150)
     slug = models.SlugField(max_length=100, unique=True)
     category = models.CharField(max_length=30, choices=Category.choices)
+    # External aggregator identifier (32-char hex UID). The launch + callback
+    # flow keys on this; it maps aggregator events back to this catalog row.
+    game_uid = models.CharField(max_length=64, null=True, blank=True, db_index=True)
+    # Aggregator-side game type label (e.g. "Slot Game", "CasinoTable") kept for
+    # catalog filtering/display alongside the normalized `category`.
+    game_type = models.CharField(max_length=40, null=True, blank=True)
     thumbnail_url = models.URLField(max_length=500, null=True, blank=True)
     rtp = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     min_bet = models.DecimalField(max_digits=18, decimal_places=2, default=10)
     max_bet = models.DecimalField(max_digits=18, decimal_places=2, default=100000)
     is_featured = models.BooleanField(default=False)
     is_active_web = models.BooleanField(default=True)
+    # Per-game launch toggle (independent of the global GAME_STATUS setting).
+    is_active = models.BooleanField(default=True)
     is_provably_fair = models.BooleanField(default=False)
     sort_order = models.IntegerField(default=0)
     play_count = models.IntegerField(default=0)
@@ -218,6 +230,108 @@ class Game(models.Model):
 
     class Meta:
         db_table = 'games'
+
+
+class GameSession(models.Model):
+    """One game-launch session per user+game. Tracks the issued launch URL and
+    accumulates settlement totals from the aggregator's bet/win callbacks
+    (replaces the legacy tblmatchplayed row-per-session behaviour)."""
+
+    class Status(models.TextChoices):
+        WAIT = 'wait', 'Wait'
+        PROFIT = 'profit', 'Profit'
+        LOSS = 'loss', 'Loss'
+
+    id = models.BigAutoField(primary_key=True)
+    # Public, opaque session reference returned to clients / used in order ids.
+    session_uid = models.CharField(max_length=64, unique=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, db_column='user_id')
+    game = models.ForeignKey(
+        Game, on_delete=models.SET_NULL, null=True, db_column='game_id'
+    )
+    # Denormalized aggregator UID + name so settlement can match by UID and
+    # history stays readable even if the catalog row is later removed.
+    game_uid = models.CharField(max_length=64, db_index=True)
+    game_name = models.CharField(max_length=150)
+    member_account = models.CharField(max_length=100, db_index=True)
+    launch_url = models.TextField(null=True, blank=True)
+    currency = models.CharField(max_length=10, default='INR')
+    # Accumulated settlement totals across all rounds in this session.
+    total_bet = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    total_win = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    profit_loss = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    rounds_count = models.IntegerField(default=0)
+    last_balance = models.DecimalField(
+        max_digits=20, decimal_places=2, null=True, blank=True
+    )
+    status = models.CharField(
+        max_length=15, choices=Status.choices, default=Status.WAIT
+    )
+    last_played_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'game_sessions'
+
+
+class GameRound(models.Model):
+    """A single settled bet/win event from the aggregator. The aggregator's
+    `serial_number` is the idempotency key — a unique constraint makes duplicate
+    callback delivery a no-op at the database level."""
+
+    id = models.BigAutoField(primary_key=True)
+    session = models.ForeignKey(
+        GameSession, on_delete=models.CASCADE, null=True, db_column='session_id'
+    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, db_column='user_id')
+    game = models.ForeignKey(
+        Game, on_delete=models.SET_NULL, null=True, db_column='game_id'
+    )
+    game_uid = models.CharField(max_length=64, db_index=True)
+    # Aggregator idempotency key (unique). Unique round id from the aggregator.
+    serial_number = models.CharField(max_length=100, unique=True)
+    game_round = models.CharField(max_length=100, null=True, blank=True)
+    bet_amount = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    win_amount = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    balance_before = models.DecimalField(
+        max_digits=20, decimal_places=2, null=True, blank=True
+    )
+    balance_after = models.DecimalField(
+        max_digits=20, decimal_places=2, null=True, blank=True
+    )
+    currency = models.CharField(max_length=10, default='INR')
+    provider_timestamp = models.CharField(max_length=50, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'game_rounds'
+
+
+class GameCallbackLog(models.Model):
+    """Raw audit log of every inbound aggregator callback (replaces the legacy
+    bet_logs.txt file). Stores the raw + decrypted payloads and the processing
+    outcome for forensics and replay debugging."""
+
+    class Result(models.TextChoices):
+        SETTLED = 'settled', 'Settled'
+        DUPLICATE = 'duplicate', 'Duplicate'
+        HEARTBEAT = 'heartbeat', 'Heartbeat'
+        ERROR = 'error', 'Error'
+        REJECTED = 'rejected', 'Rejected'
+
+    id = models.BigAutoField(primary_key=True)
+    serial_number = models.CharField(max_length=100, null=True, blank=True, db_index=True)
+    member_account = models.CharField(max_length=100, null=True, blank=True)
+    game_uid = models.CharField(max_length=64, null=True, blank=True)
+    raw_payload = models.TextField(null=True, blank=True)
+    decrypted_payload = models.JSONField(null=True, blank=True)
+    result = models.CharField(max_length=20, choices=Result.choices)
+    message = models.CharField(max_length=255, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'game_callback_logs'
 
 
 class Bet(models.Model):

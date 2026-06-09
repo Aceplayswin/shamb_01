@@ -263,7 +263,7 @@ def list_games(
     limit: int = 50,
     offset: int = 0,
 ):
-    qs = Game.objects.filter(is_active_web=True).select_related('provider')
+    qs = Game.objects.filter(is_active_web=True, is_active=True).select_related('provider')
     if category:
         qs = qs.filter(category=category)
     if featured:
@@ -275,6 +275,8 @@ def list_games(
             'name': g.name,
             'slug': g.slug,
             'category': g.category,
+            'game_uid': g.game_uid,
+            'game_type': g.game_type,
             'thumbnail_url': g.thumbnail_url,
             'rtp': float(g.rtp) if g.rtp else None,
             'min_bet': float(g.min_bet),

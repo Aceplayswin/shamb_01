@@ -19,6 +19,11 @@ urlpatterns = [
     path('games', views.games_list),
     path('games/trending', views.games_trending),
     path('games/bet', views.games_bet),
+    path('games/launch', views.games_launch),
+    path('games/history', views.games_history),
+    path('games/pnl', views.games_pnl),
+    # Inbound aggregator bet/win callback (auth via AES payload, not JWT).
+    path('games/callback', views.games_callback),
     # Geo
     path('geo/detect', views.geo_detect),
     # Admin
@@ -35,6 +40,12 @@ urlpatterns = [
     path('admin/deposits/<int:tx_id>/confirm', views.admin_deposit_confirm),
     path('admin/games', views.admin_games),
     path('admin/games/create', views.admin_games_create),
+    path('admin/games/status', views.admin_games_status),
+    path('admin/games/status/set', views.admin_games_status_set),
+    path('admin/games/statistics', views.admin_games_statistics),
+    path('admin/games/pnl-series', views.admin_games_pnl_series),
+    path('admin/games/top', views.admin_games_top),
+    path('admin/games/rounds', views.admin_games_rounds),
     path('admin/games/<int:game_id>', views.admin_games_update),
     path('admin/providers', views.admin_providers),
     path('admin/providers/create', views.admin_providers_create),

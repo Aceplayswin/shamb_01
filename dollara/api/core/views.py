@@ -6,13 +6,26 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from core import admin_services, services
+from core import admin_services, game_admin_services, game_services, services
 from core.ai import chat_respond, fraud_score, pytorch_version, welcome_call
+from core.game_services import GameError
 from core.geo import detect_geo_from_ip
 from core.middleware import require_auth
 from core.models import AiCallLog, Transaction, User, Wallet
 from services.branding import get_branding_for_slug
 from tenants.state import get_current_tenant_slug
+
+# Game launch error codes -> HTTP status. Mirrors the legacy status_code set so
+# the existing frontend game flow keeps working unchanged.
+_GAME_ERROR_STATUS = {
+    'auth_error': 401,
+    'account_error': 403,
+    'game_off': 403,
+    'invalid_params': 400,
+    'game_not_found': 404,
+    'balance_error': 402,
+    'server_error': 502,
+}
 
 
 def _brand_name() -> str:
@@ -84,7 +97,12 @@ def register_otp(request):
 @csrf_exempt
 @require_http_methods(['POST'])
 def demo_session(request):
-    return JsonResponse(services.create_demo_session(), status=201)
+    try:
+        return JsonResponse(services.create_demo_session(), status=201)
+    except ValueError as e:
+        return _error_response(e)
+    except Exception as e:
+        return _error_response(e, status=500)
 
 
 @csrf_exempt
@@ -213,6 +231,60 @@ def games_bet(request):
         return _error_response(e)
     except ValueError as e:
         return _error_response(e)
+
+
+@csrf_exempt
+@require_auth(['user'])
+@require_http_methods(['POST'])
+def games_launch(request):
+    """Request a launch URL from the aggregator and open a game session."""
+    try:
+        body = _json_body(request)
+        return JsonResponse(game_services.launch_game(request.auth.sub, body))
+    except json.JSONDecodeError as e:
+        return JsonResponse({'status_code': 'invalid_params', 'error': str(e)}, status=400)
+    except GameError as e:
+        return JsonResponse(
+            {'status_code': e.code, 'error': str(e)},
+            status=_GAME_ERROR_STATUS.get(e.code, 400),
+        )
+
+
+@require_auth(['user'])
+@require_http_methods(['GET'])
+def games_history(request):
+    """Paginated play/session history for the current user."""
+    limit = int(request.GET.get('limit', 40))
+    offset = int(request.GET.get('offset', 0))
+    return JsonResponse(game_services.get_play_history(request.auth.sub, limit, offset))
+
+
+@require_auth(['user'])
+@require_http_methods(['GET'])
+def games_pnl(request):
+    """Aggregate betting profit/loss for the current user."""
+    return JsonResponse(game_services.get_user_pnl(request.auth.sub))
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def games_callback(request):
+    """Inbound aggregator bet/win callback. Public (auth is via AES payload)."""
+    raw = request.body.decode('utf-8', errors='replace') if request.body else ''
+    try:
+        envelope = json.loads(raw) if raw else {}
+    except json.JSONDecodeError:
+        # The aggregator may post the encrypted payload as a raw form field.
+        envelope = {'payload': request.POST.get('payload', raw)}
+    try:
+        ack = game_services.process_callback(envelope, raw_body=raw)
+        return JsonResponse(ack)
+    except GameError as e:
+        # Provider-shaped error envelope (non-zero code) so the aggregator can
+        # retry/alert without us leaking internals.
+        return JsonResponse({'code': 1, 'msg': str(e), 'payload': ''}, status=200)
+    except Exception:
+        return JsonResponse({'code': 1, 'msg': 'internal_error', 'payload': ''}, status=200)
 
 
 # --- Geo ---
@@ -370,6 +442,62 @@ def admin_games_update(request, game_id):
         return JsonResponse(admin_services.update_game(game_id, _json_body(request)))
     except Exception as e:
         return _error_response(e)
+
+
+# --- Admin: gaming control, analytics, reports ---
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_games_status(request):
+    return JsonResponse(game_admin_services.get_game_status())
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['PUT'])
+def admin_games_status_set(request):
+    try:
+        body = _json_body(request)
+        return JsonResponse(game_admin_services.set_game_status(bool(body['enabled'])))
+    except (KeyError, json.JSONDecodeError) as e:
+        return _error_response(e)
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_games_statistics(request):
+    return JsonResponse(game_admin_services.get_game_statistics())
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_games_pnl_series(request):
+    return JsonResponse(
+        game_admin_services.get_pnl_series(int(request.GET.get('days', 7))),
+        safe=False,
+    )
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_games_top(request):
+    return JsonResponse(
+        game_admin_services.get_top_games(int(request.GET.get('limit', 10))),
+        safe=False,
+    )
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_games_rounds(request):
+    return JsonResponse(
+        game_admin_services.list_recent_rounds(
+            int(request.GET.get('limit', 50)),
+            int(request.GET.get('offset', 0)),
+            request.GET.get('userId'),
+            request.GET.get('gameUid'),
+        ),
+        safe=False,
+    )
 
 
 @require_auth(['admin'])

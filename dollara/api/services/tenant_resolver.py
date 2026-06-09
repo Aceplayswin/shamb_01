@@ -20,11 +20,26 @@ from dataclasses import dataclass
 
 from django.conf import settings
 from django.core.cache import cache
+from django.db.utils import OperationalError, ProgrammingError
 
 from tenants.models import Domain, Product, TenantDatabase
 from tenants.state import register_tenant_connection, set_current_tenant, tenant_db_alias_for
 
 _LOCAL_HOSTS = {'localhost', '127.0.0.1', '0.0.0.0', 'testserver'}
+
+# Optional control-plane tables (domains, tenant_databases, branding, ...) may
+# not be provisioned in every deployment — only `products` is required for
+# tenant resolution. Treat a missing optional table as "no row" instead of a
+# hard 500 so single-tenant deployments work with just the products table.
+_MISSING_TABLE_ERRORS = (ProgrammingError, OperationalError)
+
+
+def _first_or_none(queryset):
+    """`.first()` that tolerates an optional control-plane table being absent."""
+    try:
+        return queryset.first()
+    except _MISSING_TABLE_ERRORS:
+        return None
 
 
 @dataclass
@@ -68,7 +83,9 @@ def _product_for_request(host: str, header_slug: str | None, jwt_slug: str | Non
     # 2. Exact domain match, then subdomain heuristic.
     clean_host = _strip_port(host)
     if clean_host and clean_host not in _LOCAL_HOSTS:
-        domain = Domain.objects.filter(host=clean_host).select_related('product').first()
+        domain = _first_or_none(
+            Domain.objects.filter(host=clean_host).select_related('product')
+        )
         if domain:
             return domain.product
         sub_slug = _slug_from_host(clean_host)
@@ -107,7 +124,7 @@ def resolve_tenant(
         return None
 
     alias = tenant_db_alias_for(product.slug)
-    db = TenantDatabase.objects.filter(product_id=product.id).first()
+    db = _first_or_none(TenantDatabase.objects.filter(product_id=product.id))
     if db:
         register_tenant_connection(
             alias,
@@ -117,13 +134,20 @@ def resolve_tenant(
             user=db.db_user,
             password=db.db_password,
         )
-    set_current_tenant(product.slug, alias)
+        active_alias = alias
+    else:
+        # No isolated tenant database is provisioned for this product (e.g. a
+        # single-tenant deployment that keeps everything in the master DB).
+        # Leave the DB alias unset so the router falls back to `default`
+        # instead of routing to an unregistered `tenant_<slug>` connection.
+        active_alias = None
+    set_current_tenant(product.slug, active_alias)
     return ResolvedTenant(
         product_id=product.id,
         slug=product.slug,
         name=product.name,
         status=product.status,
-        db_alias=alias,
+        db_alias=active_alias or '',
     )
 
 

@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS wallets (
   bonus_balance DECIMAL(18,2) DEFAULT 0,
   exposure_balance DECIMAL(18,2) DEFAULT 0,
   locked_balance DECIMAL(18,2) DEFAULT 0,
+  wagering_balance DECIMAL(18,2) DEFAULT 0,
   currency VARCHAR(10) DEFAULT 'INR',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -190,6 +191,8 @@ CREATE TABLE IF NOT EXISTS games (
   name VARCHAR(150) NOT NULL,
   slug VARCHAR(100) UNIQUE NOT NULL,
   category ENUM('slots', 'live_casino', 'sports', 'lottery', 'ai_games', 'fantasy', 'virtual_sports') NOT NULL,
+  game_uid VARCHAR(64),
+  game_type VARCHAR(40),
   thumbnail_url VARCHAR(500),
   rtp DECIMAL(5,2),
   min_bet DECIMAL(18,2) DEFAULT 10,
@@ -197,6 +200,7 @@ CREATE TABLE IF NOT EXISTS games (
   is_featured BOOLEAN DEFAULT FALSE,
   is_active_web BOOLEAN DEFAULT TRUE,
   is_active_mobile BOOLEAN DEFAULT TRUE,
+  is_active BOOLEAN DEFAULT TRUE,
   is_provably_fair BOOLEAN DEFAULT FALSE,
   sort_order INT DEFAULT 0,
   play_count INT DEFAULT 0,
@@ -204,7 +208,9 @@ CREATE TABLE IF NOT EXISTS games (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (provider_id) REFERENCES game_providers(id),
   INDEX idx_games_category (category),
-  INDEX idx_games_featured (is_featured)
+  INDEX idx_games_featured (is_featured),
+  INDEX idx_games_uid (game_uid),
+  INDEX idx_games_active (is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS bets (
@@ -228,6 +234,75 @@ CREATE TABLE IF NOT EXISTS bets (
   FOREIGN KEY (game_id) REFERENCES games(id),
   INDEX idx_bets_user (user_id),
   INDEX idx_bets_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Game launch sessions (one per user+game launch). Settlement totals are
+-- accumulated here from aggregator bet/win callbacks. Replaces tblmatchplayed.
+CREATE TABLE IF NOT EXISTS game_sessions (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  session_uid VARCHAR(64) NOT NULL UNIQUE,
+  user_id BIGINT UNSIGNED NOT NULL,
+  game_id BIGINT UNSIGNED,
+  game_uid VARCHAR(64) NOT NULL,
+  game_name VARCHAR(150) NOT NULL,
+  member_account VARCHAR(100) NOT NULL,
+  launch_url TEXT,
+  currency VARCHAR(10) DEFAULT 'INR',
+  total_bet DECIMAL(20,2) DEFAULT 0,
+  total_win DECIMAL(20,2) DEFAULT 0,
+  profit_loss DECIMAL(20,2) DEFAULT 0,
+  rounds_count INT DEFAULT 0,
+  last_balance DECIMAL(20,2),
+  status ENUM('wait', 'profit', 'loss') DEFAULT 'wait',
+  last_played_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE SET NULL,
+  INDEX idx_gs_user (user_id),
+  INDEX idx_gs_member (member_account),
+  INDEX idx_gs_game_uid (game_uid),
+  INDEX idx_gs_user_game (user_id, game_uid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Individual settled bet/win events. serial_number is the aggregator's
+-- idempotency key; the UNIQUE constraint makes duplicate delivery a no-op.
+CREATE TABLE IF NOT EXISTS game_rounds (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  session_id BIGINT UNSIGNED,
+  user_id BIGINT UNSIGNED NOT NULL,
+  game_id BIGINT UNSIGNED,
+  game_uid VARCHAR(64) NOT NULL,
+  serial_number VARCHAR(100) NOT NULL UNIQUE,
+  game_round VARCHAR(100),
+  bet_amount DECIMAL(20,2) DEFAULT 0,
+  win_amount DECIMAL(20,2) DEFAULT 0,
+  balance_before DECIMAL(20,2),
+  balance_after DECIMAL(20,2),
+  currency VARCHAR(10) DEFAULT 'INR',
+  provider_timestamp VARCHAR(50),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (session_id) REFERENCES game_sessions(id) ON DELETE SET NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE SET NULL,
+  INDEX idx_gr_user (user_id),
+  INDEX idx_gr_game_uid (game_uid),
+  INDEX idx_gr_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Raw audit log of inbound aggregator callbacks (replaces bet_logs.txt).
+CREATE TABLE IF NOT EXISTS game_callback_logs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  serial_number VARCHAR(100),
+  member_account VARCHAR(100),
+  game_uid VARCHAR(64),
+  raw_payload TEXT,
+  decrypted_payload JSON,
+  result ENUM('settled', 'duplicate', 'heartbeat', 'error', 'rejected') NOT NULL,
+  message VARCHAR(255),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_gcl_serial (serial_number),
+  INDEX idx_gcl_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS agents (
