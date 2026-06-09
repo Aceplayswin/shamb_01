@@ -9,6 +9,7 @@ export const useAuthStore = create((set, get) => ({
   user: null,
   wallet: null,
   isDemo: false,
+  isHydrated: false,
   setAuth: (data) => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('token', data.token);
@@ -18,6 +19,7 @@ export const useAuthStore = create((set, get) => ({
       userId: data.userId ?? null,
       username: data.username ?? null,
       isDemo: data.isDemo ?? false,
+      isHydrated: true,
     });
     get().refreshSession();
   },
@@ -25,13 +27,20 @@ export const useAuthStore = create((set, get) => ({
     if (typeof window !== 'undefined') {
       localStorage.removeItem('token');
     }
-    set({ token: null, userId: null, username: null, user: null, wallet: null, isDemo: false });
+    set({
+      token: null,
+      userId: null,
+      username: null,
+      user: null,
+      wallet: null,
+      isDemo: false,
+    });
   },
   hydrate: () => {
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('token');
-      if (token) set({ token });
-    }
+    if (typeof window === 'undefined') return;
+    const token = localStorage.getItem('token');
+    set({ token, isHydrated: true });
+    if (token) get().refreshSession();
   },
   refreshSession: async () => {
     const { token } = get();

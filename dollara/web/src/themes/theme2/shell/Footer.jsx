@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Dices, Twitter, Send, MessageCircle, Instagram } from 'lucide-react';
 import { useBranding } from '@/hooks/useBranding';
+import { useAuthStore } from '@/store/auth';
 
 const COLUMNS = [
   { title: 'Casino', links: ['All Games', 'Slots', 'Live Casino', 'Table Games', 'Jackpot Games'] },
@@ -14,11 +15,28 @@ const COLUMNS = [
 export function Theme2Footer() {
   const branding = useBranding();
   const name = branding.product_name || 'WAXCASINO';
+  const token = useAuthStore((s) => s.token);
+  const isHydrated = useAuthStore((s) => s.isHydrated);
+  const isLoggedIn = isHydrated && Boolean(token);
+
+  if (isLoggedIn) {
+    return (
+      <footer className="border-t border-white/5 bg-[#0a101a] px-6 py-6">
+        <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-between gap-3 sm:flex-row">
+          <p className="text-xs text-slate-500">© 2026 {name}. All rights reserved.</p>
+          <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-slate-400">
+            <Link href="/support/chat" className="transition hover:text-amber-400">Support</Link>
+            <span>18+ · Play responsibly</span>
+          </div>
+        </div>
+      </footer>
+    );
+  }
+
   return (
     <footer className="border-t border-white/5 bg-[#0a101a] px-6 py-12">
       <div className="mx-auto max-w-[1400px]">
         <div className="grid gap-8 lg:grid-cols-6">
-          {/* Brand + socials */}
           <div className="lg:col-span-2">
             <Link href="/" className="flex items-center gap-2.5">
               <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-black">
@@ -38,7 +56,6 @@ export function Theme2Footer() {
             </div>
           </div>
 
-          {/* Link columns */}
           {COLUMNS.map((col) => (
             <div key={col.title}>
               <h4 className="mb-3 text-sm font-bold text-white">{col.title}</h4>
@@ -53,7 +70,6 @@ export function Theme2Footer() {
           ))}
         </div>
 
-        {/* Newsletter */}
         <div className="mt-10 flex flex-col gap-3 border-t border-white/5 pt-8 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-bold text-white">Subscribe to our Newsletter</p>
@@ -70,7 +86,6 @@ export function Theme2Footer() {
           </form>
         </div>
 
-        {/* Legal */}
         <div className="mt-8 flex flex-col gap-3 border-t border-white/5 pt-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
           <p>© 2026 {name}. All rights reserved.</p>
           <div className="flex flex-wrap gap-4">

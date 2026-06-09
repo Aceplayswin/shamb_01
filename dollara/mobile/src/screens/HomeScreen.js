@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -14,6 +14,7 @@ import { BalanceCard } from '../components/BalanceCard';
 import { useAuthStore } from '../store/auth';
 import { colors, radius, spacing } from '../theme';
 import { useBranding } from '../branding';
+import { api } from '../services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -59,7 +60,7 @@ function GameCardMobile({ item, onPlay, isGrid }) {
       <View style={styles.gameCardInner}>
         <Icon name={icon} size={28} color={colors.brand400} />
         <Text style={styles.gameName}>{item.name}</Text>
-        <Text style={styles.gameProvider}>{item.provider}</Text>
+        <Text style={styles.gameProvider}>{item.provider_name ?? item.provider}</Text>
       </View>
     </Pressable>
   );
@@ -103,27 +104,38 @@ export function HomeScreen({ navigation }) {
   const branding = useBranding();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProvider, setSelectedProvider] = useState(null);
+  const [liveSports, setLiveSports] = useState(LIVE_SPORTS);
+  const [casinoGames, setCasinoGames] = useState(CASINO_GAMES);
+  const [trendingGames, setTrendingGames] = useState(TRENDING_GAMES);
+  const [allGames, setAllGames] = useState(ALL_GAMES);
+
+  useEffect(() => {
+    Promise.all([
+      api('/api/v1/games?category=sports&limit=8').catch(() => []),
+      api('/api/v1/games?category=live_casino&limit=8').catch(() => []),
+      api('/api/v1/games/trending').catch(() => []),
+      api('/api/v1/games?limit=50').catch(() => []),
+    ]).then(([sports, casino, trending, all]) => {
+      if (sports.length) setLiveSports(sports);
+      if (casino.length) setCasinoGames(casino);
+      if (trending.length) setTrendingGames(trending);
+      if (all.length) setAllGames(all);
+    });
+  }, []);
 
   const handlePlayGame = (game) => {
     if (!token) {
       navigation.navigate('Login');
       return;
     }
-    const fullGame = {
-      id: game.id,
-      name: game.name,
-      provider_name: game.provider,
-      category: game.category ?? 'slots',
-      min_bet: 100,
-      max_bet: 50000,
-      rtp: 96,
-    };
-    navigation.navigate('Play', { game: fullGame });
+    navigation.navigate('Play', { game });
   };
 
-  const filteredGames = ALL_GAMES.filter((game) => {
-    const matchesSearch = game.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesProvider = selectedProvider ? game.provider === selectedProvider : true;
+  const filteredGames = allGames.filter((game) => {
+    const name = game.name ?? '';
+    const provider = game.provider_name ?? game.provider ?? '';
+    const matchesSearch = name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesProvider = selectedProvider ? provider === selectedProvider : true;
     return matchesSearch && matchesProvider;
   });
 
@@ -247,17 +259,17 @@ export function HomeScreen({ navigation }) {
 
             <View style={styles.section}>
               <SectionHeader icon="football" title="Live sports" onSeeAll={() => navigation.navigate('Games')} />
-              <Carousel items={LIVE_SPORTS} onPlay={handlePlayGame} />
+              <Carousel items={liveSports} onPlay={handlePlayGame} />
             </View>
 
             <View style={styles.section}>
               <SectionHeader icon="videocam" title="Casino" onSeeAll={() => navigation.navigate('Games')} />
-              <Carousel items={CASINO_GAMES} onPlay={handlePlayGame} />
+              <Carousel items={casinoGames} onPlay={handlePlayGame} />
             </View>
 
             <View style={styles.section}>
               <SectionHeader icon="flame" title="Trending" onSeeAll={() => navigation.navigate('Play')} />
-              <Carousel items={TRENDING_GAMES} onPlay={handlePlayGame} />
+              <Carousel items={trendingGames} onPlay={handlePlayGame} />
             </View>
           </>
         )}

@@ -19,9 +19,10 @@ from django.views.decorators.http import require_http_methods
 
 from tenants.auth_jwt import sign_token
 from tenants.auth_middleware import require_auth
+from services.branding import BRANDING_FIELDS, get_branding_for_product, serialize_branding
 from services.tenant_provisioning import ProvisioningError, provision_product
 from services.tenant_resolver import invalidate_tenant_cache
-from tenants.models import Database, Product, ProductTheme, Url, User, UserSession
+from tenants.models import Branding, Database, Product, ProductTheme, Url, User, UserSession
 from tenants.state import tenant_db_alias_for, use_tenant
 from tenants.themes import (
     DEFAULT_THEME, THEME_CATALOG, THEME_KEYS,
@@ -64,8 +65,10 @@ def _product_theme_rows(product: Product) -> list[dict]:
 def _serialize_product(product: Product) -> dict:
     db = Database.objects.filter(product=product).first()
     url_obj = Url.objects.filter(product=product).first()
+    branding = Branding.objects.filter(product=product).first()
     theme_rows = _product_theme_rows(product)
     active = next((r['theme_key'] for r in theme_rows if r['is_active']), DEFAULT_THEME)
+    branding_data = serialize_branding(product, branding)
     return {
         'id': product.id,
         'slug': product.slug,
@@ -74,6 +77,7 @@ def _serialize_product(product: Product) -> dict:
         'created_at': product.created_at.isoformat(),
         'themes': theme_rows,
         'active_theme': active,
+        'branding': branding_data,
         'urls': {
             'fe_url': url_obj.fe_url if url_obj else '',
             'be_url': url_obj.be_url if url_obj else '',
@@ -176,6 +180,7 @@ def products_create(request):
             db_password=db.get('db_password'),
             fe_url=urls.get('fe_url', ''),
             be_url=urls.get('be_url', ''),
+            branding=body.get('branding'),
             seed=body.get('seed', True),
         )
     except ProvisioningError as e:
@@ -328,6 +333,34 @@ def product_urls(request, slug):
     })
 
 
+# --- Branding ---
+@csrf_exempt
+@require_auth(['super_admin'])
+@require_http_methods(['GET', 'PUT'])
+def product_branding(request, slug):
+    product = Product.objects.filter(slug=slug).first()
+    if not product:
+        return _error('Product not found', 404)
+    if request.method == 'GET':
+        return JsonResponse(get_branding_for_product(product))
+    body = _json_body(request)
+    existing = Branding.objects.filter(product=product).first()
+    data = {field: getattr(existing, field) if existing else serialize_branding(product, None)[field]
+            for field in BRANDING_FIELDS}
+    for field in BRANDING_FIELDS:
+        if field not in body:
+            continue
+        value = body[field]
+        if field == 'extra' and value is not None and not isinstance(value, (dict, list)):
+            return _error('extra must be a JSON object or array')
+        data[field] = value
+    if not str(data.get('product_name', '')).strip():
+        return _error('product_name cannot be empty')
+    Branding.objects.update_or_create(product=product, defaults=data)
+    invalidate_tenant_cache(slug)
+    return JsonResponse(get_branding_for_product(product))
+
+
 # --- Themes ---
 @require_auth(['super_admin'])
 @require_http_methods(['GET'])
@@ -419,7 +452,18 @@ def product_theme_set_enabled(request, slug, theme_key):
     return JsonResponse({'slug': slug, 'themes': _product_theme_rows(product)})
 
 
-# --- Public (unauthenticated) theme resolution for product frontends ---
+# --- Public (unauthenticated) branding + theme for product frontends ---
+@require_http_methods(['GET'])
+def public_product_branding(request, slug):
+    """Public endpoint product frontends call for white-label branding."""
+    product = Product.objects.filter(slug=slug).first()
+    if not product:
+        return _error('Product not found', 404)
+    payload = get_branding_for_product(product)
+    payload['status'] = product.status
+    return JsonResponse(payload)
+
+
 @require_http_methods(['GET'])
 def public_product_theme(request, slug):
     """Public endpoint a product frontend calls to learn its live theme.

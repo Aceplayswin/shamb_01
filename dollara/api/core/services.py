@@ -49,7 +49,10 @@ def send_otp(phone: str, channel: str) -> dict:
     cache.set(f'otp:{phone}', {'attempts': 0}, settings.OTP_EXPIRY_MINUTES * 60)
     if settings.DEBUG:
         print(f'[DEV OTP] {phone} via {channel}: {otp}')
-    return {'sent': True, 'expiresIn': settings.OTP_EXPIRY_MINUTES * 60}
+    result = {'sent': True, 'expiresIn': settings.OTP_EXPIRY_MINUTES * 60}
+    if settings.DEBUG:
+        result['otp'] = otp
+    return result
 
 
 def verify_otp(phone: str, otp: str) -> None:
@@ -86,7 +89,16 @@ def get_user_settings(user: User) -> UserSetting | None:
         return None
 
 
-def register_with_otp(full_name: str, phone: str, country_code: str = 'IN') -> dict:
+def register_with_otp(
+    full_name: str,
+    phone: str,
+    password: str,
+    country_code: str = 'IN',
+) -> dict:
+    if User.objects.filter(phone=phone, role=User.Role.USER).exists():
+        raise ValueError('Phone number already registered')
+    if not password or len(password) < 6:
+        raise ValueError('Password must be at least 6 characters')
     username = f'user_{phone[-6:]}_{secrets.token_hex(4)}'
     voice_id = f'AI_EXEC_{random.randint(1, 50):03d}'
     user = User.objects.create(
@@ -95,6 +107,7 @@ def register_with_otp(full_name: str, phone: str, country_code: str = 'IN') -> d
         full_name=full_name,
         country_code=country_code,
         role=User.Role.USER,
+        password_hash=_hash_password(password),
     )
     Wallet.objects.create(
         user=user,
@@ -128,6 +141,11 @@ def create_demo_session() -> dict:
         user,
         is_demo=True,
         demo_expires_at=expires_at,
+    )
+    Wallet.objects.create(
+        user=user,
+        main_balance=Decimal('50000'),
+        bonus_balance=Decimal('5000'),
     )
     token = sign_token(
         {'sub': user.id, 'role': User.Role.USER, 'type': 'demo'},

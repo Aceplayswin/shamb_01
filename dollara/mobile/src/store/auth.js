@@ -1,25 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
+import { fetchMe } from '../services/api';
 import { useWalletStore } from './walletStore';
 
 const USER_KEY = 'dollara_user_v1';
 
-function buildUser({ userId, username, fullName, phone, isDemo }) {
-  return {
-    id: userId ?? 'local-user',
-    username: username ?? 'player',
-    full_name: fullName ?? username ?? 'Player',
-    phone: phone ?? '—',
-    kyc_status: isDemo ? 'verified' : 'pending',
-    account_status: 'active',
-    currency: 'INR',
-    member_since: new Date().toISOString(),
-    email: `${username ?? 'player'}@dollara.app`,
-    level: isDemo ? 'Gold' : 'Silver',
-    total_bets: isDemo ? 248 : 12,
-    total_wins: isDemo ? 89 : 4,
-    referral_code: `DOL${(username ?? 'play').slice(0, 4).toUpperCase()}99`,
-  };
+function isDemoToken(token) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload.type === 'demo';
+  } catch {
+    return false;
+  }
 }
 
 export const useAuthStore = create((set, get) => ({
@@ -28,12 +20,9 @@ export const useAuthStore = create((set, get) => ({
   isDemo: false,
   isHydrated: false,
 
-  setAuth: async ({ token, userId, username, fullName, phone, isDemo = false }) => {
-    const user = buildUser({ userId, username, fullName, phone, isDemo });
+  setAuth: async ({ token, userId, username, isDemo = false }) => {
     await AsyncStorage.setItem('token', token);
-    await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
-    set({ token, isDemo, user });
-    await useWalletStore.getState().initWallet({ isDemo });
+    set({ token, isDemo: isDemo || isDemoToken(token), userId, username });
     await get().refreshSession();
   },
 
@@ -41,10 +30,15 @@ export const useAuthStore = create((set, get) => ({
     const { token } = get();
     if (!token) return;
     try {
-      const raw = await AsyncStorage.getItem(USER_KEY);
-      if (raw) set({ user: JSON.parse(raw) });
-      const walletState = useWalletStore.getState();
-      if (!walletState.wallet) await walletState.initWallet({ isDemo: get().isDemo });
+      const me = await fetchMe();
+      if (me) {
+        await AsyncStorage.setItem(USER_KEY, JSON.stringify(me));
+        set({
+          user: me,
+          isDemo: isDemoToken(token) || me.username?.startsWith('DEMO_'),
+        });
+      }
+      await useWalletStore.getState().loadFromApi();
     } catch {
       // keep existing state
     }
@@ -65,11 +59,12 @@ export const useAuthStore = create((set, get) => ({
         AsyncStorage.getItem(USER_KEY),
       ]);
       const user = userRaw ? JSON.parse(userRaw) : null;
-      const isDemo = token?.includes('demo') ?? false;
+      const isDemo = token ? isDemoToken(token) : false;
       set({ token, user, isDemo, isHydrated: true });
-      await useWalletStore.getState().hydrate();
-      if (token && !useWalletStore.getState().wallet) {
-        await useWalletStore.getState().initWallet({ isDemo });
+      if (token) {
+        await get().refreshSession();
+      } else {
+        await useWalletStore.getState().hydrate();
       }
     } catch {
       set({ isHydrated: true });
@@ -83,7 +78,6 @@ export const useAuthStore = create((set, get) => ({
   },
 }));
 
-// Wallet selector for components that used useAuthStore wallet
 export function useWallet() {
   return useWalletStore((s) => s.wallet);
 }

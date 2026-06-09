@@ -85,7 +85,10 @@ def register_otp(request):
         body = _json_body(request)
         services.verify_otp(body['phone'], body['otp'])
         result = services.register_with_otp(
-            body['fullName'], body['phone'], body.get('countryCode', 'IN')
+            body['fullName'],
+            body['phone'],
+            body['password'],
+            body.get('countryCode', 'IN'),
         )
         return JsonResponse(result, status=201)
     except (KeyError, json.JSONDecodeError) as e:

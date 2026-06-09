@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Download, ShieldCheck, ArrowRight, Headset } from 'lucide-react';
 import { useBranding } from '@/hooks/useBranding';
+import { useAuthStore } from '@/store/auth';
 
 const LINK_GROUPS = [
   { title: 'Play', links: ['Sports', 'Live Casino', 'Slots', 'Crash Games', 'Lottery'] },
@@ -16,11 +17,45 @@ const PAYMENTS = ['UPI', 'GPay', 'PhonePe', 'Paytm', 'Visa', 'Mastercard', 'Rupa
 export function Footer({ showCta = true }) {
   const branding = useBranding();
   const brandName = branding.product_name;
+  const token = useAuthStore((s) => s.token);
+  const isHydrated = useAuthStore((s) => s.isHydrated);
+  const isLoggedIn = isHydrated && Boolean(token);
+  const showMarketing = showCta && !isLoggedIn;
+
+  if (isLoggedIn) {
+    return (
+      <footer className="mt-8 px-4 pb-4 xl:px-6">
+        <div className="mx-auto max-w-[1400px]">
+          <div className="flex flex-col items-center justify-between gap-3 border-t border-hairline/[0.06] py-5 sm:flex-row">
+            <div className="flex items-center gap-2.5">
+              <span
+                className="grid h-7 w-7 place-items-center rounded-lg text-surface-950"
+                style={{ background: `linear-gradient(135deg, ${branding.theme_color}, ${branding.secondary_color})` }}
+              >
+                <span className="font-display text-xs font-black">
+                  {brandName.charAt(0).toUpperCase()}
+                </span>
+              </span>
+              <span className="text-xs text-muted">© 2026 {brandName}</span>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-muted">
+              <Link href="/support/chat" className="font-semibold text-app-fg transition hover:text-brand-400">
+                Support
+              </Link>
+              <span className="rounded border border-hairline/10 px-1.5 py-0.5 text-red-400">18+</span>
+              <span>Play responsibly</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    );
+  }
+
   return (
     <footer className="mt-16 px-4 xl:px-6">
       <div className="mx-auto max-w-[1400px]">
         {/* CTA band */}
-        {showCta && (
+        {showMarketing && (
           <div className="ring-grad relative overflow-hidden rounded-3xl bg-panel-strong bg-mesh-violet p-8 text-center sm:p-12">
             <div className="pointer-events-none absolute -left-10 top-0 h-40 w-40 rounded-full bg-brand-500/20 blur-3xl" />
             <div className="pointer-events-none absolute -right-10 bottom-0 h-40 w-40 rounded-full bg-brand-500/25 blur-3xl" />

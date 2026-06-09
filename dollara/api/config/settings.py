@@ -36,8 +36,9 @@ WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
 # --- Multi-tenant database-per-tenant configuration ---
-# `default` is the master / control-plane database (products, domains, branding,
-# super admins). Tenant databases are registered dynamically at runtime by the
+# `default` is the master / control-plane database (products, urls, branding,
+# databases, product_themes — see super_admin/api/database/master.sql). Tenant
+# databases are registered dynamically at runtime by the
 # tenant resolver (see services/tenant_resolver.py + tenants/state.py) and routed
 # via middleware.db_router.TenantRouter.
 DATABASES = {

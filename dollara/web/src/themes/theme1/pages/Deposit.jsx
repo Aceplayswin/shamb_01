@@ -15,6 +15,7 @@ export default function Theme1Deposit() {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('');
   const [loading, setLoading] = useState(false);
+  const [confirmLoading, setConfirmLoading] = useState(false);
   const [result, setResult] = useState(null);
 
   const numAmount = parseFloat(amount) || 0;
@@ -32,6 +33,25 @@ export default function Theme1Deposit() {
       alert(e instanceof Error ? e.message : 'Deposit failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const confirmDeposit = async () => {
+    if (!result?.transactionId) return;
+    setConfirmLoading(true);
+    try {
+      await api(`/api/v1/wallet/deposit/${result.transactionId}/confirm`, {
+        method: 'POST',
+        body: JSON.stringify({ referenceNumber: `DEV-${Date.now()}` }),
+      });
+      alert('Deposit confirmed and credited to your wallet.');
+      setResult(null);
+      setAmount('');
+      setMethod('');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Confirm failed');
+    } finally {
+      setConfirmLoading(false);
     }
   };
 
@@ -105,9 +125,19 @@ export default function Theme1Deposit() {
           {loading ? 'Processing...' : 'Proceed to Payment'}
         </button>
         {result && (
-          <p className="mt-4 text-center text-sm text-green-400">
-            Deposit initiated. ID: {result.transactionId}
-          </p>
+          <>
+            <p className="mt-4 text-center text-sm text-green-400">
+              Deposit initiated. ID: {result.transactionId}
+            </p>
+            <button
+              type="button"
+              onClick={confirmDeposit}
+              disabled={confirmLoading}
+              className="mt-3 w-full rounded-lg border border-brand-500/40 py-3 font-semibold text-brand-400 disabled:opacity-50"
+            >
+              {confirmLoading ? 'Confirming…' : 'Confirm deposit (dev)'}
+            </button>
+          </>
         )}
       </main>
 

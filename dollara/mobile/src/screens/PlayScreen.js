@@ -43,12 +43,9 @@ export function PlayScreen({ route, navigation }) {
     setLoading(true);
     try {
       const result = await placeBet(amount, game);
-      const won = result.status === 'won';
       Alert.alert(
-        won ? 'You won!' : 'Better luck next time',
-        won
-          ? `Payout: ₹${result.payout.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
-          : `Bet of ₹${amount.toLocaleString('en-IN')} placed on ${game.name}`,
+        'Bet placed',
+        `Bet #${result.betId} placed on ${game.name} for ₹${amount.toLocaleString('en-IN')}`,
       );
     } catch (e) {
       Alert.alert('Bet failed', e.message);

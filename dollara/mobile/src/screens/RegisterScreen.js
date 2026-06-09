@@ -12,6 +12,8 @@ import {
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
+import { PasswordInput } from '../components/PasswordInput';
+import { api } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { colors, radius, spacing } from '../theme';
 
@@ -26,33 +28,53 @@ export function RegisterScreen({ navigation }) {
   const [step, setStep] = useState('phone');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
   const [channel, setChannel] = useState('sms');
   const [loading, setLoading] = useState(false);
 
   const sendOtp = async () => {
-    if (!phone || !fullName) return;
+    if (!phone || !fullName || password.length < 6) return;
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 500));
-    setLoading(false);
-    setStep('otp');
-    Alert.alert('OTP sent', `Demo OTP: 123456 (via ${channel})`);
+    try {
+      const res = await api('/api/v1/auth/otp/send', {
+        method: 'POST',
+        body: JSON.stringify({ phone, channel }),
+      });
+      if (res.otp) {
+        setOtp(res.otp);
+        Alert.alert('OTP sent', `Your code: ${res.otp}`);
+      } else {
+        Alert.alert('OTP sent', 'Check your phone for the verification code.');
+      }
+      setStep('otp');
+    } catch (e) {
+      Alert.alert('Failed', e.message ?? 'Could not send OTP');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const register = async () => {
     if (otp.length !== 6) return;
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 500));
-    await setAuth({
-      token: `user_${Date.now()}`,
-      userId: 'user-new',
-      username: `user_${phone.slice(-4)}`,
-      fullName,
-      phone,
-      isDemo: false,
-    });
-    setLoading(false);
-    navigation.navigate('Main');
+    try {
+      const result = await api('/api/v1/auth/register/otp', {
+        method: 'POST',
+        body: JSON.stringify({ phone, otp, fullName, password }),
+      });
+      await setAuth({
+        token: result.token,
+        userId: result.userId,
+        username: result.username,
+        isDemo: false,
+      });
+      navigation.navigate('Main');
+    } catch (e) {
+      Alert.alert('Registration failed', e.message ?? 'Could not create account');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -78,6 +100,12 @@ export function RegisterScreen({ navigation }) {
                 onChangeText={setPhone}
                 placeholder="10-digit mobile"
               />
+              <PasswordInput
+                label="Password"
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Min 6 characters"
+              />
               <Text style={styles.label}>OTP channel</Text>
               <View style={styles.channels}>
                 {CHANNELS.map((c) => (
@@ -92,7 +120,12 @@ export function RegisterScreen({ navigation }) {
                   </Pressable>
                 ))}
               </View>
-              <Button title="Send OTP" onPress={sendOtp} loading={loading} disabled={!phone || !fullName} />
+              <Button
+                title="Send OTP"
+                onPress={sendOtp}
+                loading={loading}
+                disabled={!phone || !fullName || password.length < 6}
+              />
             </>
           ) : (
             <>

@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
+import { api } from '../services/api';
+import { useAuthStore } from './auth';
 
 const STORAGE_KEY = 'dollara_wallet_v1';
 
@@ -26,8 +28,15 @@ function normalizeWallet(wallet) {
   return w;
 }
 
-function makeId(prefix) {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+function mapTransaction(tx) {
+  return {
+    id: tx.id,
+    type: tx.type === 'withdrawal' ? 'withdraw' : tx.type,
+    amount: tx.amount,
+    status: tx.status,
+    method: tx.payment_method,
+    created_at: tx.created_at,
+  };
 }
 
 export const useWalletStore = create((set, get) => ({
@@ -56,54 +65,24 @@ export const useWalletStore = create((set, get) => ({
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ wallet, transactions }));
   },
 
-  initWallet: async (opts = {}) => {
-    const isDemo = opts.isDemo ?? false;
-    const wallet = normalizeWallet({
-      main: isDemo ? 50000 : 10000,
-      bonus: isDemo ? 5000 : 1000,
-      exposure: 0,
-      locked: 0,
-      currency: 'INR',
-    });
-    const transactions = isDemo
-      ? [
-          {
-            id: makeId('tx'),
-            type: 'deposit',
-            amount: 50000,
-            status: 'completed',
-            method: 'upi',
-            created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-          },
-          {
-            id: makeId('tx'),
-            type: 'bonus',
-            amount: 5000,
-            status: 'completed',
-            method: 'promo',
-            created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-          },
-        ]
-      : [
-          {
-            id: makeId('tx'),
-            type: 'deposit',
-            amount: 10000,
-            status: 'completed',
-            method: 'upi',
-            created_at: new Date(Date.now() - 86400000).toISOString(),
-          },
-          {
-            id: makeId('tx'),
-            type: 'bonus',
-            amount: 1000,
-            status: 'completed',
-            method: 'welcome',
-            created_at: new Date(Date.now() - 43200000).toISOString(),
-          },
-        ];
-    set({ wallet, transactions });
-    await get().persist();
+  loadFromApi: async () => {
+    const token = useAuthStore.getState().token;
+    if (!token) return;
+    try {
+      const [wallet, txs] = await Promise.all([
+        api('/api/v1/wallet'),
+        api('/api/v1/wallet/transactions'),
+      ]);
+      const transactions = (txs ?? []).map(mapTransaction);
+      set({ wallet: normalizeWallet(wallet), transactions });
+      await get().persist();
+    } catch {
+      // keep cached state
+    }
+  },
+
+  initWallet: async () => {
+    await get().loadFromApi();
   },
 
   reset: async () => {
@@ -115,140 +94,46 @@ export const useWalletStore = create((set, get) => ({
     const num = Number(amount);
     if (!num || num < 100) throw new Error('Minimum deposit is ₹100');
 
-    const txId = makeId('dep');
-    const pendingTx = {
-      id: txId,
-      type: 'deposit',
-      amount: num,
-      status: 'pending',
-      method,
-      created_at: new Date().toISOString(),
-    };
-
-    set((s) => ({ transactions: [pendingTx, ...s.transactions] }));
-    await get().persist();
-    return { transactionId: txId, status: 'pending' };
+    const res = await api('/api/v1/wallet/deposit', {
+      method: 'POST',
+      body: JSON.stringify({ amount: num, paymentMethod: method }),
+    });
+    await get().loadFromApi();
+    return { transactionId: res.transactionId, status: res.status };
   },
 
   confirmDeposit: async (txId) => {
-    const { wallet, transactions } = get();
-    const tx = transactions.find((t) => t.id === txId);
-    if (!tx || tx.status !== 'pending') throw new Error('Transaction not found');
-
-    const bonus = tx.amount >= 1000 ? tx.amount * 0.1 : 0;
-    const updatedWallet = normalizeWallet({
-      ...wallet,
-      main: (wallet?.main ?? 0) + tx.amount,
-      bonus: (wallet?.bonus ?? 0) + bonus,
+    const res = await api(`/api/v1/wallet/deposit/${txId}/confirm`, {
+      method: 'POST',
+      body: JSON.stringify({ referenceNumber: `DEV-${Date.now()}` }),
     });
-
-    const updatedTx = transactions.map((t) =>
-      t.id === txId ? { ...t, status: 'completed' } : t,
-    );
-    const bonusTx =
-      bonus > 0
-        ? {
-            id: makeId('tx'),
-            type: 'bonus',
-            amount: bonus,
-            status: 'completed',
-            method: 'deposit_bonus',
-            created_at: new Date().toISOString(),
-          }
-        : null;
-
-    set({
-      wallet: updatedWallet,
-      transactions: bonusTx ? [bonusTx, ...updatedTx] : updatedTx,
-    });
-    await get().persist();
-    return { credited: tx.amount + bonus };
+    await get().loadFromApi();
+    return { credited: res.credited };
   },
 
   withdraw: async (amount, method) => {
     const num = Number(amount);
-    const { wallet } = get();
-    if (!wallet) throw new Error('Wallet not initialized');
     if (num < 500) throw new Error('Minimum withdrawal is ₹500');
-    if (num > wallet.available) throw new Error('Insufficient balance');
 
-    const updatedWallet = normalizeWallet({
-      ...wallet,
-      main: wallet.main - num,
-      locked: wallet.locked + num,
+    await api('/api/v1/wallet/withdraw', {
+      method: 'POST',
+      body: JSON.stringify({ amount: num, paymentMethod: method }),
     });
-
-    const tx = {
-      id: makeId('wd'),
-      type: 'withdraw',
-      amount: num,
-      status: 'processing',
-      method,
-      created_at: new Date().toISOString(),
-    };
-
-    set((s) => ({
-      wallet: updatedWallet,
-      transactions: [tx, ...s.transactions],
-    }));
-    await get().persist();
-
-    setTimeout(async () => {
-      const state = get();
-      const completed = state.transactions.map((t) =>
-        t.id === tx.id ? { ...t, status: 'completed' } : t,
-      );
-      const w = normalizeWallet({
-        ...state.wallet,
-        locked: Math.max(0, (state.wallet?.locked ?? 0) - num),
-      });
-      set({ transactions: completed, wallet: w });
-      await get().persist();
-    }, 2000);
-
+    await get().loadFromApi();
     return { status: 'processing' };
   },
 
   placeBet: async (amount, game) => {
     const num = Number(amount);
-    const { wallet } = get();
-    if (!wallet) throw new Error('Wallet not initialized');
     if (num < (game.min_bet ?? 1)) throw new Error(`Minimum bet is ₹${game.min_bet ?? 1}`);
-    if (num > wallet.available) throw new Error('Insufficient balance');
 
-    const win = Math.random() > 0.55;
-    const payout = win ? num * (1 + Math.random() * 2) : 0;
-    const net = payout - num;
-
-    const updatedWallet = normalizeWallet({
-      ...wallet,
-      main: Math.max(0, wallet.main + net),
-      exposure: Math.max(0, wallet.exposure - num),
+    const res = await api('/api/v1/games/bet', {
+      method: 'POST',
+      body: JSON.stringify({ gameId: game.id, amount: num }),
     });
-
-    const tx = {
-      id: makeId('bet'),
-      type: win ? 'win' : 'bet',
-      amount: win ? payout : num,
-      status: 'completed',
-      method: game.name,
-      gameId: game.id,
-      created_at: new Date().toISOString(),
-    };
-
-    set((s) => ({
-      wallet: updatedWallet,
-      transactions: [tx, ...s.transactions],
-    }));
-    await get().persist();
-
-    return { betId: tx.id, status: win ? 'won' : 'lost', payout };
+    await get().loadFromApi();
+    return { betId: res.betId, status: res.status, payout: 0 };
   },
 
-  addExposure: (amount) => {
-    const { wallet } = get();
-    if (!wallet) return;
-    set({ wallet: normalizeWallet({ ...wallet, exposure: wallet.exposure + amount }) });
-    get().persist();
-  },
+  addExposure: () => {},
 }));

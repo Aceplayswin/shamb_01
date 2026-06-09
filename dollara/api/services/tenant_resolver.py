@@ -22,20 +22,19 @@ from django.conf import settings
 from django.core.cache import cache
 from django.db.utils import OperationalError, ProgrammingError
 
-from tenants.models import Domain, Product, TenantDatabase
+from tenants.models import Database, Product
 from tenants.state import register_tenant_connection, set_current_tenant, tenant_db_alias_for
 
 _LOCAL_HOSTS = {'localhost', '127.0.0.1', '0.0.0.0', 'testserver'}
 
-# Optional control-plane tables (domains, tenant_databases, branding, ...) may
-# not be provisioned in every deployment — only `products` is required for
-# tenant resolution. Treat a missing optional table as "no row" instead of a
-# hard 500 so single-tenant deployments work with just the products table.
+# Optional control-plane tables (``databases``, ``branding``, ...) may not be
+# provisioned in every deployment — only ``products`` is required for tenant
+# resolution. Treat a missing optional table as "no row" instead of a hard 500.
 _MISSING_TABLE_ERRORS = (ProgrammingError, OperationalError)
 
 
 def _first_or_none(queryset):
-    """`.first()` that tolerates an optional control-plane table being absent."""
+    """``.first()`` that tolerates an optional control-plane table being absent."""
     try:
         return queryset.first()
     except _MISSING_TABLE_ERRORS:
@@ -56,12 +55,7 @@ def _strip_port(host: str) -> str:
 
 
 def _slug_from_host(host: str) -> str | None:
-    """Best-effort slug extraction from a hostname.
-
-    - Exact domain match wins (handled by the caller via the ``domains`` table).
-    - Otherwise treat the left-most label as the tenant slug when it is a
-      subdomain of a known base domain or *.localhost (e.g. ``productb.localhost``).
-    """
+    """Best-effort slug extraction from a hostname subdomain label."""
     host = _strip_port(host)
     if not host or host in _LOCAL_HOSTS:
         return None
@@ -80,14 +74,9 @@ def _product_for_request(host: str, header_slug: str | None, jwt_slug: str | Non
         if product:
             return product
 
-    # 2. Exact domain match, then subdomain heuristic.
+    # 2. Subdomain heuristic from request host.
     clean_host = _strip_port(host)
     if clean_host and clean_host not in _LOCAL_HOSTS:
-        domain = _first_or_none(
-            Domain.objects.filter(host=clean_host).select_related('product')
-        )
-        if domain:
-            return domain.product
         sub_slug = _slug_from_host(clean_host)
         if sub_slug:
             product = Product.objects.filter(slug=sub_slug).first()
@@ -124,7 +113,7 @@ def resolve_tenant(
         return None
 
     alias = tenant_db_alias_for(product.slug)
-    db = _first_or_none(TenantDatabase.objects.filter(product_id=product.id))
+    db = _first_or_none(Database.objects.filter(product_id=product.id))
     if db:
         register_tenant_connection(
             alias,
@@ -138,8 +127,6 @@ def resolve_tenant(
     else:
         # No isolated tenant database is provisioned for this product (e.g. a
         # single-tenant deployment that keeps everything in the master DB).
-        # Leave the DB alias unset so the router falls back to `default`
-        # instead of routing to an unregistered `tenant_<slug>` connection.
         active_alias = None
     set_current_tenant(product.slug, active_alias)
     return ResolvedTenant(

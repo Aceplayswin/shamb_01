@@ -16,7 +16,8 @@ from django.conf import settings
 from django.core.management import call_command
 from django.db import connections
 
-from tenants.models import Database, Product, Url
+from services.branding import default_branding_for_product
+from tenants.models import Branding, Database, Product, Url
 from tenants.state import register_tenant_connection, tenant_db_alias_for, use_tenant
 
 INIT_SQL = Path(getattr(settings, 'TENANT_SCHEMA_PATH', settings.BASE_DIR / 'database' / 'init.sql'))
@@ -75,6 +76,7 @@ def provision_product(
     db_password: str | None = None,
     fe_url: str = '',
     be_url: str = '',
+    branding: dict | None = None,
     seed: bool = True,
     stdout=None,
 ) -> Product:
@@ -97,6 +99,11 @@ def provision_product(
     # Seed one theme row per catalog theme (theme1 active by default). Idempotent.
     from tenants.themes import ensure_product_themes
     ensure_product_themes(product)
+
+    branding_data = default_branding_for_product(product)
+    branding_data.update(branding or {})
+    branding_data['product_name'] = (branding_data.get('product_name') or name).strip()
+    Branding.objects.update_or_create(product=product, defaults=branding_data)
 
     Url.objects.update_or_create(
         product=product,

@@ -1,10 +1,24 @@
+import { useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '../components/Icon';
 import { CATEGORIES } from '../config';
-import { getGamesByCategory } from '../data/mockGames';
+import { api } from '../services/api';
 import { colors, radius, spacing } from '../theme';
 
 export function GamesScreen({ navigation }) {
+  const [counts, setCounts] = useState({});
+
+  useEffect(() => {
+    CATEGORIES.forEach(async (cat) => {
+      try {
+        const games = await api(`/api/v1/games?category=${cat.api}&limit=200`);
+        setCounts((prev) => ({ ...prev, [cat.api]: games.length }));
+      } catch {
+        setCounts((prev) => ({ ...prev, [cat.api]: 0 }));
+      }
+    });
+  }, []);
+
   return (
     <View style={styles.flex}>
       <Text style={styles.subtitle}>Browse by category</Text>
@@ -14,7 +28,7 @@ export function GamesScreen({ navigation }) {
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => {
-          const count = getGamesByCategory(item.api).length;
+          const count = counts[item.api];
           return (
             <Pressable
               style={({ pressed }) => [styles.row, pressed && styles.pressed]}
@@ -31,7 +45,9 @@ export function GamesScreen({ navigation }) {
               </View>
               <View style={styles.body}>
                 <Text style={styles.label}>{item.label}</Text>
-                <Text style={styles.count}>{count} games</Text>
+                <Text style={styles.count}>
+                  {count === undefined ? 'Loading…' : `${count} games`}
+                </Text>
               </View>
               <Icon name="chevron-forward" size={20} color={colors.textDim} />
             </Pressable>

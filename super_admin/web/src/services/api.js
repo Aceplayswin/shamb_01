@@ -87,6 +87,13 @@ export const updateUrls = (slug, payload) =>
     method: 'PUT',
     body: JSON.stringify(payload),
   });
+export const getBranding = (slug) =>
+  superAdminApi(`/api/v1/super-admin/products/${slug}/branding`);
+export const updateBranding = (slug, payload) =>
+  superAdminApi(`/api/v1/super-admin/products/${slug}/branding`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
 export const testConnection = (payload) =>
   superAdminApi('/api/v1/super-admin/test-connection', {
     method: 'POST',

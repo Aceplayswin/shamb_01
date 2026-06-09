@@ -29,6 +29,8 @@ import {
 import Swal from 'sweetalert2';
 import { useBranding } from '@/hooks/useBranding';
 import { ThemeToggleButton } from '@/components/ThemeToggle';
+import { UserAuthActions } from '@/components/UserAuthActions';
+import { useAuthStore } from '@/store/auth';
 
 const PRIMARY = [
   { label: 'Home', href: '/', icon: Home },
@@ -52,12 +54,11 @@ const CATEGORIES = [
   { label: 'Andar', href: '#', icon: HeartHandshake, color: 'text-rose-400' },
 ];
 
-const MOBILE_TABS = [
+const MOBILE_TABS_BASE = [
   { label: 'Home', href: '/', icon: Home },
   { label: 'Casino', href: '#', icon: Dices },
   { label: 'Sports', href: '#', icon: Trophy },
   { label: 'Promos', href: '#', icon: Gift },
-  { label: 'Account', href: '/login', icon: User },
 ];
 
 const fire = (title, text, icon = 'info') =>
@@ -96,6 +97,13 @@ function RailItem({ item }) {
 export function Header() {
   const branding = useBranding();
   const brandName = branding.product_name;
+  const token = useAuthStore((s) => s.token);
+  const wallet = useAuthStore((s) => s.wallet);
+  const mobileTabs = [
+    ...MOBILE_TABS_BASE,
+    { label: 'Account', href: token ? '/profile' : '/login', icon: User },
+  ];
+  const balance = wallet?.available ?? wallet?.main ?? 0;
   return (
     <>
       {/* ===== Desktop: full-height side rail (crosses under navbar) ===== */}
@@ -193,35 +201,26 @@ export function Header() {
           </span>
 
           {/* Wallet / balance pill */}
-          <button
-            onClick={() => fire('Wallet', 'Add funds via UPI, cards or wallets.', 'success')}
+          <Link
+            href={token ? '/deposit' : '/login'}
             className="hidden items-center gap-2 rounded-full border border-hairline/10 bg-panel/60 py-1 pl-3 pr-1 md:flex"
           >
             <Wallet className="h-4 w-4 text-brand-400" />
-            <span className="text-sm font-bold text-app-fg">₹0.00</span>
+            <span className="text-sm font-bold text-app-fg">
+              ₹{Number(balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
             <span className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-surface-950">
               <Plus className="h-4 w-4" strokeWidth={3} />
             </span>
-          </button>
+          </Link>
 
-          <Link
-            href="/login"
-            className="rounded-xl border border-hairline/10 px-4 py-2 text-xs font-bold text-app-fg transition hover:border-brand-400/50 hover:bg-panel"
-          >
-            LOG IN
-          </Link>
-          <Link
-            href="/register"
-            className="rounded-xl bg-gradient-to-r from-brand-400 to-brand-600 px-4 py-2 text-xs font-bold text-surface-950 shadow-glow transition hover:from-brand-300 hover:to-brand-500"
-          >
-            REGISTER
-          </Link>
+          <UserAuthActions />
         </div>
       </header>
 
       {/* ===== Mobile: fixed bottom tab bar ===== */}
       <nav className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-hairline/[0.06] bg-rail/90 backdrop-blur-xl lg:hidden">
-        {MOBILE_TABS.map((item, i) => {
+        {mobileTabs.map((item, i) => {
           const Icon = item.icon;
           const isCenter = i === 2;
           const onClick = (e) => {

@@ -42,7 +42,16 @@ export function tenantHeaders(extra = {}) {
   return { 'X-Tenant': getTenantSlug(), ...extra };
 }
 
+// Branding is authored in Super Admin and served from the platform control-plane.
+// Falls back to the product API when the platform is unreachable (local dev).
 export async function fetchBranding() {
+  const slug = getTenantSlug();
+  try {
+    const res = await fetch(`${PLATFORM_API_URL}/api/v1/public/products/${slug}/branding`);
+    if (res.ok) return res.json();
+  } catch {
+    // Fall through to product API.
+  }
   const res = await fetch(`${API_URL}/api/v1/branding`, {
     headers: tenantHeaders(),
   });
@@ -50,10 +59,7 @@ export async function fetchBranding() {
   return res.json();
 }
 
-// The super admin chooses which theme this product renders. We resolve it from
-// the platform control-plane's public (unauthenticated) theme endpoint, keyed by
-// the current tenant slug. Returns the active theme key, or null if the product
-// is disabled / unreachable (callers fall back to the default theme).
+// Live theme is chosen by Super Admin per product.
 export async function fetchActiveTheme() {
   const slug = getTenantSlug();
   try {

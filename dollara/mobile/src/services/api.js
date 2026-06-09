@@ -1,4 +1,4 @@
-import { API_URL, TENANT_SLUG } from '../tenant';
+import { API_URL, PLATFORM_API_URL, TENANT_SLUG } from '../tenant';
 import { useAuthStore } from '../store/auth';
 
 // Every request carries the X-Tenant header so the backend resolves the right
@@ -32,6 +32,14 @@ export async function detectGeo() {
 }
 
 export async function fetchBranding() {
+  try {
+    const res = await fetch(
+      `${PLATFORM_API_URL}/api/v1/public/products/${TENANT_SLUG}/branding`
+    );
+    if (res.ok) return res.json();
+  } catch {
+    // Fall through to product API.
+  }
   const res = await fetch(`${API_URL}/api/v1/branding`, { headers: tenantHeaders() });
   if (!res.ok) throw new Error('Failed to load branding');
   return res.json();

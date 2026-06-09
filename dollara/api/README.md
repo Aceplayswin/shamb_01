@@ -2,10 +2,10 @@
 
 Multi-tenant, white-label gaming backend for **product deployments** (Dollara,
 Product B, Product C, ...). Each product has its own isolated MySQL database.
-Only branding, domains, and configuration differ between products.
+Branding, themes, and URLs are configured in the master DB via Super Admin.
 
-> **Super Admin** (product onboarding, master DB management) lives in the separate
-> [`super_admin/api`](../../super_admin/api) service — not in this API.
+> **Super Admin** (product onboarding, master DB management, branding, themes)
+> lives in the separate [`super_admin/api`](../../super_admin/api) service.
 
 ## Stack
 
@@ -20,10 +20,11 @@ Only branding, domains, and configuration differ between products.
 ## Architecture
 
 ```
-                       ┌─────────────────────┐
-Super Admin API ─────► │  Master MySQL DB     │  products, domains, branding
-(super_admin/api)      │  (read via resolver) │
-                       └─────────────────────┘
+                       ┌─────────────────────────────────────┐
+Super Admin API ─────► │  Master MySQL DB (master.sql)        │
+(super_admin/api)      │  products, urls, branding, databases │
+                       │  product_themes                      │
+                       └─────────────────────────────────────┘
                                  │ TenantRouter (database-per-tenant)
         ┌────────────────────────┼────────────────────────┐
         ▼                        ▼                         ▼
@@ -32,8 +33,8 @@ Super Admin API ─────► │  Master MySQL DB     │  products, domai
    games, txns, ...)        of init.sql schema)       of init.sql schema)
 ```
 
-- `tenants/` — control-plane models (read from master DB for tenant resolution).
-- `services/` — `tenant_resolver`, `branding` (provisioning is in `super_admin/api`).
+- `tenants/` — read-only control-plane models (mirror of `super_admin/api`).
+- `services/` — `tenant_resolver`, `branding`.
 - `middleware/` — `TenantResolverMiddleware` + `TenantRouter`.
 - `core/` — per-tenant features (auth, wallet, games, transactions, admin, AI).
 
@@ -42,16 +43,30 @@ Super Admin API ─────► │  Master MySQL DB     │  products, domai
 A request's tenant is resolved (in priority order) from:
 
 1. `X-Tenant` / `X-Tenant-ID` header (mobile app, server-to-server).
-2. Request host / subdomain (`dollara.com` -> `dollara`, `productb.localhost` -> `productb`).
+2. Request host / subdomain (`dollara.localhost` → `dollara`).
 3. The `tenant` claim in the JWT.
 4. `DEFAULT_TENANT` (development fallback for `localhost`).
+
+The resolver looks up the tenant's connection in the master `databases` table
+and registers a dynamic Django connection (`tenant_<slug>`).
+
+### Branding & themes
+
+Branding and live theme are managed in Super Admin and exposed via public
+platform endpoints:
+
+- `GET /api/v1/public/products/<slug>/branding`
+- `GET /api/v1/public/products/<slug>/theme`
+
+Product frontends (web/mobile) should prefer those endpoints. This API also
+exposes `GET /api/v1/branding` as a tenant-resolved fallback.
 
 ## Setup
 
 Requires **MySQL 8**. See root [README](../../README.md).
 
-**Prerequisite:** run `seed_master` from `super_admin/api` to create the master DB,
-Super Admin account, and initial tenant databases.
+**Prerequisite:** apply `super_admin/api/database/master.sql` and run
+`seed_master` from `super_admin/api`.
 
 ```bash
 python -m venv .venv
@@ -71,7 +86,7 @@ python manage.py runserver 0.0.0.0:5000
 | Path | Description |
 |------|-------------|
 | `GET /health` | Health check (includes PyTorch version) |
-| `GET /api/v1/branding` | White-label branding for the resolved tenant (public) |
+| `GET /api/v1/branding` | White-label branding for the resolved tenant (fallback) |
 | `POST /api/v1/auth/...` | Per-tenant auth (login, OTP, demo) |
 | `GET/POST /api/v1/wallet...`, `/games...` | Per-tenant features |
 | `POST /api/v1/games/launch` | Launch an aggregator game (see [docs/GAMES.md](docs/GAMES.md)) |
@@ -80,17 +95,8 @@ python manage.py runserver 0.0.0.0:5000
 | `POST /graphql` | GraphQL (Strawberry) |
 | `WS /ws` | Live ticker WebSocket |
 
-The external game aggregator integration (launch flow, AES-encrypted callbacks,
-wallet settlement, the 263-game catalog, and admin controls) is documented in
-**[docs/GAMES.md](docs/GAMES.md)**. Seed the catalog with
-`python manage.py seed_games --tenant <slug>`.
-
-Example — branding differs per tenant:
-
-```bash
-curl -s http://localhost:5000/api/v1/branding -H 'Host: dollara.localhost'
-curl -s http://localhost:5000/api/v1/branding -H 'X-Tenant: productb'
-```
+The external game aggregator integration is documented in **[docs/GAMES.md](docs/GAMES.md)**.
+Seed the catalog with `python manage.py seed_games --tenant <slug>`.
 
 ## Default credentials (after seed_master)
 

@@ -6,11 +6,8 @@ from django.db.utils import OperationalError, ProgrammingError
 
 from tenants.models import Branding, Product
 
-# The optional `branding` control-plane table is absent in single-tenant
-# deployments; fall back to defaults instead of raising a 500.
 _MISSING_TABLE_ERRORS = (ProgrammingError, OperationalError)
 
-# Neutral fallback so the apps never hard-fail and never hardcode a brand name.
 DEFAULT_BRANDING = {
     'slug': None,
     'product_name': 'Gaming Platform',
@@ -27,28 +24,43 @@ DEFAULT_BRANDING = {
     'extra': None,
 }
 
+BRANDING_FIELDS = (
+    'product_name',
+    'logo_url',
+    'favicon_url',
+    'theme_color',
+    'secondary_color',
+    'splash_url',
+    'app_icon_url',
+    'support_email',
+    'support_phone',
+    'terms_url',
+    'privacy_url',
+    'extra',
+)
+
+
+def default_branding_for_product(product: Product) -> dict:
+    data = dict(DEFAULT_BRANDING)
+    data['product_name'] = product.name
+    return data
+
 
 def serialize_branding(product: Product, branding: Branding | None) -> dict:
     if branding is None:
-        data = dict(DEFAULT_BRANDING)
-        data['slug'] = product.slug
-        data['product_name'] = product.name
-        return data
-    return {
-        'slug': product.slug,
-        'product_name': branding.product_name,
-        'logo_url': branding.logo_url,
-        'favicon_url': branding.favicon_url,
-        'theme_color': branding.theme_color,
-        'secondary_color': branding.secondary_color,
-        'splash_url': branding.splash_url,
-        'app_icon_url': branding.app_icon_url,
-        'support_email': branding.support_email,
-        'support_phone': branding.support_phone,
-        'terms_url': branding.terms_url,
-        'privacy_url': branding.privacy_url,
-        'extra': branding.extra,
-    }
+        data = default_branding_for_product(product)
+    else:
+        data = {field: getattr(branding, field) for field in BRANDING_FIELDS}
+    data['slug'] = product.slug
+    return data
+
+
+def get_branding_for_product(product: Product) -> dict:
+    try:
+        branding = Branding.objects.filter(product=product).first()
+    except _MISSING_TABLE_ERRORS:
+        branding = None
+    return serialize_branding(product, branding)
 
 
 def get_branding_for_slug(slug: str | None) -> dict:
@@ -60,8 +72,4 @@ def get_branding_for_slug(slug: str | None) -> dict:
         product = None
     if not product:
         return dict(DEFAULT_BRANDING)
-    try:
-        branding = Branding.objects.filter(product=product).first()
-    except _MISSING_TABLE_ERRORS:
-        branding = None
-    return serialize_branding(product, branding)
+    return get_branding_for_product(product)

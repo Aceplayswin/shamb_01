@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Sparkles, Lock, User as UserIcon, Loader2, ShieldCheck, AlertCircle } from 'lucide-react';
 import { adminLogin, getAdminToken } from '@/services/adminApi';
 import { useBranding } from '@/hooks/useBranding';
+import { PasswordInput } from '@/components/PasswordInput';
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -89,12 +90,12 @@ export default function AdminLoginPage() {
               Password
             </span>
             <div className="relative">
-              <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-              <input
-                type="password"
+              <Lock className="pointer-events-none absolute left-3.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              <PasswordInput
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-xl border border-white/10 bg-surface-950/60 py-3 pl-10 pr-3.5 text-sm text-white placeholder-slate-500 transition focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400/40"
+                className="w-full rounded-xl border border-white/10 bg-surface-950/60 py-3 pl-10 pr-11 text-sm text-white placeholder-slate-500 transition focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400/40"
+                toggleClassName="absolute right-3 top-1/2 z-10 -translate-y-1/2 text-slate-500 transition hover:text-slate-300"
                 placeholder="••••••••"
                 required
                 autoComplete="current-password"

@@ -1,8 +1,8 @@
-"""Public tenant-resolved branding endpoint.
+"""Public tenant-resolved branding endpoint (fallback).
 
-Super Admin control-plane endpoints live in the separate ``super_admin/api``
-service. This module only exposes the public branding API used by product
-frontends (web/mobile).
+Branding is authored in Super Admin and stored in the master ``branding`` table.
+Product frontends should prefer ``GET /api/v1/public/products/<slug>/branding`` on
+the platform API; this view remains for direct product-API access.
 """
 
 from django.http import JsonResponse

@@ -42,6 +42,8 @@ python manage.py runserver 0.0.0.0:8000
 |--------|------|-------------|
 | GET | `/health` | Health check |
 | POST | `/api/v1/super-admin/auth/login` | Super Admin login |
-| GET/POST | `/api/v1/super-admin/products...` | Product CRUD, provision, branding, domains |
+| GET/PUT | `/api/v1/super-admin/products/<slug>/branding` | White-label branding (admin) |
+| GET | `/api/v1/public/products/<slug>/branding` | Public branding for product frontends |
+| GET | `/api/v1/public/products/<slug>/theme` | Public active theme for product frontends |
 
 Default credentials after `seed_master`: `superadmin` / `Admin@123`

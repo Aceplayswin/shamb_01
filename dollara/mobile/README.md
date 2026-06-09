@@ -25,11 +25,13 @@ tenant config and the dynamically-loaded branding differ.
 
 Edit [src/tenant.js](src/tenant.js) per product build:
 
-- `API_URL` — backend base URL
+- `API_URL` — product API base URL (port 5000)
+- `PLATFORM_API_URL` — Super Admin control-plane API (port 8000) for branding
 - `TENANT_SLUG` — product slug sent as the `X-Tenant` header (e.g. `dollara`, `productb`)
-- `DEFAULT_BRANDING` — fallback name/colors shown before `/api/v1/branding` loads
+- `DEFAULT_BRANDING` — fallback name/colors shown before branding loads
 
-At runtime the app fetches the tenant's branding (name, colors, logo, support)
+At runtime the app fetches branding from the platform public endpoint
+(`/api/v1/public/products/<slug>/branding`), with fallback to the product API,
 and applies it via `src/branding.js`.
 
 | Platform | API host |

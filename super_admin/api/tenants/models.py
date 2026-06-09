@@ -53,8 +53,34 @@ class ProductTheme(models.Model):
         unique_together = (('product', 'theme_key'),)
 
 
+class Branding(models.Model):
+    """White-label branding configuration for a product."""
+
+    id = models.BigAutoField(primary_key=True)
+    product = models.OneToOneField(
+        Product, on_delete=models.CASCADE, db_column='product_id', related_name='branding'
+    )
+    product_name = models.CharField(max_length=150)
+    logo_url = models.CharField(max_length=500, blank=True, default='')
+    favicon_url = models.CharField(max_length=500, blank=True, default='')
+    theme_color = models.CharField(max_length=20, default='#ff9800')
+    secondary_color = models.CharField(max_length=20, default='#a78bfa')
+    splash_url = models.CharField(max_length=500, blank=True, default='')
+    app_icon_url = models.CharField(max_length=500, blank=True, default='')
+    support_email = models.CharField(max_length=150, blank=True, default='')
+    support_phone = models.CharField(max_length=50, blank=True, default='')
+    terms_url = models.CharField(max_length=500, blank=True, default='')
+    privacy_url = models.CharField(max_length=500, blank=True, default='')
+    extra = models.JSONField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = 'tenants'
+        db_table = 'branding'
+
+
 class Url(models.Model):
-    """FE, BE, and host URLs for a product."""
+    """FE and BE URLs for a product."""
 
     id = models.BigAutoField(primary_key=True)
     product = models.OneToOneField(

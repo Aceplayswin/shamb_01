@@ -17,6 +17,8 @@ urlpatterns = [
     path('super-admin/products/<slug:slug>/database', views.product_database_update),
     # URLs
     path('super-admin/products/<slug:slug>/urls', views.product_urls),
+    # Branding
+    path('super-admin/products/<slug:slug>/branding', views.product_branding),
     # Themes
     path('super-admin/themes', views.themes_catalog),
     path('super-admin/products/<slug:slug>/themes', views.product_themes),
@@ -27,6 +29,7 @@ urlpatterns = [
     # Cross-tenant inspection
     path('super-admin/products/<slug:slug>/users', views.product_users),
 
-    # Public (no auth) — product frontends resolve their live theme here.
+    # Public (no auth) — product frontends resolve branding + live theme here.
+    path('public/products/<slug:slug>/branding', views.public_product_branding),
     path('public/products/<slug:slug>/theme', views.public_product_theme),
 ]

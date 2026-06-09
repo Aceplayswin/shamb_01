@@ -5,12 +5,13 @@ import Swal from 'sweetalert2';
 import {
   Box, CheckCircle2, Database, Eye, EyeOff, Globe, Loader2,
   MinusCircle, Palette, Pencil, Plus, Power, Server, Trash2, Wifi, X, XCircle,
-  Check, Circle,
+  Check, Circle, Paintbrush,
 } from 'lucide-react';
 import {
   listProducts, disableProduct, updateProduct, deleteProduct,
   provisionProduct, updateUrls, updateDatabase, testConnection,
   getProductThemes, activateProductTheme, setProductThemeEnabled,
+  getBranding, updateBranding,
 } from '@/services/api';
 import { useTheme } from '../providers';
 import DashboardLayout, { useDashboard } from '../components/DashboardLayout';
@@ -277,6 +278,201 @@ function EditProductModal({ product, onClose, onSaved, theme }) {
   );
 }
 
+const EMPTY_BRANDING = {
+  product_name: '',
+  logo_url: '',
+  favicon_url: '',
+  theme_color: '#ff9800',
+  secondary_color: '#a78bfa',
+  splash_url: '',
+  app_icon_url: '',
+  support_email: '',
+  support_phone: '',
+  terms_url: '',
+  privacy_url: '',
+};
+
+/* ── Branding Modal ── */
+function BrandingModal({ product, onClose, onSaved, theme }) {
+  const swal = (opts) => swalThemed(opts, theme);
+
+  const [form, setForm] = useState(EMPTY_BRANDING);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const data = await getBranding(product.slug);
+        if (!cancelled) {
+          setForm({
+            product_name: data.product_name || product.name,
+            logo_url: data.logo_url || '',
+            favicon_url: data.favicon_url || '',
+            theme_color: data.theme_color || '#ff9800',
+            secondary_color: data.secondary_color || '#a78bfa',
+            splash_url: data.splash_url || '',
+            app_icon_url: data.app_icon_url || '',
+            support_email: data.support_email || '',
+            support_phone: data.support_phone || '',
+            terms_url: data.terms_url || '',
+            privacy_url: data.privacy_url || '',
+          });
+        }
+      } catch (e) {
+        if (!cancelled) swal({ icon: 'error', title: 'Failed to load branding', text: e.message });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product.slug]);
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const handleSave = async () => {
+    if (!form.product_name.trim()) {
+      swal({ icon: 'warning', title: 'Product name is required' });
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateBranding(product.slug, {
+        ...form,
+        product_name: form.product_name.trim(),
+      });
+      onSaved?.();
+      onClose();
+    } catch (e) {
+      swal({ icon: 'error', title: 'Save failed', text: e.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputCls =
+    'w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none ' +
+    'focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 ' +
+    'dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500 dark:focus:border-indigo-400';
+  const labelCls = 'mb-1.5 block text-xs font-semibold text-gray-500 dark:text-gray-400';
+
+  const fields = [
+    { key: 'product_name', label: 'Display Name', placeholder: 'Dollara', type: 'text', span: true },
+    { key: 'logo_url', label: 'Logo URL', placeholder: 'https://cdn.example.com/logo.png', type: 'url', span: true },
+    { key: 'favicon_url', label: 'Favicon URL', placeholder: 'https://cdn.example.com/favicon.ico', type: 'url', span: true },
+    { key: 'theme_color', label: 'Primary Color', placeholder: '#ff9800', type: 'color', span: false },
+    { key: 'secondary_color', label: 'Secondary Color', placeholder: '#a78bfa', type: 'color', span: false },
+    { key: 'splash_url', label: 'Splash Image URL', placeholder: 'https://cdn.example.com/splash.png', type: 'url', span: true },
+    { key: 'app_icon_url', label: 'App Icon URL', placeholder: 'https://cdn.example.com/icon.png', type: 'url', span: true },
+    { key: 'support_email', label: 'Support Email', placeholder: 'support@example.com', type: 'email', span: false },
+    { key: 'support_phone', label: 'Support Phone', placeholder: '+91 98765 43210', type: 'text', span: false },
+    { key: 'terms_url', label: 'Terms URL', placeholder: 'https://example.com/terms', type: 'url', span: true },
+    { key: 'privacy_url', label: 'Privacy URL', placeholder: 'https://example.com/privacy', type: 'url', span: true },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 flex max-h-[90vh] w-full max-w-3xl flex-col rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800">
+        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4 dark:border-gray-700">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600">
+              <Paintbrush className="h-4 w-4 text-white" />
+            </span>
+            <div>
+              <h2 className="font-display text-sm font-bold text-gray-900 dark:text-white">
+                Branding — {product.name}
+              </h2>
+              <p className="text-xs text-gray-400">White-label name, colors, and asset URLs</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-200">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto p-6">
+          {loading ? (
+            <div className="flex items-center gap-2 p-6 text-gray-400"><Loader2 className="h-5 w-5 animate-spin" /> Loading branding…</div>
+          ) : (
+            <>
+              <div className="mb-5 flex items-center gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/60">
+                {form.logo_url ? (
+                  <img src={form.logo_url} alt="" className="h-12 w-12 rounded-xl object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                ) : (
+                  <span
+                    className="flex h-12 w-12 items-center justify-center rounded-xl text-lg font-black text-white"
+                    style={{ background: `linear-gradient(135deg, ${form.theme_color}, ${form.secondary_color})` }}
+                  >
+                    {(form.product_name || product.name).charAt(0).toUpperCase()}
+                  </span>
+                )}
+                <div className="min-w-0">
+                  <p className="truncate font-bold text-gray-900 dark:text-white">{form.product_name || product.name}</p>
+                  <p className="text-xs text-gray-400">Live preview of brand colors and display name</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                {fields.map(({ key, label, placeholder, type, span }) => (
+                  <div key={key} className={`${span ? 'sm:col-span-2' : ''} text-sm`}>
+                    <label htmlFor={`b-${key}`} className={labelCls}>{label}</label>
+                    {type === 'color' ? (
+                      <div className="flex items-center gap-3">
+                        <input
+                          id={`b-${key}`}
+                          type="color"
+                          value={form[key]}
+                          onChange={set(key)}
+                          className="h-10 w-14 cursor-pointer rounded-lg border border-gray-300 bg-transparent p-1 dark:border-gray-600"
+                        />
+                        <input
+                          type="text"
+                          value={form[key]}
+                          onChange={set(key)}
+                          placeholder={placeholder}
+                          className={inputCls}
+                        />
+                      </div>
+                    ) : (
+                      <input
+                        id={`b-${key}`}
+                        type={type === 'url' ? 'url' : type}
+                        value={form[key]}
+                        onChange={set(key)}
+                        placeholder={placeholder}
+                        className={inputCls}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-3 border-t border-gray-100 px-6 py-4 dark:border-gray-700">
+          <button type="button" onClick={onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={loading || saving}
+            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-60 transition-colors"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paintbrush className="h-4 w-4" />}
+            Save Branding
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Themes Modal ──
    Per-product Themes table. All catalog themes appear as rows; exactly one is the
    live (active) theme. Activating a theme deactivates the rest. A theme can be
@@ -457,8 +653,9 @@ function ProductsContent() {
   const [products,    setProducts]    = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [busy,        setBusy]        = useState(null);
-  const [editTarget,  setEditTarget]  = useState(null);
-  const [themeTarget, setThemeTarget] = useState(null);
+  const [editTarget,     setEditTarget]     = useState(null);
+  const [themeTarget,    setThemeTarget]    = useState(null);
+  const [brandingTarget, setBrandingTarget] = useState(null);
 
   const swal = (opts) => swalThemed(opts, theme);
 
@@ -517,6 +714,15 @@ function ProductsContent() {
         />
       )}
 
+      {brandingTarget && (
+        <BrandingModal
+          product={brandingTarget}
+          theme={theme}
+          onClose={() => setBrandingTarget(null)}
+          onSaved={() => { load(); }}
+        />
+      )}
+
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -569,6 +775,9 @@ function ProductsContent() {
                       <button onClick={() => setEditTarget(p)} className={actionBtn}>
                         <Pencil className="h-3.5 w-3.5" /> Edit
                       </button>
+                      <button onClick={() => setBrandingTarget(p)} className={actionBtn}>
+                        <Paintbrush className="h-3.5 w-3.5" /> Branding
+                      </button>
                       <button onClick={() => setThemeTarget(p)} className={actionBtn}>
                         <Palette className="h-3.5 w-3.5" /> Themes
                       </button>
@@ -594,7 +803,17 @@ function ProductsContent() {
                   </div>
 
                   {/* Info cards */}
-                  <div className="mt-4 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="mt-4 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-5">
+                    <div className="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-900/60">
+                      <p className="flex items-center gap-1.5 font-medium text-gray-500 dark:text-gray-400">
+                        <Paintbrush className="h-3.5 w-3.5" /> Brand
+                      </p>
+                      <p className="mt-1 font-semibold text-gray-900 dark:text-white">{p.branding?.product_name || p.name}</p>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <span className="h-3 w-3 rounded-full border border-gray-200 dark:border-gray-600" style={{ background: p.branding?.theme_color || '#ff9800' }} />
+                        <span className="h-3 w-3 rounded-full border border-gray-200 dark:border-gray-600" style={{ background: p.branding?.secondary_color || '#a78bfa' }} />
+                      </div>
+                    </div>
                     <div className="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-900/60">
                       <p className="flex items-center gap-1.5 font-medium text-gray-500 dark:text-gray-400">
                         <Palette className="h-3.5 w-3.5" /> Live Theme

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -12,6 +13,8 @@ import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { Icon } from '../components/Icon';
 import { Input } from '../components/Input';
+import { PasswordInput } from '../components/PasswordInput';
+import { api } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { colors, spacing } from '../theme';
 import { useBranding } from '../branding';
@@ -25,32 +28,45 @@ export function LoginScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
 
   const submit = async () => {
+    if (!phone || !password) {
+      Alert.alert('Missing fields', 'Enter your phone number and password.');
+      return;
+    }
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 600));
-    await setAuth({
-      token: `user_${Date.now()}`,
-      userId: 'user-local',
-      username: phone ? `user_${phone.slice(-4)}` : 'player',
-      fullName: 'Player',
-      phone: phone || '9876543210',
-      isDemo: false,
-    });
-    setLoading(false);
-    navigation.goBack();
+    try {
+      const result = await api('/api/v1/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ phone, password }),
+      });
+      await setAuth({
+        token: result.token,
+        userId: result.userId,
+        isDemo: false,
+      });
+      navigation.goBack();
+    } catch (e) {
+      Alert.alert('Login failed', e.message ?? 'Invalid phone or password');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const tryDemo = async () => {
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 400));
-    await setAuth({
-      token: 'mock-demo-token',
-      username: 'demo_user',
-      fullName: 'Demo Player',
-      phone: '9999999999',
-      isDemo: true,
-    });
-    setLoading(false);
-    navigation.goBack();
+    try {
+      const result = await api('/api/v1/auth/demo', { method: 'POST' });
+      await setAuth({
+        token: result.token,
+        userId: result.demoId,
+        username: result.demoId,
+        isDemo: true,
+      });
+      navigation.goBack();
+    } catch (e) {
+      Alert.alert('Demo failed', e.message ?? 'Could not start demo session');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -70,7 +86,7 @@ export function LoginScreen({ navigation }) {
             <Icon name="log-in-outline" size={28} color={colors.brand400} />
             <View>
               <Text style={styles.title}>Welcome back</Text>
-              <Text style={styles.subtitle}>Sign in to your account</Text>
+              <Text style={styles.subtitle}>Sign in with phone and password</Text>
             </View>
           </View>
 
@@ -81,10 +97,9 @@ export function LoginScreen({ navigation }) {
             value={phone}
             onChangeText={setPhone}
           />
-          <Input
+          <PasswordInput
             label="Password"
             placeholder="Enter password"
-            secureTextEntry
             value={password}
             onChangeText={setPassword}
           />
