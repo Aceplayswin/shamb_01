@@ -88,9 +88,23 @@ function GameCard({ item, onPlay, theme = THEMES.casino, rank }) {
       onClick={() => onPlay(item)}
       className={`group relative flex aspect-[3/4] w-44 shrink-0 snap-start flex-col justify-end overflow-hidden rounded-2xl border border-hairline/[0.07] bg-panel text-left transition-all duration-300 hover:-translate-y-1 hover:border-hairline/20 ${theme.glow} sm:w-48`}
     >
-      {/* Art placeholder — themed gradient mesh (kept on the fixed dark scale for contrast against any theme) */}
-      <div className={`absolute inset-0 bg-gradient-to-br ${theme.ring} via-surface-800 to-surface-950`} />
-      <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-white/[0.04] blur-2xl transition group-hover:bg-white/[0.08]" />
+      {item.thumbnail_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={item.thumbnail_url}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          loading="lazy"
+        />
+      ) : (
+        <>
+          <div className={`absolute inset-0 bg-gradient-to-br ${theme.ring} via-surface-800 to-surface-950`} />
+          <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-white/[0.04] blur-2xl transition group-hover:bg-white/[0.08]" />
+        </>
+      )}
+      {item.thumbnail_url ? (
+        <div className="absolute inset-0 bg-gradient-to-t from-surface-950 via-surface-950/40 to-transparent" />
+      ) : null}
 
       {/* Top badges */}
       <div className="absolute left-3 right-3 top-3 flex items-center justify-between">
@@ -327,9 +341,9 @@ export default function Theme1Home() {
           ) : loading ? (
             <p className="py-16 text-center text-muted">Loading games…</p>
           ) : error ? (
-            <p className="py-16 text-center text-red-400">{error}. Start the API and run seed_games.</p>
+            <p className="py-16 text-center text-red-400">{error}. Start the API and import database/init.sql.</p>
           ) : games.length === 0 ? (
-            <p className="py-16 text-center text-muted">No games in catalog. Run seed_games on the API.</p>
+            <p className="py-16 text-center text-muted">No games in catalog. Import database/init.sql on the API.</p>
           ) : (
             <>
               <section>

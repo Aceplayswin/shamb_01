@@ -96,8 +96,8 @@ python manage.py runserver 0.0.0.0:5000
 | `WS /ws` | Live ticker WebSocket |
 
 The external game aggregator integration is documented in **[docs/GAMES.md](docs/GAMES.md)**.
-Seed the catalog with `python manage.py seed_games --tenant <slug>`.
+Import a fresh tenant database with `mysql <tenant_db> < database/init.sql` (schema + seed data: admin, 263 games, settings).
 
-## Default credentials (after seed_master)
+## Default credentials (after init.sql import)
 
 - Per-tenant admin (each tenant DB): `superadmin` / `Admin@123`

@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { api } from '@/services/api';
+import { useAuthStore } from '@/store/auth';
 
 const QUICK_AMOUNTS = [500, 1000, 2500, 5000, 10000];
 const PAYMENT_METHODS = [
@@ -12,6 +14,8 @@ const PAYMENT_METHODS = [
 ];
 
 export default function Theme1Deposit() {
+  const router = useRouter();
+  const { token, isHydrated, hydrate } = useAuthStore();
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,6 +24,14 @@ export default function Theme1Deposit() {
 
   const numAmount = parseFloat(amount) || 0;
   const bonus = numAmount >= 1000 ? numAmount * 0.5 : 0;
+
+  useEffect(() => {
+    hydrate();
+  }, [hydrate]);
+
+  useEffect(() => {
+    if (isHydrated && !token) router.replace('/login');
+  }, [isHydrated, token, router]);
 
   const submit = async () => {
     setLoading(true);
@@ -30,7 +42,12 @@ export default function Theme1Deposit() {
       });
       setResult(res);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Deposit failed');
+      const msg = e instanceof Error ? e.message : 'Deposit failed';
+      if (/log in again|unauthorized/i.test(msg)) {
+        router.replace('/login');
+        return;
+      }
+      alert(msg);
     } finally {
       setLoading(false);
     }

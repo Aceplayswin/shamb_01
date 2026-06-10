@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from './Icon';
 import { colors, radius, spacing } from '../theme';
 
@@ -20,7 +20,11 @@ export function GameCard({ game, onPress }) {
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
       <View style={styles.thumb}>
-        <Icon name={iconName} size={32} color={colors.brand400} />
+        {game.thumbnail_url ? (
+          <Image source={{ uri: game.thumbnail_url }} style={styles.thumbImage} resizeMode="cover" />
+        ) : (
+          <Icon name={iconName} size={32} color={colors.brand400} />
+        )}
         {game.is_provably_fair ? (
           <View style={styles.badge}>
             <Icon name="shield-checkmark" size={10} color={colors.green} />
@@ -61,6 +65,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface700,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  thumbImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
   },
   badge: {
     position: 'absolute',

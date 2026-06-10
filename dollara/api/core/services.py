@@ -247,8 +247,16 @@ def login_admin(username: str, password: str) -> dict:
     }
 
 
+def _require_player(user_id: int) -> User:
+    user = User.objects.filter(id=user_id, role=User.Role.USER).first()
+    if not user:
+        raise ValueError('User account not found. Please log in again.')
+    return user
+
+
 def get_wallet(user_id: int) -> dict:
-    wallet = Wallet.objects.get(user_id=user_id)
+    _require_player(user_id)
+    wallet, _ = Wallet.objects.get_or_create(user_id=user_id, defaults={'currency': 'INR'})
     main = float(wallet.main_balance)
     locked = float(wallet.locked_balance)
     return {
@@ -262,14 +270,17 @@ def get_wallet(user_id: int) -> dict:
 
 
 def create_deposit(user_id: int, amount: float, payment_method: str, currency: str = 'INR') -> dict:
-    tx = Transaction.objects.create(
-        user_id=user_id,
-        type=Transaction.TxType.DEPOSIT,
-        amount=Decimal(str(amount)),
-        currency=currency,
-        status=Transaction.Status.PENDING,
-        payment_method=payment_method,
-    )
+    _require_player(user_id)
+    Wallet.objects.get_or_create(user_id=user_id, defaults={'currency': currency})
+    with tenant_atomic():
+        tx = Transaction.objects.create(
+            user_id=user_id,
+            type=Transaction.TxType.DEPOSIT,
+            amount=Decimal(str(amount)),
+            currency=currency,
+            status=Transaction.Status.PENDING,
+            payment_method=payment_method,
+        )
     return {'transactionId': tx.id, 'status': 'pending'}
 
 
@@ -289,6 +300,7 @@ def confirm_deposit(transaction_id: int, reference_number: str) -> dict:
 
 
 def create_withdrawal(user_id: int, amount: float, payment_method: str) -> dict:
+    _require_player(user_id)
     wallet_data = get_wallet(user_id)
     if amount > wallet_data['available']:
         raise ValueError('Insufficient balance')

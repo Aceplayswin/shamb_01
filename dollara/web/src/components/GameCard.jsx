@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { GameThumbnail } from '@/components/GameThumbnail';
 
 export function GameCard({ game }) {
   return (
@@ -7,9 +8,17 @@ export function GameCard({ game }) {
       className="group card-glass overflow-hidden transition hover:border-brand-500/30 hover:shadow-lg hover:shadow-brand-500/10"
     >
       <div className="relative aspect-video bg-gradient-to-br from-surface-700 to-surface-800">
-        <div className="flex h-full items-center justify-center text-4xl opacity-50">
-          {game.category === 'ai_games' ? '🤖' : '🎮'}
-        </div>
+        {game.thumbnail_url ? (
+          <GameThumbnail
+            src={game.thumbnail_url}
+            alt={game.name}
+            className="absolute inset-0"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-4xl opacity-50">
+            {game.category === 'ai_games' ? '🤖' : '🎮'}
+          </div>
+        )}
         {game.is_provably_fair && (
           <span className="absolute left-2 top-2 rounded bg-green-500/20 px-2 py-0.5 text-xs text-green-400">
             Provably Fair

@@ -2,7 +2,7 @@
 
 Implements the Super Admin "Create Product" / "Create Tenant Database"
 capability: register a product in the master DB, create its isolated MySQL
-database, apply the per-tenant schema, and seed initial data. Designed so new
+database, apply the per-tenant schema (includes seed data). Designed so new
 products can be onboarded dynamically with no code changes.
 """
 
@@ -13,12 +13,11 @@ import subprocess
 from pathlib import Path
 
 from django.conf import settings
-from django.core.management import call_command
 from django.db import connections
 
 from services.branding import default_branding_for_product
 from tenants.models import Branding, Database, Product, Url
-from tenants.state import register_tenant_connection, tenant_db_alias_for, use_tenant
+from tenants.state import register_tenant_connection, tenant_db_alias_for
 
 INIT_SQL = Path(getattr(settings, 'TENANT_SCHEMA_PATH', settings.BASE_DIR / 'database' / 'init.sql'))
 
@@ -133,11 +132,6 @@ def provision_product(
     register_tenant_connection(
         alias, name=db_name, host=db_host, port=db_port, user=db_user, password=db_password
     )
-    if seed:
-        if stdout:
-            stdout('  seeding tenant data ...')
-        with use_tenant(slug, alias):
-            call_command('seed', tenant=slug, brand_name=name)
 
     tenant_db.is_provisioned = True
     tenant_db.save(update_fields=['is_provisioned', 'updated_at'])

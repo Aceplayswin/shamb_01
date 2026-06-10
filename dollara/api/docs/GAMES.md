@@ -70,8 +70,8 @@ The aggregator posts callbacks to `${GAME_CALLBACK_BASE_URL}/api/v1/games/callba
 
 ## 3. Data model
 
-New tables (schema in `database/init.sql`; idempotent ALTERs for existing tenant
-DBs in `database/migrations/001_gaming_module.sql`):
+Schema and seed data live in `database/init.sql` (import that file for new tenant
+databases):
 
 - **`games`** (extended): `game_uid` (aggregator UID, indexed), `game_type`,
   `is_active` (per-game launch toggle).
@@ -163,15 +163,16 @@ race-loss handling — so duplicate/retried deliveries never double-settle.
 
 ---
 
-## 6. Seeding
+## 6. Database import
 
 ```bash
-# 263-game catalog + 7 aggregator providers (upsert by game_uid / provider slug)
-python manage.py seed_games --tenant dollara
+mysql -u <user> -p <tenant_db> < database/init.sql
 ```
 
-Catalog data is auto-generated from the legacy frontend bundle into
-`core/management/commands/_game_catalog.py`. Aggregator `Game Type` values map to
+Includes 7 aggregator providers, 263 games (with thumbnail URLs), platform settings, welcome bonus, and default admin (`superadmin` / `Admin@123`).
+
+Catalog data (263 games with thumbnail URLs) is embedded in `database/init.sql`.
+Aggregator `Game Type` values map to
 our normalized categories:
 
 | Aggregator type | Category |

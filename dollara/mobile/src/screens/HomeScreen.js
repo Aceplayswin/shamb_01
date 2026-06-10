@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -58,7 +59,11 @@ function GameCardMobile({ item, onPlay, isGrid }) {
       style={[styles.gameCard, isGrid ? styles.gameCardGrid : styles.gameCardCarousel]}
     >
       <View style={styles.gameCardInner}>
-        <Icon name={icon} size={28} color={colors.brand400} />
+        {item.thumbnail_url ? (
+          <Image source={{ uri: item.thumbnail_url }} style={styles.gameThumb} resizeMode="cover" />
+        ) : (
+          <Icon name={icon} size={28} color={colors.brand400} />
+        )}
         <Text style={styles.gameName}>{item.name}</Text>
         <Text style={styles.gameProvider}>{item.provider_name ?? item.provider}</Text>
       </View>
@@ -445,6 +450,12 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     backgroundColor: colors.surface700,
     gap: spacing.xs,
+    overflow: 'hidden',
+  },
+  gameThumb: {
+    width: '100%',
+    aspectRatio: 16 / 10,
+    borderRadius: radius.md,
   },
   gameName: { color: colors.text, fontSize: 14, fontWeight: '700', textAlign: 'center' },
   gameProvider: { color: colors.brand400, fontSize: 9, fontWeight: '700', textTransform: 'uppercase' },

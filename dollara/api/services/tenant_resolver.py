@@ -16,6 +16,7 @@ targets the right database. No hardcoded product logic lives here.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 from django.conf import settings
@@ -96,6 +97,22 @@ def _product_for_request(host: str, header_slug: str | None, jwt_slug: str | Non
     return None
 
 
+def _register_env_tenant_db(alias: str) -> str | None:
+    """Register MYSQL_* from the environment for single-tenant / dev deployments."""
+    db_name = os.getenv('MYSQL_DATABASE')
+    if not db_name:
+        return None
+    register_tenant_connection(
+        alias,
+        name=db_name,
+        host=os.getenv('MYSQL_HOST', 'localhost'),
+        port=os.getenv('MYSQL_PORT', '3306'),
+        user=os.getenv('MYSQL_USER', 'root'),
+        password=os.getenv('MYSQL_PASSWORD', ''),
+    )
+    return alias
+
+
 def resolve_tenant(
     *,
     host: str = '',
@@ -125,9 +142,10 @@ def resolve_tenant(
         )
         active_alias = alias
     else:
-        # No isolated tenant database is provisioned for this product (e.g. a
-        # single-tenant deployment that keeps everything in the master DB).
-        active_alias = None
+        # Route feature data to MYSQL_* when configured. Without this, core models
+        # fall back to the master DB while a databases row may later point deposits
+        # at the tenant DB — causing FK failures (user on master, tx on tenant).
+        active_alias = _register_env_tenant_db(alias)
     set_current_tenant(product.slug, active_alias)
     return ResolvedTenant(
         product_id=product.id,

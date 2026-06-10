@@ -1,6 +1,7 @@
 from django.http import JsonResponse
 
 from core.auth_jwt import AuthUser, decode_token
+from core.models import User
 
 STAFF_ROLES = frozenset({'admin', 'super_admin'})
 
@@ -44,6 +45,11 @@ def require_auth(roles: list[str] | None = None):
                 return JsonResponse({'error': 'Unauthorized'}, status=401)
             if roles and not role_is_allowed(request.auth.role, roles):
                 return JsonResponse({'error': 'Forbidden'}, status=403)
+            if request.auth.role == 'user' and not User.objects.filter(id=request.auth.sub).exists():
+                return JsonResponse(
+                    {'error': 'User account not found. Please log in again.'},
+                    status=401,
+                )
             return view_func(request, *args, **kwargs)
         return wrapped
     return decorator

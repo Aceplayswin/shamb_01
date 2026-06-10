@@ -59,9 +59,11 @@ export const useAuthStore = create((set, get) => ({
         });
       } else if (wallet) {
         set({ wallet });
+      } else {
+        get().logout();
       }
     } catch {
-      // ignore
+      get().logout();
     }
   },
 }));

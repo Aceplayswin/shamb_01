@@ -80,6 +80,15 @@ function GameTile({ item, onPlay }) {
       className="group flex shrink-0 flex-col text-left"
     >
       <span className={`relative grid aspect-[3/4] w-32 place-items-center overflow-hidden rounded-xl border border-white/5 bg-gradient-to-br ${hue} via-[#0d1420] to-[#070d16] sm:w-36`}>
+        {item.thumbnail_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={item.thumbnail_url}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+            loading="lazy"
+          />
+        ) : null}
         <span className="absolute inset-0 bg-black/0 transition group-hover:bg-black/40" />
         <span className="relative grid h-12 w-12 scale-90 place-items-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 opacity-0 shadow-glow transition group-hover:scale-100 group-hover:opacity-100">
           <Play className="h-5 w-5 fill-black text-black" />
@@ -98,10 +107,20 @@ function LiveTile({ item, onPlay }) {
       className="group flex shrink-0 flex-col text-left"
     >
       <span className="relative grid aspect-square w-32 place-items-center overflow-hidden rounded-xl border border-white/5 bg-gradient-to-br from-slate-700/40 via-[#0d1420] to-[#070d16] sm:w-36">
+        {item.thumbnail_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={item.thumbnail_url}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+            loading="lazy"
+          />
+        ) : (
+          <Tv className="h-8 w-8 text-slate-500 transition group-hover:text-amber-400" />
+        )}
         <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[0.55rem] font-bold uppercase text-emerald-300 backdrop-blur">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" /> Live
         </span>
-        <Tv className="h-8 w-8 text-slate-500 transition group-hover:text-amber-400" />
       </span>
       <span className="mt-2 w-32 truncate text-sm font-bold text-white sm:w-36">{item.name}</span>
       <span className="w-32 truncate text-xs text-slate-500 sm:w-36">{item.provider_name ?? item.provider}</span>
@@ -218,7 +237,7 @@ export default function Theme2Home() {
         ) : error ? (
           <p className="py-12 text-center text-rose-400">{error}</p>
         ) : games.length === 0 ? (
-          <p className="py-12 text-center text-slate-500">No games found. Run seed_games on the API.</p>
+          <p className="py-12 text-center text-slate-500">No games found. Import database/init.sql on the API.</p>
         ) : tab !== 'lobby' ? (
           <section>
             <RowHeader Icon={Gamepad2} title={`${TABS.find((t) => t.id === tab)?.label ?? 'Games'}`} seeAllHref={tab === 'slots' ? NAV_GAME_LINKS.slots : tab === 'sports' ? NAV_GAME_LINKS.sports : tab === 'live' ? NAV_GAME_LINKS.liveCasino : tab === 'crash' || tab === 'table' ? NAV_GAME_LINKS.crash : undefined} />
