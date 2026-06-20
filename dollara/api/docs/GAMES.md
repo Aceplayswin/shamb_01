@@ -57,7 +57,9 @@ is hardcoded. See `.env.example`. Settings are assembled in
 | `GAME_AGENCY_UID` | Agency identifier with the aggregator |
 | `GAME_AES_SECRET_KEY` | AES-256-ECB key (encrypt launch / decrypt callbacks) |
 | `GAME_PLAYER_PREFIX` | Prefix for `member_account` (`prefix` + user id) |
-| `GAME_SERVER_URL` | Aggregator launch base URL (e.g. `https://bet`) |
+| `GAME_SERVER_URL` | Full aggregator HTTPS base URL from your provider (not the legacy placeholder `https://bet`) |
+| `GAME_MOCK_LAUNCH` | Set `1` to use a local mock game frame instead of calling the aggregator |
+| `GAME_LAUNCH_PATH` | Launch endpoint path (default `/game/v1`) |
 | `GAME_CALLBACK_BASE_URL` | Public base URL the aggregator posts callbacks to |
 | `GAME_HOME_URL` | "Back to lobby" URL passed to launched games |
 | `GAME_CURRENCY_CODE` / `GAME_DEFAULT_LANGUAGE` | Launch defaults |

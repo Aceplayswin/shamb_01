@@ -2,7 +2,7 @@ import json
 
 from django.conf import settings
 from django.db.models import F
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
@@ -306,6 +306,42 @@ def games_callback(request):
         return JsonResponse({'code': 1, 'msg': str(e), 'payload': ''}, status=200)
     except Exception:
         return JsonResponse({'code': 1, 'msg': 'internal_error', 'payload': ''}, status=200)
+
+
+@require_http_methods(['GET'])
+def games_mock_launch(request):
+    """Dev-only placeholder page when GAME_MOCK_LAUNCH is active."""
+    game_uid = request.GET.get('game_uid', '')
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mock game launch</title>
+  <style>
+    body {{
+      margin: 0; min-height: 100vh; display: grid; place-items: center;
+      font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0;
+    }}
+    .card {{
+      max-width: 32rem; padding: 2rem; border-radius: 1rem;
+      background: #1e293b; border: 1px solid #334155; text-align: center;
+    }}
+    h1 {{ margin: 0 0 0.75rem; font-size: 1.25rem; }}
+    p {{ margin: 0.5rem 0; color: #94a3b8; line-height: 1.5; }}
+    code {{ color: #38bdf8; word-break: break-all; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Mock game launch (development)</h1>
+    <p>Launch session created successfully. The real aggregator is not configured.</p>
+    <p>Game UID: <code>{game_uid or 'n/a'}</code></p>
+    <p>Set <code>GAME_SERVER_URL</code> to your provider&apos;s full HTTPS base URL for live play.</p>
+  </div>
+</body>
+</html>"""
+    return HttpResponse(html, content_type='text/html; charset=utf-8')
 
 
 # --- Geo ---

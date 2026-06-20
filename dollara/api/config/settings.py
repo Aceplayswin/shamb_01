@@ -118,3 +118,7 @@ GAME_PROVIDER = {
 # Minimum main-wallet balance required to launch a game (currency units, string
 # so the service layer can build a Decimal without float rounding).
 GAME_MIN_LAUNCH_BALANCE = os.getenv('GAME_MIN_LAUNCH_BALANCE', '100')
+# Set to 1 to skip the real aggregator and serve a local mock game frame.
+GAME_MOCK_LAUNCH = os.getenv('GAME_MOCK_LAUNCH', '').lower() in ('1', 'true', 'yes')
+# Launch endpoint path on the aggregator (default matches legacy /game/v1).
+GAME_LAUNCH_PATH = os.getenv('GAME_LAUNCH_PATH', '/game/v1')

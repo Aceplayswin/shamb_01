@@ -90,6 +90,52 @@ class LaunchTests(SimpleTestCase):
         self.assertEqual(decrypted['credit_amount'], '250.00')
         self.assertEqual(decrypted['callback_url'], 'https://api.test/api/v1/games/callback')
 
+    @override_settings(
+        DEBUG=True,
+        GAME_MOCK_LAUNCH=False,
+        GAME_PROVIDER={
+            'AGENCY_UID': 'test_agency_uid',
+            'AES_SECRET_KEY': '1f806d609f1ef42a131a187d1509ca98',
+            'PLAYER_PREFIX': 'h72add',
+            'SERVER_URL': 'https://bet',
+            'CALLBACK_BASE_URL': 'https://api.test',
+            'HOME_URL': 'https://app.test',
+            'CURRENCY_CODE': 'INR',
+            'DEFAULT_LANGUAGE': 'en',
+            'HTTP_TIMEOUT': 5,
+        },
+    )
+    def test_placeholder_url_uses_mock_in_debug(self):
+        with mock.patch.object(game_provider.requests, 'post') as post:
+            url = game_provider.request_launch_url(
+                user_id=42, game_uid='a04d1f3eb8ccec8a4823bdf18e3f0e84',
+                credit_amount='250.00',
+            )
+        post.assert_not_called()
+        self.assertIn('/api/v1/games/mock-launch', url)
+        self.assertIn('game_uid=a04d1f3eb8ccec8a4823bdf18e3f0e84', url)
+
+    @override_settings(
+        DEBUG=False,
+        GAME_MOCK_LAUNCH=False,
+        GAME_PROVIDER={
+            'AGENCY_UID': 'test_agency_uid',
+            'AES_SECRET_KEY': '1f806d609f1ef42a131a187d1509ca98',
+            'PLAYER_PREFIX': 'h72add',
+            'SERVER_URL': 'https://bet',
+            'CALLBACK_BASE_URL': 'https://api.test',
+            'HOME_URL': 'https://app.test',
+            'CURRENCY_CODE': 'INR',
+            'DEFAULT_LANGUAGE': 'en',
+            'HTTP_TIMEOUT': 5,
+        },
+    )
+    def test_placeholder_url_raises_in_production(self):
+        with self.assertRaises(game_provider.ProviderConfigError):
+            game_provider.request_launch_url(
+                user_id=1, game_uid='abc123', credit_amount='100.00',
+            )
+
     def test_non_zero_code_raises_provider_error(self):
         class _Resp:
             status_code = 200

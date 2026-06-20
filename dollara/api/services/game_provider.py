@@ -21,6 +21,7 @@ import base64
 import json
 import time
 from dataclasses import dataclass
+from urllib.parse import urlencode, urlparse
 
 import requests
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -71,6 +72,36 @@ def get_config() -> ProviderConfig:
     return cfg
 
 
+def _launch_path() -> str:
+    path = getattr(settings, 'GAME_LAUNCH_PATH', '/game/v1')
+    return path if path.startswith('/') else f'/{path}'
+
+
+def _is_placeholder_server_url(url: str) -> bool:
+    """Detect legacy doc placeholders like ``https://bet`` (not a real host)."""
+    if not url:
+        return True
+    host = (urlparse(url).hostname or '').lower()
+    if not host or host == 'bet':
+        return True
+    return '.' not in host
+
+
+def _use_mock_launch(cfg: ProviderConfig) -> bool:
+    if getattr(settings, 'GAME_MOCK_LAUNCH', False):
+        return True
+    if settings.DEBUG and _is_placeholder_server_url(cfg.server_url):
+        return True
+    return False
+
+
+def mock_launch_url(*, game_uid: str) -> str:
+    """Local/dev launch page when the real aggregator is unavailable."""
+    cfg = get_config()
+    qs = urlencode({'game_uid': game_uid})
+    return f'{cfg.callback_base_url}/api/v1/games/mock-launch?{qs}'
+
+
 def _require_launch_config(cfg: ProviderConfig) -> None:
     missing = [
         name
@@ -84,6 +115,12 @@ def _require_launch_config(cfg: ProviderConfig) -> None:
     if missing:
         raise ProviderConfigError(
             f'Game provider not configured: missing {", ".join(missing)}'
+        )
+    if _is_placeholder_server_url(cfg.server_url):
+        raise ProviderConfigError(
+            'GAME_SERVER_URL is invalid (legacy placeholder "https://bet"). '
+            'Set the full aggregator URL from your game provider, or set '
+            'GAME_MOCK_LAUNCH=1 for local development.'
         )
 
 
@@ -196,6 +233,9 @@ def request_launch_url(
     aggregator code, and :class:`ProviderConfigError` if env is incomplete.
     """
     cfg = get_config()
+    if _use_mock_launch(cfg):
+        return mock_launch_url(game_uid=game_uid)
+
     _require_launch_config(cfg)
 
     timestamp = int(time.time() * 1000)
@@ -219,7 +259,7 @@ def request_launch_url(
 
     try:
         resp = requests.post(
-            f'{cfg.server_url}/game/v1',
+            f'{cfg.server_url}{_launch_path()}',
             json=envelope,
             timeout=cfg.http_timeout,
             headers={'Content-Type': 'application/json'},

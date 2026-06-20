@@ -26,6 +26,7 @@ urlpatterns = [
     path('games/pnl', views.games_pnl),
     # Inbound aggregator bet/win callback (auth via AES payload, not JWT).
     path('games/callback', views.games_callback),
+    path('games/mock-launch', views.games_mock_launch),
     # Geo
     path('geo/detect', views.geo_detect),
     # Admin
