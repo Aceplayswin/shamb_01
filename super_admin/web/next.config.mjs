@@ -1,7 +1,18 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  images: { remotePatterns: [{ protocol: 'https', hostname: '**' }] },
+
+  basePath: "/superadmin",
+  assetPrefix: "/superadmin",
+
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "**",
+      },
+    ],
+  },
 };
 
 export default nextConfig;
