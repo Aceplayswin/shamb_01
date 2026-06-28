@@ -41,9 +41,11 @@ GAME_PROVIDER = {
     'PLAYER_PREFIX': 'h72add',
     'SERVER_URL': 'https://aggregator.test',
     'CALLBACK_BASE_URL': 'https://api.test',
+    'CALLBACK_PATH': '/api/v1/games/callback',
     'HOME_URL': 'https://app.test',
     'CURRENCY_CODE': 'INR',
     'DEFAULT_LANGUAGE': 'en',
     'HTTP_TIMEOUT': 5,
 }
+GAME_LAUNCH_PATH = '/game/v1'
 GAME_MIN_LAUNCH_BALANCE = '100'

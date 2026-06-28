@@ -1,6 +1,8 @@
 import json, time, os, base64
 from pathlib import Path
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from services.game_provider import normalize_launch_path
+
 for line in Path('.env').read_text().splitlines():
     line = line.strip()
     if line and not line.startswith('#') and '=' in line:
@@ -10,9 +12,7 @@ AGENCY = os.environ['GAME_AGENCY_UID']
 AES_KEY = os.environ['GAME_AES_SECRET_KEY'].encode()
 PREFIX = os.environ['GAME_PLAYER_PREFIX']
 SERVER_URL = os.environ.get('GAME_SERVER_URL', '').rstrip('/')
-LAUNCH_PATH = os.environ.get('GAME_LAUNCH_PATH', '/game/v1')
-if not LAUNCH_PATH.startswith('/'):
-    LAUNCH_PATH = '/' + LAUNCH_PATH
+LAUNCH_PATH = normalize_launch_path(os.environ.get('GAME_LAUNCH_PATH'))
 HOME_URL = os.environ.get('GAME_HOME_URL', 'http://localhost:3000')
 CALLBACK_BASE = os.environ.get('GAME_CALLBACK_BASE_URL', 'http://localhost:5000').rstrip('/')
 CALLBACK_PATH = os.environ.get('GAME_CALLBACK_PATH', '/api/v1/games/callback')

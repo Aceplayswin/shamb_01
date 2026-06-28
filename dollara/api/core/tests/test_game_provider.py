@@ -7,6 +7,49 @@ from django.test import SimpleTestCase, override_settings
 from services import game_provider
 
 
+class NormalizeLaunchPathTests(SimpleTestCase):
+    def test_bare_slash_becomes_game_v1(self):
+        self.assertEqual(game_provider.normalize_launch_path('/'), '/game/v1')
+
+    def test_empty_becomes_game_v1(self):
+        self.assertEqual(game_provider.normalize_launch_path(''), '/game/v1')
+        self.assertEqual(game_provider.normalize_launch_path(None), '/game/v1')
+
+    def test_game_v1_unchanged(self):
+        self.assertEqual(game_provider.normalize_launch_path('/game/v1'), '/game/v1')
+
+    @override_settings(
+        GAME_LAUNCH_PATH='/',
+        GAME_PROVIDER={
+            'AGENCY_UID': 'a', 'AES_SECRET_KEY': '1f806d609f1ef42a131a187d1509ca98',
+            'PLAYER_PREFIX': 'h72add', 'SERVER_URL': 'https://huidu.bet',
+            'CALLBACK_BASE_URL': 'https://api.test', 'CALLBACK_PATH': '/game/',
+            'HOME_URL': 'https://app.test', 'CURRENCY_CODE': 'INR',
+            'DEFAULT_LANGUAGE': 'en', 'HTTP_TIMEOUT': 5,
+        },
+    )
+    def test_launch_uses_game_v1_when_env_is_bare_slash(self):
+        captured = {}
+
+        class _Resp:
+            status_code = 200
+
+            @staticmethod
+            def json():
+                return {'code': 0, 'payload': {'game_launch_url': 'https://play/x'}}
+
+        def _fake_post(url, **kw):
+            captured['url'] = url
+            return _Resp()
+
+        with mock.patch.object(game_provider.requests, 'post', _fake_post):
+            game_provider.request_launch_url(
+                user_id=42, game_uid='08ced9dd788aed11ff3c7f387ae0f063',
+                credit_amount='250.00',
+            )
+        self.assertEqual(captured['url'], 'https://huidu.bet/game/v1')
+
+
 class CryptoTests(SimpleTestCase):
     def test_encrypt_decrypt_roundtrip(self):
         obj = {

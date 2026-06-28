@@ -104,12 +104,31 @@ API_PORT = int(os.getenv('PORT', '5000'))
 # --- Game aggregator / provider integration ---
 # All values come from the environment so credentials, keys, and URLs are never
 # committed to source. See services/game_provider.py for how they are consumed.
+
+def _normalize_launch_path(path: str) -> str:
+    """Bare ``/`` or empty GAME_LAUNCH_PATH must not hit the aggregator root."""
+    raw = (path or '/game/v1').strip()
+    if raw in ('', '/'):
+        return '/game/v1'
+    return raw if raw.startswith('/') else f'/{raw}'
+
+
+_api_public_url = os.getenv('API_URL', '').rstrip('/')
+_callback_env = os.getenv('GAME_CALLBACK_BASE_URL', '').strip().rstrip('/')
+# Prefer explicit GAME_CALLBACK_BASE_URL; else HTTPS API_URL (production); else localhost.
+if _callback_env:
+    _game_callback_base = _callback_env
+elif _api_public_url.startswith('https://'):
+    _game_callback_base = _api_public_url
+else:
+    _game_callback_base = 'http://localhost:5000'
+
 GAME_PROVIDER = {
     'AGENCY_UID': os.getenv('GAME_AGENCY_UID', ''),
     'AES_SECRET_KEY': os.getenv('GAME_AES_SECRET_KEY', ''),
     'PLAYER_PREFIX': os.getenv('GAME_PLAYER_PREFIX', ''),
     'SERVER_URL': os.getenv('GAME_SERVER_URL', '').rstrip('/'),
-    'CALLBACK_BASE_URL': os.getenv('GAME_CALLBACK_BASE_URL', 'http://localhost:5000').rstrip('/'),
+    'CALLBACK_BASE_URL': _game_callback_base,
     # Path appended to CALLBACK_BASE_URL to build the callback_url sent to the
     # aggregator. Defaults to our Django games_callback route. For Winco-parity
     # testing against a shared agency account it can be set to '/game/' (the
@@ -126,4 +145,4 @@ GAME_MIN_LAUNCH_BALANCE = os.getenv('GAME_MIN_LAUNCH_BALANCE', '100')
 # Set to 1 to skip the real aggregator and serve a local mock game frame.
 GAME_MOCK_LAUNCH = os.getenv('GAME_MOCK_LAUNCH', '').lower() in ('1', 'true', 'yes')
 # Launch endpoint path on the aggregator (default matches legacy /game/v1).
-GAME_LAUNCH_PATH = os.getenv('GAME_LAUNCH_PATH', '/game/v1')
+GAME_LAUNCH_PATH = _normalize_launch_path(os.getenv('GAME_LAUNCH_PATH', '/game/v1'))

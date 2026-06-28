@@ -79,9 +79,25 @@ def get_config() -> ProviderConfig:
     return cfg
 
 
+DEFAULT_LAUNCH_PATH = '/game/v1'
+
+
+def normalize_launch_path(path: str | None) -> str:
+    """Resolve the aggregator launch path; reject bare ``/`` and empty values."""
+    raw = (path or DEFAULT_LAUNCH_PATH).strip()
+    if raw in ('', '/'):
+        return DEFAULT_LAUNCH_PATH
+    return raw if raw.startswith('/') else f'/{raw}'
+
+
 def _launch_path() -> str:
-    path = getattr(settings, 'GAME_LAUNCH_PATH', '/game/v1')
-    return path if path.startswith('/') else f'/{path}'
+    return normalize_launch_path(getattr(settings, 'GAME_LAUNCH_PATH', DEFAULT_LAUNCH_PATH))
+
+
+def aggregator_launch_url(cfg: ProviderConfig | None = None) -> str:
+    """Full outbound launch URL (server base + path), for logging and diagnostics."""
+    c = cfg or get_config()
+    return f'{c.server_url.rstrip("/")}{_launch_path()}'
 
 
 def _is_placeholder_server_url(url: str) -> bool:
@@ -264,7 +280,7 @@ def request_launch_url(
         'payload': encrypt_json(payload),
     }
 
-    launch_url = f'{cfg.server_url}{_launch_path()}'
+    launch_url = aggregator_launch_url(cfg)
     try:
         resp = requests.post(
             launch_url,
