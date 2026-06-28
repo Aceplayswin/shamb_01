@@ -52,7 +52,12 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MIGRATION_MODULES = {'core': None, 'tenants': None}
 
-CORS_ALLOW_ALL_ORIGINS = DEBUG
+# TEMPORARY (development): allow every origin regardless of DEBUG so the
+# frontend never hits a CORS preflight failure. django-cors-headers reflects
+# the request Origin back (instead of "*") when credentials are enabled, so
+# this stays compatible with CORS_ALLOW_CREDENTIALS.
+# TODO: lock this down to an explicit allowlist before going to production.
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
 JWT_SECRET = os.getenv('JWT_SECRET', 'dev-secret-change-in-production')
