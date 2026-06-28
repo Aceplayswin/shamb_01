@@ -26,11 +26,23 @@ urlpatterns = [
     path('super-admin/products/<slug:slug>/themes/<str:theme_key>/enabled', views.product_theme_set_enabled),
     # Connection testing
     path('super-admin/test-connection', views.test_connection),
+    # Product webhook credentials (RSA key pair securing the data channel)
+    path('super-admin/products/<slug:slug>/credential', views.product_credential),
+    path('super-admin/products/<slug:slug>/credential/generate', views.product_credential_generate),
+    path('super-admin/products/<slug:slug>/credential/rotate', views.product_credential_rotate),
+    path('super-admin/products/<slug:slug>/credential/mark-delivered', views.product_credential_mark_delivered),
     # Cross-tenant inspection
     path('super-admin/products/<slug:slug>/users', views.product_users),
-    # Cross-tenant data explorer (read-only view of a product's tenant DB)
+    # Cross-tenant data explorer (read-only view of a product's tenant DB).
+    # NOTE: the direct-DB path below is being superseded by the signed webhook
+    # path (data-webhook/*); kept for now during the migration.
     path('super-admin/products/<slug:slug>/data/summary', views.product_data_summary),
     path('super-admin/products/<slug:slug>/data/<str:dataset>', views.product_dataset),
+    # Webhook-based data fetch (PULL): same datasets, fetched over the signed
+    # webhook instead of connecting to the tenant database.
+    path('super-admin/products/<slug:slug>/data-webhook/summary', views.product_webhook_summary),
+    path('super-admin/products/<slug:slug>/data-webhook/deliveries', views.product_webhook_deliveries),
+    path('super-admin/products/<slug:slug>/data-webhook/<str:dataset>', views.product_webhook_dataset),
 
     # Public (no auth) — product frontends resolve branding + live theme here.
     path('public/products/<slug:slug>/branding', views.public_product_branding),
