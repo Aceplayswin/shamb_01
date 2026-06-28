@@ -63,7 +63,7 @@ export default function AdminAiCallsPage() {
         <p className="mb-3 text-xs text-slate-500">
           {transcript?.username} · {fmtDate(transcript?.created_at)}
         </p>
-        <p className="whitespace-pre-wrap rounded-lg bg-surface-950/50 p-4 text-sm leading-relaxed text-slate-300">
+        <p className="whitespace-pre-wrap rounded-lg bg-slate-950/60 p-4 text-sm leading-relaxed text-slate-300">
           {transcript?.transcript || 'No transcript available.'}
         </p>
       </Modal>

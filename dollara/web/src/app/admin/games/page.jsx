@@ -99,7 +99,7 @@ export default function AdminGamesPage() {
       label: 'Game',
       render: (r) => (
         <div className="flex items-center gap-2">
-          {r.is_featured && <Star className="h-3.5 w-3.5 fill-brand-400 text-brand-400" />}
+          {r.is_featured && <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />}
           <div>
             <p className="font-medium text-white">{r.name}</p>
             <p className="text-xs text-slate-500">{r.slug}</p>
