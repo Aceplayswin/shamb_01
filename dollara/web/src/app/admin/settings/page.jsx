@@ -339,7 +339,7 @@ export default function AdminSettingsPage() {
       {loading ? (
         <div className="space-y-4">
           {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="glass h-48 animate-pulse" />
+            <div key={i} className="h-48 animate-pulse rounded-xl border border-slate-800 bg-slate-900" />
           ))}
         </div>
       ) : settings?.length ? (
@@ -350,7 +350,7 @@ export default function AdminSettingsPage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search settings…"
-              className="w-full rounded-xl border border-white/10 bg-surface-950/60 py-2.5 pl-10 pr-3 text-sm text-white placeholder-slate-500 focus:border-brand-400 focus:outline-none"
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 py-2.5 pl-10 pr-3 text-sm text-white placeholder-slate-500 transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
             />
           </div>
 
@@ -360,8 +360,8 @@ export default function AdminSettingsPage() {
                 const { icon: Icon, accent } = GROUPS[groupName];
                 return (
                   <Card key={groupName} className="overflow-hidden">
-                    <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-4">
-                      <span className={`grid h-9 w-9 place-items-center rounded-xl bg-surface-800 ring-1 ring-white/10 ${accent}`}>
+                    <div className="flex items-center gap-3 border-b border-slate-800 px-5 py-4">
+                      <span className={`grid h-9 w-9 place-items-center rounded-lg bg-slate-800 ring-1 ring-inset ring-slate-700 ${accent}`}>
                         <Icon className="h-4 w-4" />
                       </span>
                       <div>
@@ -371,7 +371,7 @@ export default function AdminSettingsPage() {
                         </p>
                       </div>
                     </div>
-                    <div className="divide-y divide-white/[0.04]">
+                    <div className="divide-y divide-slate-800">
                       {grouped[groupName].map((item) => (
                         <SettingRow
                           key={item.key}

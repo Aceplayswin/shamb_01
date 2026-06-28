@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { createPortal } from 'react-dom';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -429,6 +430,9 @@ export function Toggle({ checked, onChange, label }) {
 }
 
 export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => e.key === 'Escape' && onClose?.();
@@ -436,15 +440,15 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
   const widths = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' };
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={onClose} />
       <div
-        className={`relative w-full ${widths[size]} animate-fade-up rounded-xl border border-slate-800 bg-slate-900 shadow-2xl shadow-black/60`}
+        className={`relative flex max-h-[90vh] w-full flex-col ${widths[size]} animate-fade-up rounded-xl border border-slate-800 bg-slate-900 shadow-2xl shadow-black/60`}
       >
-        <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-800 px-5 py-4">
           <h3 className="font-display text-base font-bold text-white">{title}</h3>
           <button
             onClick={onClose}
@@ -453,14 +457,15 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
+        <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-slate-800 px-5 py-4">
+          <div className="flex shrink-0 justify-end gap-2 border-t border-slate-800 px-5 py-4">
             {footer}
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

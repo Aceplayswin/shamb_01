@@ -51,7 +51,7 @@ export default function AdminProvidersPage() {
       label: 'Provider',
       render: (r) => (
         <div className="flex items-center gap-3">
-          <span className="grid h-9 w-9 place-items-center rounded-lg bg-surface-800 text-xs font-bold text-brand-400">
+          <span className="grid h-9 w-9 place-items-center rounded-lg bg-indigo-500/10 text-xs font-bold text-indigo-400 ring-1 ring-inset ring-indigo-500/20">
             {r.name.slice(0, 2).toUpperCase()}
           </span>
           <span className="font-medium text-white">{r.name}</span>

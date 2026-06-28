@@ -148,7 +148,7 @@ export default function AdminUsersPage() {
         {detailLoading || !detail?.username ? (
           <div className="space-y-3">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="h-12 animate-pulse rounded-lg bg-white/[0.05]" />
+              <div key={i} className="h-12 animate-pulse rounded-lg bg-slate-800/60" />
             ))}
           </div>
         ) : (
@@ -197,7 +197,7 @@ export default function AdminUsersPage() {
               <div className="max-h-40 space-y-1.5 overflow-y-auto">
                 {detail.transactions?.length ? (
                   detail.transactions.map((t) => (
-                    <div key={t.id} className="flex items-center justify-between rounded-lg bg-surface-950/40 px-3 py-2 text-sm">
+                    <div key={t.id} className="flex items-center justify-between rounded-lg bg-slate-950/50 px-3 py-2 text-sm">
                       <span className="capitalize text-slate-300">{t.type.replace(/_/g, ' ')}</span>
                       <span className="font-medium text-white">{inr(t.amount)}</span>
                       <StatusBadge status={t.status} />

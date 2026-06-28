@@ -20,8 +20,8 @@ export default function AdminLoginRedirect() {
   }, [router]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-surface-900">
-      <Loader2 className="h-7 w-7 animate-spin text-brand-400" />
+    <div className="flex min-h-screen items-center justify-center bg-slate-950">
+      <Loader2 className="h-7 w-7 animate-spin text-indigo-400" />
     </div>
   );
 }
