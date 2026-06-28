@@ -75,25 +75,36 @@ GET {be_url}/api/v1/webhooks/super-admin/data/{resource}?{query}
   `/data/users`.
 - Base path prefix is `WEBHOOK_BASE_PATH = /api/v1/webhooks/super-admin`.
 
-## Phase 2 — TODO on dollara (NOT done yet — do not start until confirmed)
+## Phase 2 — DONE (on dollara, `dollara/api`)
 
-The product side must:
+The product side now:
 
-1. **Store the public key + key_id** Super Admin issued (env var, config, or a
-   small `super_admin_keys` table). Accept rotation.
-2. **Mount the verifying endpoint** at
-   `/api/v1/webhooks/super-admin/data/<resource>` that:
+1. **Reads the public key + key_id** Super Admin issued. dollara shares Super
+   Admin's master/control-plane DB (`dollara_master`), so it reads `public_pem`
+   straight from the `product_credentials` table via a read-only mirror model
+   (`tenants.models.ProductCredential`) keyed on `X-SA-Key-Id`. Because `key_id`
+   is unique, a **rotation is picked up automatically with no redeploy**. Deploys
+   that don't share the master DB can pin a key via
+   `SUPER_ADMIN_WEBHOOK_KEY_ID` / `SUPER_ADMIN_WEBHOOK_PUBLIC_KEY` env vars.
+   Resolver: [`dollara/api/services/super_admin_keys.py`](../../dollara/api/services/super_admin_keys.py).
+2. **Mounts the verifying endpoint** at
+   `/api/v1/webhooks/super-admin/data/<resource>`
+   ([`dollara/api/core/webhook_views.py`](../../dollara/api/core/webhook_views.py),
+   routed in [`dollara/api/config/urls.py`](../../dollara/api/config/urls.py)) that:
    - Rejects if `X-SA-Timestamp` is older than 300s (replay protection).
    - Rebuilds the signing-string from the **received** method/path/headers/body
-     and verifies `X-SA-Signature` against the stored public key for `X-SA-Key-Id`.
-   - On success, reads the product's **own** database and returns the same JSON
-     shapes the console expects (see `_DATASETS` / `product_data_summary` /
-     `product_dataset` in [`tenants/views.py`](tenants/views.py) for the response
-     shape to reproduce).
-3. **POST back** (or have an operator click) `…/credential/mark-delivered` once
-   the key is installed.
+     and verifies `X-SA-Signature` against the stored public key for `X-SA-Key-Id`
+     ([`dollara/api/services/webhook_verify.py`](../../dollara/api/services/webhook_verify.py),
+     a faithful copy of the reference verifier — same `build_signing_string`).
+   - Validates the key's product matches `X-SA-Product`, activates that tenant's
+     DB, reads the product's **own** database, and returns the same JSON shapes
+     the console expects (mirrors `_DATASETS` / `product_data_summary` /
+     `product_dataset` in [`tenants/views.py`](tenants/views.py) column-for-column).
+3. **Marking delivered:** because dollara reads the public key live from the
+   shared control plane, there is nothing to "install" — the operator just clicks
+   `…/credential/mark-delivered` (or POSTs it) to record the handshake.
 
-A drop-in verifier for the product lives at
+The drop-in reference the product side was built from lives at
 [`docs/product_verifier_reference.py`](docs/product_verifier_reference.py) — it
 reuses the exact same `build_signing_string` contract so the two sides cannot
 drift.

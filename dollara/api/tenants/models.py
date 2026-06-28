@@ -98,6 +98,37 @@ class Url(models.Model):
         db_table = 'urls'
 
 
+class ProductCredential(models.Model):
+    """Read-only mirror of Super Admin's ``product_credentials`` (master DB).
+
+    Super Admin owns the lifecycle (issue / rotate / mark-delivered) and holds the
+    private key; dollara reads only the **public** half to verify signed webhook
+    data pulls — see ``services/webhook_verify.py`` and
+    ``services/super_admin_keys.py``. The ``private_pem`` column is intentionally
+    not mapped so the private key never leaves Super Admin even at the ORM layer.
+
+    ``key_id`` is globally unique, so a rotation simply adds a new active row and
+    is picked up here with no redeploy.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+    product = models.ForeignKey(
+        Product, on_delete=models.CASCADE, db_column='product_id', related_name='credentials'
+    )
+    key_id = models.CharField(max_length=64, unique=True)
+    public_pem = models.TextField()
+    fingerprint = models.CharField(max_length=40, blank=True, default='')
+    is_active = models.BooleanField(default=True)
+    delivered_to_product_at = models.DateTimeField(null=True, blank=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    rotated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        app_label = 'tenants'
+        db_table = 'product_credentials'
+
+
 class Database(models.Model):
     """Connection details for a product's isolated tenant database."""
 
