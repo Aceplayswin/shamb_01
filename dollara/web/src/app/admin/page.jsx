@@ -26,8 +26,8 @@ import {
 } from '@/components/admin/AdminShell';
 
 const SERIES = [
-  { key: 'deposits', label: 'Deposits', color: 'bg-gradient-to-t from-brand-600 to-brand-400' },
-  { key: 'withdrawals', label: 'Withdrawals', color: 'bg-gradient-to-t from-brand-600 to-brand-400' },
+  { key: 'deposits', label: 'Deposits', color: 'bg-emerald-500' },
+  { key: 'withdrawals', label: 'Withdrawals', color: 'bg-rose-500' },
 ];
 
 export default function AdminDashboardPage() {
@@ -59,7 +59,7 @@ export default function AdminDashboardPage() {
       {loading && !stats ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="glass h-32 animate-pulse" />
+            <div key={i} className="h-[7.5rem] animate-pulse rounded-xl border border-slate-800 bg-slate-900" />
           ))}
         </div>
       ) : (
@@ -82,7 +82,7 @@ export default function AdminDashboardPage() {
           {charts ? (
             <BarChart data={charts.series} series={SERIES} />
           ) : (
-            <div className="h-52 animate-pulse rounded-xl bg-white/[0.04]" />
+            <div className="h-52 animate-pulse rounded-lg bg-slate-800/60" />
           )}
         </Card>
 
@@ -94,9 +94,9 @@ export default function AdminDashboardPage() {
               <Link
                 key={q.label}
                 href={q.href}
-                className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-surface-950/40 p-3 transition hover:border-brand-400/30 hover:bg-white/[0.03]"
+                className="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3 transition hover:border-slate-700 hover:bg-slate-800/40"
               >
-                <span className="grid h-9 w-9 place-items-center rounded-lg bg-surface-800 text-brand-400">
+                <span className="grid h-9 w-9 place-items-center rounded-lg bg-indigo-500/10 text-indigo-400 ring-1 ring-inset ring-indigo-500/20">
                   <q.icon className="h-4 w-4" />
                 </span>
                 <span className="flex-1 text-sm font-medium text-slate-300">{q.label}</span>
@@ -110,13 +110,13 @@ export default function AdminDashboardPage() {
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
         <Card className="overflow-hidden lg:col-span-2">
-          <div className="flex items-center justify-between border-b border-white/[0.06] px-6 py-4">
+          <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
             <h2 className="font-display text-lg font-bold text-white">Recent activity</h2>
-            <Link href="/admin/transactions" className="text-xs font-semibold text-brand-400 hover:text-brand-300">
+            <Link href="/admin/transactions" className="text-xs font-semibold text-indigo-400 hover:text-indigo-300">
               View all →
             </Link>
           </div>
-          <div className="divide-y divide-white/[0.04]">
+          <div className="divide-y divide-slate-800">
             {(activity ?? []).slice(0, 8).map((a) => {
               const isOut = a.type === 'withdrawal';
               return (
@@ -145,9 +145,9 @@ export default function AdminDashboardPage() {
               <p className="px-6 py-10 text-center text-sm text-slate-500">No activity yet</p>
             )}
             {!activity && (
-              <div className="space-y-px p-3">
+              <div className="space-y-2 p-3">
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="h-12 animate-pulse rounded-lg bg-white/[0.04]" />
+                  <div key={i} className="h-12 animate-pulse rounded-lg bg-slate-800/60" />
                 ))}
               </div>
             )}
@@ -169,9 +169,9 @@ export default function AdminDashboardPage() {
                       </span>
                       <span className="text-slate-500">{inr(c.volume)}</span>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-surface-700">
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-800">
                       <div
-                        className="h-full rounded-full bg-gradient-to-r from-brand-400 to-brand-500"
+                        className="h-full rounded-full bg-indigo-500"
                         style={{ width: `${(c.volume / maxVol) * 100}%` }}
                       />
                     </div>
