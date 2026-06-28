@@ -1,11 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import Swal from 'sweetalert2';
 import {
   Box, CheckCircle2, Database, Eye, EyeOff, Globe, Loader2,
   MinusCircle, Palette, Pencil, Plus, Power, Server, Trash2, Wifi, X, XCircle,
-  Check, Circle, Paintbrush,
+  Check, Circle, Paintbrush, BarChart3,
 } from 'lucide-react';
 import {
   listProducts, disableProduct, updateProduct, deleteProduct,
@@ -772,6 +773,12 @@ function ProductsContent() {
                       {p.status}
                     </span>
                     <div className="ml-auto flex flex-wrap gap-2">
+                      <Link
+                        href={`/products/${p.slug}/data`}
+                        className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-400 dark:hover:bg-indigo-950 transition-colors"
+                      >
+                        <BarChart3 className="h-3.5 w-3.5" /> View Data
+                      </Link>
                       <button onClick={() => setEditTarget(p)} className={actionBtn}>
                         <Pencil className="h-3.5 w-3.5" /> Edit
                       </button>
