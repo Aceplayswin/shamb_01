@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/services/api';
+import { loadGameCatalog } from '@/hooks/useGameCatalog';
 import { useAuthStore } from '@/store/auth';
 
 export function useGamePlay(slug) {
@@ -21,7 +22,7 @@ export function useGamePlay(slug) {
     setNotFound(false);
     setGameUrl('');
     setError('');
-    api(`/api/v1/games?limit=300`)
+    loadGameCatalog(300)
       .then((games) => {
         const g = games.find((x) => x.slug === slug);
         if (!g) {

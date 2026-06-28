@@ -62,9 +62,9 @@ const SETTING_META = {
 };
 
 const GROUPS = {
-  General: { icon: SlidersHorizontal, accent: 'text-brand-400' },
+  General: { icon: SlidersHorizontal, accent: 'text-indigo-400' },
   Limits: { icon: Wallet, accent: 'text-emerald-400' },
-  Localization: { icon: Languages, accent: 'text-brand-400' },
+  Localization: { icon: Languages, accent: 'text-indigo-400' },
   Security: { icon: Globe, accent: 'text-sky-400' },
   Other: { icon: SettingsIcon, accent: 'text-slate-400' },
 };
@@ -113,7 +113,7 @@ function TagEditor({ value, onChange }) {
         {value.map((tag) => (
           <span
             key={tag}
-            className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-surface-950/60 py-1 pl-2.5 pr-1.5 text-sm text-white"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-950/60 py-1 pl-2.5 pr-1.5 text-sm text-white"
           >
             <span>{LANGUAGE_NAMES[tag] ? `${LANGUAGE_NAMES[tag]} · ${tag}` : tag}</span>
             <button
@@ -156,7 +156,7 @@ function ValueDisplay({ type, value }) {
     return (
       <div className="flex flex-wrap gap-1.5">
         {(value ?? []).map((t) => (
-          <span key={t} className="rounded-md bg-surface-700/60 px-2 py-0.5 text-xs font-medium text-slate-300">
+          <span key={t} className="rounded-md bg-slate-800 px-2 py-0.5 text-xs font-medium text-slate-300">
             {LANGUAGE_NAMES[t] ?? t}
           </span>
         ))}
@@ -164,7 +164,7 @@ function ValueDisplay({ type, value }) {
     );
   if (type === 'json')
     return (
-      <pre className="max-w-full overflow-x-auto rounded-lg bg-surface-950/50 p-2 text-xs text-slate-300">
+      <pre className="max-w-full overflow-x-auto rounded-lg bg-slate-950/60 p-2 text-xs text-slate-300">
         {JSON.stringify(value, null, 2)}
       </pre>
     );
@@ -213,7 +213,7 @@ function SettingRow({ item, busy, onSave }) {
           type="button"
           disabled={busy}
           onClick={() => onSave(item.key, !item.value)}
-          className={`relative h-6 w-11 shrink-0 rounded-full transition ${item.value ? 'bg-brand-500' : 'bg-surface-600'}`}
+          className={`relative h-6 w-11 shrink-0 rounded-full transition ${item.value ? 'bg-indigo-500' : 'bg-slate-700'}`}
         >
           <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${item.value ? 'left-[1.375rem]' : 'left-0.5'}`} />
         </button>
@@ -227,7 +227,7 @@ function SettingRow({ item, busy, onSave }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="font-medium text-white">{meta.label}</p>
-            <code className="rounded bg-surface-950/60 px-1.5 py-0.5 text-[0.65rem] text-slate-500">
+            <code className="rounded bg-slate-950/60 px-1.5 py-0.5 text-[0.65rem] text-slate-500">
               {item.key}
             </code>
           </div>
@@ -248,7 +248,7 @@ function SettingRow({ item, busy, onSave }) {
       </div>
 
       {editing && (
-        <div className="mt-3 rounded-xl border border-white/[0.06] bg-surface-950/40 p-3">
+        <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
           {type === 'tags' ? (
             <TagEditor value={draft} onChange={setDraft} />
           ) : type === 'json' ? (
