@@ -510,6 +510,255 @@ def product_users(request, slug):
     return JsonResponse(users, safe=False)
 
 
+# --- Cross-tenant data explorer ---
+# Read-only inspection of a product's isolated tenant database. Each dataset maps
+# to a tenant table (core.models) and exposes the columns safe to surface in the
+# Super Admin console (secrets like password hashes / 2FA secrets are excluded).
+# All queries run inside ``use_tenant`` so the ORM is routed to the tenant DB.
+
+# datakey -> (model import path, ordering, [columns]). Columns are passed to
+# ``.values(...)`` so only whitelisted fields ever leave the tenant DB.
+_DATASETS = {
+    'users': {
+        'label': 'Users',
+        'model': 'core.models.User',
+        'order': '-created_at',
+        'columns': ['id', 'username', 'email', 'country_code', 'phone', 'full_name',
+                    'role', 'account_status', 'last_login_at', 'created_at'],
+    },
+    'user_settings': {
+        'label': 'User Settings',
+        'model': 'core.models.UserSetting',
+        'order': '-created_at',
+        'columns': ['id', 'user_id', 'date_of_birth', 'gender', 'kyc_status',
+                    'email_verified', 'phone_verified', 'two_factor_enabled',
+                    'currency', 'registration_path', 'fraud_score', 'is_demo',
+                    'created_at'],
+    },
+    'wallets': {
+        'label': 'Wallets',
+        'model': 'core.models.Wallet',
+        'order': '-updated_at',
+        'columns': ['id', 'user_id', 'main_balance', 'bonus_balance',
+                    'exposure_balance', 'locked_balance', 'currency', 'updated_at'],
+    },
+    'transactions': {
+        'label': 'Transactions',
+        'model': 'core.models.Transaction',
+        'order': '-created_at',
+        'columns': ['id', 'user_id', 'type', 'amount', 'currency', 'status',
+                    'payment_method', 'reference_number', 'created_at'],
+    },
+    'bets': {
+        'label': 'Bets',
+        'model': 'core.models.Bet',
+        'order': '-created_at',
+        'columns': ['id', 'user_id', 'game_id', 'bet_amount', 'odds', 'payout',
+                    'status', 'created_at'],
+    },
+    'games': {
+        'label': 'Games',
+        'model': 'core.models.Game',
+        'order': 'sort_order',
+        'columns': ['id', 'provider_id', 'name', 'slug', 'category', 'rtp',
+                    'min_bet', 'max_bet', 'is_featured', 'is_active_web',
+                    'play_count', 'created_at'],
+    },
+    'game_providers': {
+        'label': 'Game Providers',
+        'model': 'core.models.GameProvider',
+        'order': 'name',
+        'columns': ['id', 'name', 'slug', 'is_active', 'created_at'],
+    },
+    'bonuses': {
+        'label': 'Bonuses',
+        'model': 'core.models.Bonus',
+        'order': '-created_at',
+        'columns': ['id', 'name', 'display_title', 'bonus_type', 'value_type',
+                    'value_amount', 'min_deposit', 'wagering_multiplier', 'status',
+                    'start_date', 'end_date', 'created_at'],
+    },
+    'ai_call_logs': {
+        'label': 'AI Call Logs',
+        'model': 'core.models.AiCallLog',
+        'order': '-created_at',
+        'columns': ['id', 'user_id', 'voice_executive_id', 'duration_seconds',
+                    'deposit_intent', 'deposit_amount', 'status', 'created_at'],
+    },
+    'platform_settings': {
+        'label': 'Platform Settings',
+        'model': 'core.models.PlatformSetting',
+        'order': 'setting_key',
+        'columns': ['id', 'setting_key', 'setting_value', 'updated_at'],
+    },
+}
+
+_DATASET_ORDER = list(_DATASETS.keys())
+_MAX_PAGE_SIZE = 200
+_DEFAULT_PAGE_SIZE = 50
+
+
+def _import_model(path: str):
+    module_path, _, name = path.rpartition('.')
+    mod = __import__(module_path, fromlist=[name])
+    return getattr(mod, name)
+
+
+def _jsonable(value):
+    """Coerce ORM values to JSON-serialisable primitives."""
+    from datetime import date, datetime
+    from decimal import Decimal
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
+
+
+def _activate_tenant(slug):
+    """Resolve + activate the tenant DB connection for a product slug."""
+    from services.tenant_resolver import resolve_tenant
+    resolve_tenant(header_slug=slug)
+    return tenant_db_alias_for(slug)
+
+
+@require_auth(['super_admin'])
+@require_http_methods(['GET'])
+def product_data_summary(request, slug):
+    """High-level counts + balance/financial totals from a product's tenant DB.
+
+    Drives the stat cards on the product data explorer. Returns a `datasets`
+    list (key + label + row count) plus headline aggregates."""
+    from django.db.models import Count, Sum
+
+    product = Product.objects.filter(slug=slug).first()
+    if not product:
+        return _error('Product not found', 404)
+
+    alias = _activate_tenant(slug)
+    datasets = []
+    aggregates = {}
+    with use_tenant(slug, alias):
+        try:
+            for key in _DATASET_ORDER:
+                cfg = _DATASETS[key]
+                model = _import_model(cfg['model'])
+                datasets.append({
+                    'key': key,
+                    'label': cfg['label'],
+                    'count': model.objects.count(),
+                })
+
+            from core.models import User, Wallet, Transaction
+            wallet_totals = Wallet.objects.aggregate(
+                main=Sum('main_balance'), bonus=Sum('bonus_balance'),
+                locked=Sum('locked_balance'),
+            )
+            tx_by_status = {
+                row['status']: {'count': row['n'], 'amount': float(row['total'] or 0)}
+                for row in Transaction.objects.values('status').annotate(
+                    n=Count('id'), total=Sum('amount'))
+            }
+            aggregates = {
+                'total_main_balance': float(wallet_totals['main'] or 0),
+                'total_bonus_balance': float(wallet_totals['bonus'] or 0),
+                'total_locked_balance': float(wallet_totals['locked'] or 0),
+                'users_by_status': {
+                    row['account_status']: row['n']
+                    for row in User.objects.values('account_status').annotate(n=Count('id'))
+                },
+                'transactions_by_status': tx_by_status,
+            }
+        except Exception as e:
+            return _error(f'Could not read tenant database: {e}', 502)
+
+    return JsonResponse({
+        'slug': slug,
+        'name': product.name,
+        'status': product.status,
+        'datasets': datasets,
+        'aggregates': aggregates,
+    })
+
+
+@require_auth(['super_admin'])
+@require_http_methods(['GET'])
+def product_dataset(request, slug, dataset):
+    """Paginated rows for a single tenant dataset.
+
+    Query params: ``page`` (1-based), ``page_size`` (<= 200), ``q`` (substring
+    match against text columns). Returns whitelisted columns only."""
+    product = Product.objects.filter(slug=slug).first()
+    if not product:
+        return _error('Product not found', 404)
+    cfg = _DATASETS.get(dataset)
+    if not cfg:
+        return _error('Unknown dataset', 404)
+
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = int(request.GET.get('page_size', _DEFAULT_PAGE_SIZE))
+    except (TypeError, ValueError):
+        page_size = _DEFAULT_PAGE_SIZE
+    page_size = max(1, min(page_size, _MAX_PAGE_SIZE))
+    search = (request.GET.get('q') or '').strip()
+
+    alias = _activate_tenant(slug)
+    with use_tenant(slug, alias):
+        try:
+            model = _import_model(cfg['model'])
+            qs = model.objects.all()
+            if search:
+                from django.db.models import Q
+                text_fields = _text_columns(model, cfg['columns'])
+                if text_fields:
+                    cond = Q()
+                    for f in text_fields:
+                        cond |= Q(**{f'{f}__icontains': search})
+                    qs = qs.filter(cond)
+            total = qs.count()
+            qs = qs.order_by(cfg['order'])
+            start = (page - 1) * page_size
+            rows = list(qs[start:start + page_size].values(*cfg['columns']))
+        except Exception as e:
+            return _error(f'Could not read tenant database: {e}', 502)
+
+    for row in rows:
+        for col, val in row.items():
+            row[col] = _jsonable(val)
+
+    return JsonResponse({
+        'slug': slug,
+        'dataset': dataset,
+        'label': cfg['label'],
+        'columns': cfg['columns'],
+        'page': page,
+        'page_size': page_size,
+        'total': total,
+        'total_pages': max(1, (total + page_size - 1) // page_size),
+        'rows': rows,
+    })
+
+
+def _text_columns(model, columns):
+    """Whitelisted columns that are CharField/TextField/EmailField — searchable."""
+    from django.db.models import CharField, EmailField, SlugField, TextField
+    searchable = (CharField, EmailField, SlugField, TextField)
+    out = []
+    for col in columns:
+        field_name = col[:-3] if col.endswith('_id') else col
+        try:
+            field = model._meta.get_field(field_name)
+        except Exception:
+            continue
+        if isinstance(field, searchable):
+            out.append(col)
+    return out
+
+
 # --- Connection testing ---
 _SSL_CTX = ssl.create_default_context()
 _SSL_CTX.check_hostname = False

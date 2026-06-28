@@ -100,6 +100,15 @@ export const testConnection = (payload) =>
     body: JSON.stringify(payload),
   });
 
+// Product data explorer — read-only inspection of a product's tenant DB.
+export const getProductDataSummary = (slug) =>
+  superAdminApi(`/api/v1/super-admin/products/${slug}/data/summary`);
+export const getProductDataset = (slug, dataset, { page = 1, pageSize = 50, q = '' } = {}) => {
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  if (q) params.set('q', q);
+  return superAdminApi(`/api/v1/super-admin/products/${slug}/data/${dataset}?${params.toString()}`);
+};
+
 export const listThemes = () => superAdminApi('/api/v1/super-admin/themes');
 
 // Per-product theme table.

@@ -28,6 +28,9 @@ urlpatterns = [
     path('super-admin/test-connection', views.test_connection),
     # Cross-tenant inspection
     path('super-admin/products/<slug:slug>/users', views.product_users),
+    # Cross-tenant data explorer (read-only view of a product's tenant DB)
+    path('super-admin/products/<slug:slug>/data/summary', views.product_data_summary),
+    path('super-admin/products/<slug:slug>/data/<str:dataset>', views.product_dataset),
 
     # Public (no auth) — product frontends resolve branding + live theme here.
     path('public/products/<slug:slug>/branding', views.public_product_branding),
