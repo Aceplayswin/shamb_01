@@ -43,6 +43,7 @@ class ProviderConfig:
     player_prefix: str
     server_url: str
     callback_base_url: str
+    callback_path: str
     home_url: str
     currency_code: str
     default_language: str
@@ -50,9 +51,14 @@ class ProviderConfig:
 
     @property
     def callback_url(self) -> str:
-        # The aggregator posts settlement callbacks here. Trailing slash matches
-        # the legacy contract (``https://api.host/game/``).
-        return f'{self.callback_base_url}/api/v1/games/callback'
+        # The aggregator posts settlement callbacks here. Built from the public
+        # base URL + a configurable path (default ``/api/v1/games/callback``).
+        # For Winco-parity against a shared agency account the path can be set to
+        # ``/game/`` (the legacy registered contract ``https://api.host/game/``).
+        path = self.callback_path or '/api/v1/games/callback'
+        if not path.startswith('/'):
+            path = f'/{path}'
+        return f'{self.callback_base_url}{path}'
 
 
 def get_config() -> ProviderConfig:
@@ -64,6 +70,7 @@ def get_config() -> ProviderConfig:
         player_prefix=raw['PLAYER_PREFIX'],
         server_url=raw['SERVER_URL'],
         callback_base_url=raw['CALLBACK_BASE_URL'],
+        callback_path=raw.get('CALLBACK_PATH', '/api/v1/games/callback'),
         home_url=raw['HOME_URL'],
         currency_code=raw['CURRENCY_CODE'],
         default_language=raw['DEFAULT_LANGUAGE'],
@@ -257,18 +264,21 @@ def request_launch_url(
         'payload': encrypt_json(payload),
     }
 
+    launch_url = f'{cfg.server_url}{_launch_path()}'
     try:
         resp = requests.post(
-            f'{cfg.server_url}{_launch_path()}',
+            launch_url,
             json=envelope,
             timeout=cfg.http_timeout,
             headers={'Content-Type': 'application/json'},
         )
     except requests.RequestException as exc:
-        raise ProviderError(f'Aggregator unreachable: {exc}') from exc
+        raise ProviderError(f'Aggregator unreachable at {launch_url}: {exc}') from exc
 
     if resp.status_code != 200:
-        raise ProviderError(f'Aggregator HTTP {resp.status_code}')
+        # Include the target URL (no secrets) so a 403/404 is diagnosable —
+        # e.g. a wrong launch path or a source IP not whitelisted by the provider.
+        raise ProviderError(f'Aggregator HTTP {resp.status_code} from {launch_url}')
 
     try:
         data = resp.json()

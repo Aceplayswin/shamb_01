@@ -110,6 +110,11 @@ GAME_PROVIDER = {
     'PLAYER_PREFIX': os.getenv('GAME_PLAYER_PREFIX', ''),
     'SERVER_URL': os.getenv('GAME_SERVER_URL', '').rstrip('/'),
     'CALLBACK_BASE_URL': os.getenv('GAME_CALLBACK_BASE_URL', 'http://localhost:5000').rstrip('/'),
+    # Path appended to CALLBACK_BASE_URL to build the callback_url sent to the
+    # aggregator. Defaults to our Django games_callback route. For Winco-parity
+    # testing against a shared agency account it can be set to '/game/' (the
+    # legacy registered path) and reverse-proxied/aliased to games_callback.
+    'CALLBACK_PATH': os.getenv('GAME_CALLBACK_PATH', '/api/v1/games/callback'),
     'HOME_URL': os.getenv('GAME_HOME_URL', 'http://localhost:3000'),
     'CURRENCY_CODE': os.getenv('GAME_CURRENCY_CODE', 'INR'),
     'DEFAULT_LANGUAGE': os.getenv('GAME_DEFAULT_LANGUAGE', 'en'),
