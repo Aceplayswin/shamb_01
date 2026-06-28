@@ -16,6 +16,7 @@ from django.conf import settings
 from django.db import connections
 
 from services.branding import default_branding_for_product
+from services.product_credentials import issue_credential
 from tenants.models import Branding, Database, Product, Url
 from tenants.state import register_tenant_connection, tenant_db_alias_for
 
@@ -98,6 +99,10 @@ def provision_product(
     # Seed one theme row per catalog theme (theme1 active by default). Idempotent.
     from tenants.themes import ensure_product_themes
     ensure_product_themes(product)
+
+    # Issue the product's RSA webhook credential (Super Admin signs data pulls,
+    # the product verifies). Idempotent: keeps any existing active key pair.
+    issue_credential(product)
 
     branding_data = default_branding_for_product(product)
     branding_data.update(branding or {})

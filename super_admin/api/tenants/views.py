@@ -20,9 +20,17 @@ from django.views.decorators.http import require_http_methods
 from tenants.auth_jwt import sign_token
 from tenants.auth_middleware import require_auth
 from services.branding import BRANDING_FIELDS, get_branding_for_product, serialize_branding
+from services.product_credentials import (
+    get_active_credential, issue_credential, mark_delivered, rotate_credential,
+    serialize_credential,
+)
 from services.tenant_provisioning import ProvisioningError, provision_product
 from services.tenant_resolver import invalidate_tenant_cache
-from tenants.models import Branding, Database, Product, ProductTheme, Url, User, UserSession
+from services.webhook_client import WebhookError, call_product
+from tenants.models import (
+    Branding, Database, Product, ProductTheme, Url, User, UserSession,
+    WebhookDelivery,
+)
 from tenants.state import tenant_db_alias_for, use_tenant
 from tenants.themes import (
     DEFAULT_THEME, THEME_CATALOG, THEME_KEYS,
@@ -69,6 +77,7 @@ def _serialize_product(product: Product) -> dict:
     theme_rows = _product_theme_rows(product)
     active = next((r['theme_key'] for r in theme_rows if r['is_active']), DEFAULT_THEME)
     branding_data = serialize_branding(product, branding)
+    cred = get_active_credential(product)
     return {
         'id': product.id,
         'slug': product.slug,
@@ -86,6 +95,11 @@ def _serialize_product(product: Product) -> dict:
             'db_name': db.db_name if db else None,
             'db_host': db.db_host if db else None,
             'is_provisioned': db.is_provisioned if db else False,
+        },
+        'credential': {
+            'key_id': cred.key_id if cred else None,
+            'fingerprint': cred.fingerprint if cred else None,
+            'delivered': bool(cred and cred.delivered_to_product_at) if cred else False,
         },
     }
 
@@ -820,3 +834,141 @@ def test_connection(request):
         return JsonResponse(_test_db(host=host, port=port, user=user, password=password, db_name=db_name))
 
     return JsonResponse({'status': 'error', 'message': 'Unknown test type'}, status=400)
+
+
+# --- Product webhook credentials (RSA key pair) ---
+# The credential secures the Super Admin -> Product data channel: Super Admin signs
+# every data pull with the product's private key; the product verifies with the
+# public key. This replaces Super Admin connecting to the tenant DB directly.
+
+@require_auth(['super_admin'])
+@require_http_methods(['GET'])
+def product_credential(request, slug):
+    """Return the product's active credential (public material only)."""
+    product = Product.objects.filter(slug=slug).first()
+    if not product:
+        return _error('Product not found', 404)
+    cred = get_active_credential(product)
+    if not cred:
+        return JsonResponse({'slug': slug, 'credential': None})
+    return JsonResponse({'slug': slug, 'credential': serialize_credential(cred)})
+
+
+@csrf_exempt
+@require_auth(['super_admin'])
+@require_http_methods(['POST'])
+def product_credential_generate(request, slug):
+    """Issue the first credential for a product (no-op if one already exists).
+
+    Returns the private key **once** so the operator can hand it off; afterwards
+    only the public key is retrievable. Use rotate to replace an existing key.
+    """
+    product = Product.objects.filter(slug=slug).first()
+    if not product:
+        return _error('Product not found', 404)
+    existing = get_active_credential(product)
+    cred = issue_credential(product)
+    # Only reveal the private key when we actually just created it.
+    reveal = existing is None
+    return JsonResponse({
+        'slug': slug,
+        'created': reveal,
+        'credential': serialize_credential(cred, include_private=reveal),
+    }, status=201 if reveal else 200)
+
+
+@csrf_exempt
+@require_auth(['super_admin'])
+@require_http_methods(['POST'])
+def product_credential_rotate(request, slug):
+    """Retire the active key pair and issue a new one. Returns the new private key
+    once. The product must install the new public key before pulls resume."""
+    product = Product.objects.filter(slug=slug).first()
+    if not product:
+        return _error('Product not found', 404)
+    cred = rotate_credential(product)
+    return JsonResponse({
+        'slug': slug,
+        'rotated': True,
+        'credential': serialize_credential(cred, include_private=True),
+    }, status=201)
+
+
+@csrf_exempt
+@require_auth(['super_admin'])
+@require_http_methods(['POST'])
+def product_credential_mark_delivered(request, slug):
+    """Mark that the product has installed the active public key (handshake)."""
+    product = Product.objects.filter(slug=slug).first()
+    if not product:
+        return _error('Product not found', 404)
+    cred = get_active_credential(product)
+    if not cred:
+        return _error('No active credential to mark', 404)
+    mark_delivered(cred)
+    return JsonResponse({'slug': slug, 'credential': serialize_credential(cred)})
+
+
+# --- Webhook-based data fetch (PULL) ---
+# Same datasets as the direct-DB explorer, but fetched over the signed webhook
+# instead of opening the tenant database. The product returns the rows. The
+# request/response shapes mirror ``product_data_summary`` / ``product_dataset`` so
+# the frontend can switch sources with minimal change.
+
+@require_auth(['super_admin'])
+@require_http_methods(['GET'])
+def product_webhook_summary(request, slug):
+    """High-level counts + aggregates pulled from the product over the webhook."""
+    product = Product.objects.filter(slug=slug).first()
+    if not product:
+        return _error('Product not found', 404)
+    try:
+        data = call_product(product, 'data.summary')
+    except WebhookError as e:
+        return _error(str(e), e.http_status or 502)
+    return JsonResponse(data)
+
+
+@require_auth(['super_admin'])
+@require_http_methods(['GET'])
+def product_webhook_dataset(request, slug, dataset):
+    """Paginated rows for one dataset, pulled from the product over the webhook."""
+    product = Product.objects.filter(slug=slug).first()
+    if not product:
+        return _error('Product not found', 404)
+    if dataset not in _DATASETS:
+        return _error('Unknown dataset', 404)
+    query = {
+        'page': request.GET.get('page', '1'),
+        'page_size': request.GET.get('page_size', str(_DEFAULT_PAGE_SIZE)),
+    }
+    if request.GET.get('q'):
+        query['q'] = request.GET['q']
+    try:
+        data = call_product(product, f'data.{dataset}', query=query)
+    except WebhookError as e:
+        return _error(str(e), e.http_status or 502)
+    return JsonResponse(data)
+
+
+@require_auth(['super_admin'])
+@require_http_methods(['GET'])
+def product_webhook_deliveries(request, slug):
+    """Recent signed-webhook calls made to this product (audit trail)."""
+    product = Product.objects.filter(slug=slug).first()
+    if not product:
+        return _error('Product not found', 404)
+    try:
+        limit = max(1, min(int(request.GET.get('limit', 50)), 200))
+    except (TypeError, ValueError):
+        limit = 50
+    rows = list(
+        WebhookDelivery.objects.filter(product=product)
+        .order_by('-created_at')[:limit]
+        .values('id', 'resource', 'request_method', 'request_path', 'status',
+                'http_status', 'duration_ms', 'error', 'created_at')
+    )
+    for r in rows:
+        if r.get('created_at'):
+            r['created_at'] = r['created_at'].isoformat()
+    return JsonResponse({'slug': slug, 'deliveries': rows}, safe=False)

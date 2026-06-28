@@ -109,6 +109,34 @@ export const getProductDataset = (slug, dataset, { page = 1, pageSize = 50, q = 
   return superAdminApi(`/api/v1/super-admin/products/${slug}/data/${dataset}?${params.toString()}`);
 };
 
+// Product webhook credentials (RSA key pair securing the data channel).
+export const getProductCredential = (slug) =>
+  superAdminApi(`/api/v1/super-admin/products/${slug}/credential`);
+export const generateProductCredential = (slug) =>
+  superAdminApi(`/api/v1/super-admin/products/${slug}/credential/generate`, {
+    method: 'POST',
+  });
+export const rotateProductCredential = (slug) =>
+  superAdminApi(`/api/v1/super-admin/products/${slug}/credential/rotate`, {
+    method: 'POST',
+  });
+export const markCredentialDelivered = (slug) =>
+  superAdminApi(`/api/v1/super-admin/products/${slug}/credential/mark-delivered`, {
+    method: 'POST',
+  });
+
+// Webhook-based data fetch (PULL) — fetches a product's data over the signed
+// webhook instead of connecting to its tenant database directly.
+export const getProductWebhookSummary = (slug) =>
+  superAdminApi(`/api/v1/super-admin/products/${slug}/data-webhook/summary`);
+export const getProductWebhookDataset = (slug, dataset, { page = 1, pageSize = 50, q = '' } = {}) => {
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  if (q) params.set('q', q);
+  return superAdminApi(`/api/v1/super-admin/products/${slug}/data-webhook/${dataset}?${params.toString()}`);
+};
+export const getProductWebhookDeliveries = (slug, { limit = 50 } = {}) =>
+  superAdminApi(`/api/v1/super-admin/products/${slug}/data-webhook/deliveries?limit=${limit}`);
+
 export const listThemes = () => superAdminApi('/api/v1/super-admin/themes');
 
 // Per-product theme table.
