@@ -12,7 +12,7 @@ export function useGamePlay(slug) {
   const [game, setGame] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [launching, setLaunching] = useState(false);
-  const [gameUrl, setGameUrl] = useState('');
+  const [redirecting, setRedirecting] = useState(false);
   const [error, setError] = useState('');
   const [betAmount, setBetAmount] = useState('100');
   const [message, setMessage] = useState('');
@@ -20,7 +20,7 @@ export function useGamePlay(slug) {
   useEffect(() => {
     setGame(null);
     setNotFound(false);
-    setGameUrl('');
+    setRedirecting(false);
     setError('');
     loadGameCatalog(300)
       .then((games) => {
@@ -49,10 +49,16 @@ export function useGamePlay(slug) {
         body: JSON.stringify({ gameUid: game.game_uid, gameName: game.name }),
       });
       if (res.status_code === 'success' && res.data?.game_url) {
-        setGameUrl(res.data.game_url);
-      } else {
-        setError(res.error ?? 'Could not launch this game. Please try again.');
+        // Full-page redirect to the aggregator's original game URL. The game
+        // takes over the whole tab on its own domain — no Dollara chrome. Bets
+        // and wins are settled server-side via the aggregator callback webhook
+        // (process_callback → GameRound/Wallet/GameSession), and the game's
+        // home button returns the player here (home_url sent at launch).
+        setRedirecting(true);
+        window.location.href = res.data.game_url;
+        return;
       }
+      setError(res.error ?? 'Could not launch this game. Please try again.');
     } catch (e) {
       setError(e.message ?? 'Could not launch this game.');
     } finally {
@@ -94,8 +100,7 @@ export function useGamePlay(slug) {
     game,
     notFound,
     launching,
-    gameUrl,
-    setGameUrl,
+    redirecting,
     error,
     betAmount,
     setBetAmount,
