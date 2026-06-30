@@ -299,6 +299,17 @@ def confirm_deposit(transaction_id: int, reference_number: str) -> dict:
     return {'credited': float(amount)}
 
 
+def reject_deposit(transaction_id: int, reason: str) -> dict:
+    with tenant_atomic():
+        tx = Transaction.objects.select_for_update().get(
+            id=transaction_id, type=Transaction.TxType.DEPOSIT
+        )
+        tx.status = Transaction.Status.REJECTED
+        tx.notes = reason or tx.notes
+        tx.save(update_fields=['status', 'notes', 'updated_at'])
+    return {'rejected': True}
+
+
 def create_withdrawal(user_id: int, amount: float, payment_method: str) -> dict:
     _require_player(user_id)
     wallet_data = get_wallet(user_id)

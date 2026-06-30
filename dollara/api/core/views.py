@@ -467,6 +467,19 @@ def admin_deposit_confirm(request, tx_id):
         return _error_response(e)
 
 
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_deposit_reject(request, tx_id):
+    try:
+        body = _json_body(request)
+        return JsonResponse(services.reject_deposit(tx_id, body.get('reason', '')))
+    except Transaction.DoesNotExist:
+        return _error_response(ValueError('Transaction not found'), 404)
+    except Exception as e:
+        return _error_response(e)
+
+
 @require_auth(['admin'])
 @require_http_methods(['GET'])
 def admin_games(request):
