@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Users, Eye, Wallet, Phone, Mail, ShieldAlert } from 'lucide-react';
+import { Users, Eye, Wallet, Phone, Mail, ShieldAlert, PlusCircle, MinusCircle } from 'lucide-react';
 import { adminApi } from '@/services/adminApi';
 import {
   AdminShell,
@@ -28,9 +28,17 @@ export default function AdminUsersPage() {
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [adjustUser, setAdjustUser] = useState(null);
+  const [adjustMode, setAdjustMode] = useState('add'); // 'add' | 'deduct'
   const [adjustAmount, setAdjustAmount] = useState('');
   const [adjustNotes, setAdjustNotes] = useState('');
   const [busy, setBusy] = useState(false);
+
+  const openAdjust = (user) => {
+    setAdjustUser(user);
+    setAdjustMode('add');
+    setAdjustAmount('');
+    setAdjustNotes('');
+  };
 
   const patchUser = async (userId, body, msg) => {
     try {
@@ -61,13 +69,19 @@ export default function AdminUsersPage() {
 
   const submitAdjust = async (e) => {
     e.preventDefault();
+    const magnitude = Math.abs(parseFloat(adjustAmount) || 0);
+    if (!magnitude) {
+      toast.error('Enter an amount greater than 0');
+      return;
+    }
+    const signedAmount = adjustMode === 'deduct' ? -magnitude : magnitude;
     setBusy(true);
     try {
       await adminApi(`/api/v1/admin/users/${adjustUser.id}/wallet/adjust`, {
         method: 'POST',
-        body: JSON.stringify({ amount: parseFloat(adjustAmount), notes: adjustNotes }),
+        body: JSON.stringify({ amount: signedAmount, notes: adjustNotes }),
       });
-      toast.success('Wallet updated');
+      toast.success(adjustMode === 'deduct' ? `${inr(magnitude)} deducted` : `${inr(magnitude)} added`);
       setAdjustUser(null);
       setAdjustAmount('');
       setAdjustNotes('');
@@ -103,7 +117,7 @@ export default function AdminUsersPage() {
           <Button variant="secondary" size="sm" icon={Eye} onClick={() => openDetail(r.id)}>
             View
           </Button>
-          <Button variant="ghost" size="sm" icon={Wallet} onClick={() => setAdjustUser(r)}>
+          <Button variant="ghost" size="sm" icon={Wallet} onClick={() => openAdjust(r)}>
             Adjust
           </Button>
         </div>
@@ -240,7 +254,7 @@ export default function AdminUsersPage() {
                 variant="secondary"
                 icon={Wallet}
                 onClick={() => {
-                  setAdjustUser(detail);
+                  openAdjust(detail);
                   setDetail(null);
                 }}
               >
@@ -261,26 +275,98 @@ export default function AdminUsersPage() {
             <Button variant="secondary" onClick={() => setAdjustUser(null)}>
               Cancel
             </Button>
-            <Button form="adjust-form" type="submit" disabled={busy}>
-              {busy ? 'Applying…' : 'Apply'}
+            <Button
+              form="adjust-form"
+              type="submit"
+              variant={adjustMode === 'deduct' ? 'danger' : 'success'}
+              disabled={busy}
+            >
+              {busy
+                ? 'Applying…'
+                : adjustMode === 'deduct'
+                ? 'Deduct money'
+                : 'Add money'}
             </Button>
           </>
         }
       >
         <form id="adjust-form" onSubmit={submitAdjust} className="space-y-4">
           <p className="text-sm text-slate-400">
-            Adjusting balance for <span className="font-semibold text-white">{adjustUser?.full_name || adjustUser?.username}</span>
+            Adjusting balance for{' '}
+            <span className="font-semibold text-white">{adjustUser?.full_name || adjustUser?.username}</span>
+            {' · current balance '}
+            <span className="font-semibold text-white">{inr(adjustUser?.main_balance)}</span>
           </p>
-          <Field label="Amount (positive credits, negative debits)">
-            <Input
-              type="number"
-              step="0.01"
-              placeholder="e.g. 500 or -200"
-              value={adjustAmount}
-              onChange={(e) => setAdjustAmount(e.target.value)}
-              required
-            />
+
+          <Field label="Action">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setAdjustMode('add')}
+                className={`flex items-center justify-center gap-2 rounded-lg border px-3.5 py-2.5 text-sm font-semibold transition ${
+                  adjustMode === 'add'
+                    ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-400'
+                    : 'border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-200'
+                }`}
+              >
+                <PlusCircle className="h-4 w-4" /> Add money
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdjustMode('deduct')}
+                className={`flex items-center justify-center gap-2 rounded-lg border px-3.5 py-2.5 text-sm font-semibold transition ${
+                  adjustMode === 'deduct'
+                    ? 'border-rose-500/50 bg-rose-500/15 text-rose-400'
+                    : 'border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-200'
+                }`}
+              >
+                <MinusCircle className="h-4 w-4" /> Deduct money
+              </button>
+            </div>
           </Field>
+
+          <Field label="Amount">
+            <div className="relative">
+              <span
+                className={`absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold ${
+                  adjustMode === 'deduct' ? 'text-rose-400' : 'text-emerald-400'
+                }`}
+              >
+                {adjustMode === 'deduct' ? '−' : '+'}
+              </span>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="e.g. 500"
+                value={adjustAmount}
+                onChange={(e) => setAdjustAmount(e.target.value)}
+                className="pl-7"
+                required
+              />
+            </div>
+          </Field>
+
+          {adjustAmount && !Number.isNaN(parseFloat(adjustAmount)) && (
+            <div
+              className={`rounded-lg border px-3.5 py-2.5 text-sm ${
+                adjustMode === 'deduct'
+                  ? 'border-rose-500/30 bg-rose-500/10 text-rose-300'
+                  : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+              }`}
+            >
+              {adjustMode === 'deduct' ? 'Deducting' : 'Adding'}{' '}
+              <span className="font-semibold">{inr(Math.abs(parseFloat(adjustAmount) || 0))}</span>
+              {' — new balance will be '}
+              <span className="font-semibold">
+                {inr(
+                  (Number(adjustUser?.main_balance) || 0) +
+                    (adjustMode === 'deduct' ? -1 : 1) * Math.abs(parseFloat(adjustAmount) || 0)
+                )}
+              </span>
+            </div>
+          )}
+
           <Field label="Notes">
             <Input
               placeholder="Reason for adjustment"
