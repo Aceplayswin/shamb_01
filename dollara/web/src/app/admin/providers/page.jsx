@@ -12,6 +12,7 @@ import {
   Field,
   Input,
   Toggle,
+  ImageUploadField,
   toast,
   useAdminData,
   fmtDate,
@@ -137,9 +138,12 @@ export default function AdminProvidersPage() {
           <Field label="Slug">
             <Input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} required />
           </Field>
-          <Field label="Logo URL">
-            <Input value={form.logo_url} onChange={(e) => setForm({ ...form, logo_url: e.target.value })} placeholder="https://…" />
-          </Field>
+          <ImageUploadField
+            label="Logo"
+            value={form.logo_url}
+            onChange={(url) => setForm({ ...form, logo_url: url })}
+            placeholder="https://…"
+          />
           <div>
             <Toggle checked={form.is_active} onChange={(v) => setForm({ ...form, is_active: v })} label="Enabled" />
             <p className="mt-1.5 text-xs text-slate-500">When disabled, all of this provider&apos;s games are hidden from players on the site.</p>

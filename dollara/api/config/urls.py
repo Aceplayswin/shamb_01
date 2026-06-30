@@ -1,4 +1,6 @@
+from django.conf import settings
 from django.urls import include, path
+from django.views.static import serve as serve_media
 from strawberry.django.views import GraphQLView
 
 from core.graphql_schema import schema
@@ -20,4 +22,8 @@ urlpatterns = [
     # Per-tenant feature API (auth, wallet, games, admin, ai).
     path('api/v1/', include('core.urls')),
     path('graphql', GraphQLView.as_view(schema=schema)),
+    # Admin-uploaded images. Served by Django directly (no nginx/object storage
+    # in this stack yet) so this must stay enabled outside DEBUG too — unlike
+    # django.conf.urls.static.static(), which no-ops when DEBUG=False.
+    path('media/<path:path>', serve_media, {'document_root': settings.MEDIA_ROOT}),
 ]

@@ -21,6 +21,10 @@ logs/
 *.log
 npm-debug.log*
 
+# Admin-uploaded media
+dollara/api/media/
+super_admin/api/media/
+
 # OS
 .DS_Store
 Thumbs.db

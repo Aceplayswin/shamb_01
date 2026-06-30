@@ -42,6 +42,7 @@ urlpatterns = [
     path('admin/deposits/pending', views.admin_deposits_pending),
     path('admin/deposits/<int:tx_id>/confirm', views.admin_deposit_confirm),
     path('admin/deposits/<int:tx_id>/reject', views.admin_deposit_reject),
+    path('admin/upload', views.admin_upload_image),
     path('admin/games', views.admin_games),
     path('admin/games/create', views.admin_games_create),
     path('admin/games/status', views.admin_games_status),

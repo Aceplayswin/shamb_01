@@ -480,6 +480,20 @@ def admin_deposit_reject(request, tx_id):
         return _error_response(e)
 
 
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_upload_image(request):
+    file = request.FILES.get('file')
+    if not file:
+        return _error_response(ValueError('No file uploaded'))
+    try:
+        url = admin_services.upload_admin_image(file)
+    except ValueError as e:
+        return _error_response(e)
+    return JsonResponse({'url': request.build_absolute_uri(url)}, status=201)
+
+
 @require_auth(['admin'])
 @require_http_methods(['GET'])
 def admin_games(request):
