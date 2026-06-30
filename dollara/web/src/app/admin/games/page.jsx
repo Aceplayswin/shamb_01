@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Gamepad2, Plus, Pencil, Star } from 'lucide-react';
+import { Gamepad2, Plus, Pencil, Star, Image as ImageIcon } from 'lucide-react';
 import { adminApi } from '@/services/adminApi';
 import {
   AdminShell,
@@ -24,11 +24,16 @@ const emptyGame = {
   slug: '',
   category: 'slots',
   provider_id: '',
+  game_uid: '',
+  game_type: '',
+  thumbnail_url: '',
   rtp: 96.5,
   min_bet: 10,
   max_bet: 100000,
+  sort_order: 0,
   is_featured: false,
   is_active_web: true,
+  is_active: true,
   is_provably_fair: false,
 };
 
@@ -49,11 +54,16 @@ export default function AdminGamesPage() {
       slug: g.slug,
       category: g.category,
       provider_id: g.provider_id || '',
+      game_uid: g.game_uid || '',
+      game_type: g.game_type || '',
+      thumbnail_url: g.thumbnail_url || '',
       rtp: g.rtp ?? '',
       min_bet: g.min_bet,
       max_bet: g.max_bet,
+      sort_order: g.sort_order ?? 0,
       is_featured: g.is_featured,
       is_active_web: g.is_active_web,
+      is_active: g.is_active,
       is_provably_fair: g.is_provably_fair,
     });
     setEditing(g.id);
@@ -62,7 +72,15 @@ export default function AdminGamesPage() {
   const save = async (e) => {
     e.preventDefault();
     setBusy(true);
-    const payload = { ...form, provider_id: form.provider_id || null };
+    const payload = {
+      ...form,
+      provider_id: form.provider_id || null,
+      game_uid: form.game_uid?.trim() || null,
+      game_type: form.game_type?.trim() || null,
+      thumbnail_url: form.thumbnail_url?.trim() || null,
+      rtp: form.rtp === '' ? null : form.rtp,
+      sort_order: Number(form.sort_order) || 0,
+    };
     try {
       if (editing === 'new') {
         await adminApi('/api/v1/admin/games/create', { method: 'POST', body: JSON.stringify(payload) });
@@ -98,11 +116,21 @@ export default function AdminGamesPage() {
       key: 'name',
       label: 'Game',
       render: (r) => (
-        <div className="flex items-center gap-2">
-          {r.is_featured && <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />}
-          <div>
-            <p className="font-medium text-white">{r.name}</p>
-            <p className="text-xs text-slate-500">{r.slug}</p>
+        <div className="flex items-center gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-700 bg-slate-950">
+            {r.thumbnail_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={r.thumbnail_url} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <ImageIcon className="h-4 w-4 text-slate-600" />
+            )}
+          </span>
+          <div className="flex items-center gap-2">
+            {r.is_featured && <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />}
+            <div>
+              <p className="font-medium text-white">{r.name}</p>
+              <p className="text-xs text-slate-500">{r.slug}</p>
+            </div>
           </div>
         </div>
       ),
@@ -181,8 +209,25 @@ export default function AdminGamesPage() {
                 ))}
               </Select>
             </Field>
+            <Field label="Game key (UID)">
+              <Input
+                value={form.game_uid}
+                onChange={(e) => setForm({ ...form, game_uid: e.target.value })}
+                placeholder="Aggregator game UID"
+              />
+            </Field>
+            <Field label="Game type">
+              <Input
+                value={form.game_type}
+                onChange={(e) => setForm({ ...form, game_type: e.target.value })}
+                placeholder="e.g. Slot Game, CasinoTable"
+              />
+            </Field>
             <Field label="RTP %">
               <Input type="number" step="0.01" value={form.rtp} onChange={(e) => setForm({ ...form, rtp: e.target.value })} />
+            </Field>
+            <Field label="Sort order">
+              <Input type="number" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: e.target.value })} />
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Min bet">
@@ -193,9 +238,27 @@ export default function AdminGamesPage() {
               </Field>
             </div>
           </div>
+          <Field label="Image URL">
+            <div className="flex items-center gap-3">
+              <span className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-700 bg-slate-950">
+                {form.thumbnail_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={form.thumbnail_url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <ImageIcon className="h-5 w-5 text-slate-600" />
+                )}
+              </span>
+              <Input
+                value={form.thumbnail_url}
+                onChange={(e) => setForm({ ...form, thumbnail_url: e.target.value })}
+                placeholder="https://…/game.png"
+              />
+            </div>
+          </Field>
           <div className="flex flex-wrap gap-6 pt-2">
             <Toggle checked={form.is_featured} onChange={(v) => setForm({ ...form, is_featured: v })} label="Featured" />
             <Toggle checked={form.is_active_web} onChange={(v) => setForm({ ...form, is_active_web: v })} label="Active on web" />
+            <Toggle checked={form.is_active} onChange={(v) => setForm({ ...form, is_active: v })} label="Launch enabled" />
             <Toggle checked={form.is_provably_fair} onChange={(v) => setForm({ ...form, is_provably_fair: v })} label="Provably fair" />
           </div>
         </form>
