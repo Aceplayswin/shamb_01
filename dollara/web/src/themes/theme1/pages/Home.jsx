@@ -1,17 +1,17 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useBranding } from '@/hooks/useBranding';
 import { useGameCatalog } from '@/hooks/useGameCatalog';
+import { useGameSearch } from '@/hooks/useGameSearch';
 import {
   filterByCategory,
   filterByProvider,
   filterFeatured,
   NAV_GAME_LINKS,
   playPath,
-  searchGames,
 } from '@/lib/gameRoutes';
 import {
   Play,
@@ -48,7 +48,7 @@ const ACCENT_TEXT = {
   rose: 'text-rose-400',
 };
 
-function SectionHeader({ title, kicker, Icon, seeAllHref, accent = 'brand' }) {
+function SectionHeader({ title, kicker, Icon, seeAllHref, accent = 'brand', onPrev, onNext }) {
   return (
     <div className="mb-5 flex items-end justify-between gap-4">
       <div className="flex items-center gap-3">
@@ -63,10 +63,20 @@ function SectionHeader({ title, kicker, Icon, seeAllHref, accent = 'brand' }) {
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <button className="grid h-8 w-8 place-items-center rounded-lg border border-hairline/10 text-muted transition hover:bg-panel hover:text-app-fg">
+        <button
+          type="button"
+          onClick={onPrev}
+          aria-label="Scroll left"
+          className="grid h-8 w-8 place-items-center rounded-lg border border-hairline/10 text-muted transition hover:bg-panel hover:text-app-fg"
+        >
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <button className="grid h-8 w-8 place-items-center rounded-lg border border-hairline/10 text-muted transition hover:bg-panel hover:text-app-fg">
+        <button
+          type="button"
+          onClick={onNext}
+          aria-label="Scroll right"
+          className="grid h-8 w-8 place-items-center rounded-lg border border-hairline/10 text-muted transition hover:bg-panel hover:text-app-fg"
+        >
           <ChevronRight className="h-4 w-4" />
         </button>
         {seeAllHref && (
@@ -137,13 +147,31 @@ function GameCard({ item, onPlay, theme = THEMES.casino, rank }) {
   );
 }
 
-function Carousel({ items, onPlay, theme, ranked }) {
+// A titled row of game cards with working ◀ ▶ controls that scroll the
+// horizontal carousel by roughly one viewport of cards.
+function Section({ title, kicker, Icon, accent, seeAllHref, items, onPlay, theme, ranked }) {
+  const scrollRef = useRef(null);
+  const scrollByPage = (dir) => {
+    const el = scrollRef.current;
+    if (el) el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: 'smooth' });
+  };
   return (
-    <div className="edge-fade-x flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
-      {items.map((item, i) => (
-        <GameCard key={item.id ?? item.slug} item={item} onPlay={onPlay} theme={theme} rank={ranked ? i + 1 : undefined} />
-      ))}
-    </div>
+    <section>
+      <SectionHeader
+        title={title}
+        kicker={kicker}
+        Icon={Icon}
+        accent={accent}
+        seeAllHref={seeAllHref}
+        onPrev={() => scrollByPage(-1)}
+        onNext={() => scrollByPage(1)}
+      />
+      <div ref={scrollRef} className="edge-fade-x flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+        {items.map((item, i) => (
+          <GameCard key={item.id ?? item.slug} item={item} onPlay={onPlay} theme={theme} rank={ranked ? i + 1 : undefined} />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -169,9 +197,11 @@ function Accordion({ question, answer, isOpen, onClick }) {
 export default function Theme1Home() {
   const branding = useBranding();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const searchQuery = (searchParams.get('q') ?? '').trim();
   const { games, loading, error } = useGameCatalog();
+  const { results: searchResults, loading: searching } = useGameSearch(searchQuery);
   const [openFaq, setOpenFaq] = useState(0);
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedProvider, setSelectedProvider] = useState(null);
 
   const providers = useMemo(
@@ -197,14 +227,18 @@ export default function Theme1Home() {
     if (game?.slug) router.push(playPath(game));
   };
 
-  const filteredGames = useMemo(() => {
-    let list = searchGames(games, searchQuery);
-    if (selectedProvider) list = filterByProvider(list, selectedProvider);
-    return list;
-  }, [games, searchQuery, selectedProvider]);
+  const isSearching = searchQuery !== '';
+  const isFiltering = isSearching || selectedProvider !== null;
 
-  const uniqueFilteredGames = filteredGames;
-  const isFiltering = searchQuery !== '' || selectedProvider !== null;
+  // When searching, filter the live API results; otherwise the provider chips
+  // filter the cached catalog client-side.
+  const uniqueFilteredGames = useMemo(() => {
+    if (isSearching) {
+      return selectedProvider ? filterByProvider(searchResults, selectedProvider) : searchResults;
+    }
+    if (selectedProvider) return filterByProvider(games, selectedProvider);
+    return [];
+  }, [isSearching, searchResults, selectedProvider, games]);
 
   return (
     <>
@@ -320,9 +354,18 @@ export default function Theme1Home() {
           {isFiltering ? (
             <section className="min-h-[400px]">
               <h2 className="mb-6 font-display text-xl font-bold text-app-fg">
-                Results <span className="text-muted/70">({uniqueFilteredGames.length})</span>
+                {isSearching ? (
+                  <>
+                    Results for <span className="text-brand-300">“{searchQuery}”</span>{' '}
+                  </>
+                ) : (
+                  'Results '
+                )}
+                <span className="text-muted/70">({uniqueFilteredGames.length})</span>
               </h2>
-              {uniqueFilteredGames.length > 0 ? (
+              {isSearching && searching && uniqueFilteredGames.length === 0 ? (
+                <p className="py-16 text-center text-muted">Searching…</p>
+              ) : uniqueFilteredGames.length > 0 ? (
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                   {uniqueFilteredGames.map((game) => (
                     <div key={game.id} className="flex justify-center">
@@ -346,25 +389,51 @@ export default function Theme1Home() {
             <p className="py-16 text-center text-muted">No games in catalog. Import database/init.sql on the API.</p>
           ) : (
             <>
-              <section>
-                <SectionHeader title="Live Sports" kicker="In play now" Icon={Trophy} accent="emerald" seeAllHref={NAV_GAME_LINKS.sports} />
-                <Carousel items={liveSports} onPlay={handlePlayGame} theme={THEMES.sports} />
-              </section>
+              <Section
+                title="Live Sports"
+                kicker="In play now"
+                Icon={Trophy}
+                accent="emerald"
+                seeAllHref={NAV_GAME_LINKS.sports}
+                items={liveSports}
+                onPlay={handlePlayGame}
+                theme={THEMES.sports}
+              />
 
-              <section>
-                <SectionHeader title="Casino Lobby" kicker="Top providers" Icon={Dices} accent="brand" seeAllHref={NAV_GAME_LINKS.casino} />
-                <Carousel items={casinoGames} onPlay={handlePlayGame} theme={THEMES.casino} />
-              </section>
+              <Section
+                title="Casino Lobby"
+                kicker="Top providers"
+                Icon={Dices}
+                accent="brand"
+                seeAllHref={NAV_GAME_LINKS.casino}
+                items={casinoGames}
+                onPlay={handlePlayGame}
+                theme={THEMES.casino}
+              />
 
-              <section>
-                <SectionHeader title="Trending Games" kicker="Player favourites" Icon={Flame} accent="rose" seeAllHref={NAV_GAME_LINKS.crash} />
-                <Carousel items={trendingGames} onPlay={handlePlayGame} theme={THEMES.trending} ranked />
-              </section>
+              <Section
+                title="Trending Games"
+                kicker="Player favourites"
+                Icon={Flame}
+                accent="rose"
+                seeAllHref="/games/featured"
+                items={trendingGames}
+                onPlay={handlePlayGame}
+                theme={THEMES.trending}
+                ranked
+              />
 
-              <section>
-                <SectionHeader title="Trending Slots" kicker="Big multipliers" Icon={Sparkles} accent="brand" seeAllHref={NAV_GAME_LINKS.slots} />
-                <Carousel items={trendingSlots} onPlay={handlePlayGame} theme={THEMES.slots} ranked />
-              </section>
+              <Section
+                title="Trending Slots"
+                kicker="Big multipliers"
+                Icon={Sparkles}
+                accent="brand"
+                seeAllHref={NAV_GAME_LINKS.slots}
+                items={trendingSlots}
+                onPlay={handlePlayGame}
+                theme={THEMES.slots}
+                ranked
+              />
 
               {/* Why choose — feature row */}
               <section>

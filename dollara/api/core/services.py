@@ -358,6 +358,7 @@ def list_games(
     featured: bool | None = None,
     limit: int = 50,
     offset: int = 0,
+    search: str | None = None,
 ):
     qs = Game.objects.filter(is_active_web=True, is_active=True).select_related('provider')
     # Hide games whose provider has been disabled in the admin panel. Games
@@ -367,6 +368,14 @@ def list_games(
         qs = qs.filter(category=category)
     if featured:
         qs = qs.filter(is_featured=True)
+    if search:
+        term = search.strip()
+        if term:
+            qs = qs.filter(
+                Q(name__icontains=term)
+                | Q(slug__icontains=term)
+                | Q(provider__name__icontains=term),
+            )
     qs = qs.order_by('sort_order', '-play_count')[offset : offset + limit]
     return [
         {

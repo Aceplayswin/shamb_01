@@ -1,6 +1,8 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Home,
   Trophy,
@@ -41,17 +43,20 @@ const PRIMARY = [
   { label: 'Promos', href: '#', icon: Gift },
 ];
 
+// Specific table/live games map to their broad category route plus a name
+// filter (?q=), so the destination page shows that game rather than the whole
+// live-casino catalog.
 const CATEGORIES = [
   { label: 'Lottery', href: NAV_GAME_LINKS.lottery, icon: Ticket, color: 'text-pink-400' },
   { label: 'Crash', href: NAV_GAME_LINKS.crash, icon: Rocket, color: 'text-brand-400' },
-  { label: 'Roulette', href: NAV_GAME_LINKS.liveCasino, icon: CircleDot, color: 'text-red-400' },
-  { label: 'Blackjack', href: NAV_GAME_LINKS.liveCasino, icon: WalletCards, color: 'text-slate-200' },
-  { label: 'Baccarat', href: NAV_GAME_LINKS.liveCasino, icon: Diamond, color: 'text-sky-400' },
-  { label: 'Dragon', href: NAV_GAME_LINKS.slots, icon: Crown, color: 'text-brand-300' },
-  { label: 'Teen Patti', href: NAV_GAME_LINKS.liveCasino, icon: Coins, color: 'text-amber-400' },
-  { label: 'Poker', href: NAV_GAME_LINKS.liveCasino, icon: Spade, color: 'text-brand-300' },
-  { label: 'Shows', href: NAV_GAME_LINKS.liveCasino, icon: Tv, color: 'text-emerald-400' },
-  { label: 'Andar', href: NAV_GAME_LINKS.liveCasino, icon: HeartHandshake, color: 'text-rose-400' },
+  { label: 'Roulette', href: `${NAV_GAME_LINKS.liveCasino}?q=roulette`, icon: CircleDot, color: 'text-red-400' },
+  { label: 'Blackjack', href: `${NAV_GAME_LINKS.liveCasino}?q=blackjack`, icon: WalletCards, color: 'text-slate-200' },
+  { label: 'Baccarat', href: `${NAV_GAME_LINKS.liveCasino}?q=baccarat`, icon: Diamond, color: 'text-sky-400' },
+  { label: 'Dragon', href: `${NAV_GAME_LINKS.slots}?q=dragon`, icon: Crown, color: 'text-brand-300' },
+  { label: 'Teen Patti', href: `${NAV_GAME_LINKS.liveCasino}?q=teen`, icon: Coins, color: 'text-amber-400' },
+  { label: 'Poker', href: `${NAV_GAME_LINKS.liveCasino}?q=poker`, icon: Spade, color: 'text-brand-300' },
+  { label: 'Shows', href: `${NAV_GAME_LINKS.liveCasino}?q=show`, icon: Tv, color: 'text-emerald-400' },
+  { label: 'Andar', href: `${NAV_GAME_LINKS.liveCasino}?q=andar`, icon: HeartHandshake, color: 'text-rose-400' },
 ];
 
 const MOBILE_TABS_BASE = [
@@ -82,6 +87,33 @@ export function Header() {
   const brandName = branding.product_name;
   const token = useAuthStore((s) => s.token);
   const wallet = useAuthStore((s) => s.wallet);
+  const router = useRouter();
+  const [search, setSearch] = useState('');
+  // Whether the user has typed in the box. Lets us seed the input from the URL
+  // (e.g. a shared /?q=… link) without that programmatic value triggering a
+  // navigation back to the home page.
+  const searchTouched = useRef(false);
+
+  // Seed the box from the current URL query once on mount.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('q') ?? '';
+    if (q) setSearch(q);
+  }, []);
+
+  // Debounced navigation: push the query into the home page via ?q= so results
+  // render there. Keyed on `search` only (not pathname) so navigating elsewhere
+  // with a term still in the box doesn't bounce the user back to the results.
+  useEffect(() => {
+    if (!searchTouched.current) return undefined;
+    const timer = setTimeout(() => {
+      const term = search.trim();
+      const onHome = window.location.pathname === '/';
+      const target = term ? `/?q=${encodeURIComponent(term)}` : '/';
+      if (onHome) router.replace(target);
+      else if (term) router.push(target);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search, router]);
   const mobileTabs = [
     ...MOBILE_TABS_BASE,
     { label: 'Account', href: token ? '/profile' : '/login', icon: User },
@@ -144,6 +176,11 @@ export function Header() {
           <div className="pointer-events-auto relative w-full">
             <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <input
+              value={search}
+              onChange={(e) => {
+                searchTouched.current = true;
+                setSearch(e.target.value);
+              }}
               placeholder="Search 2,000+ games, sports & providers…"
               className="w-full rounded-xl border border-hairline/10 bg-rail/60 py-2.5 pl-10 pr-4 text-sm text-app-fg placeholder-muted/70 transition-colors focus:border-brand-400 focus:outline-none"
             />
