@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from django.db.models import Count, F, Sum
+from django.db.models import Count, F, Q, Sum
 
 from core.models import (
     Game,
@@ -29,9 +29,12 @@ GAME_STATUS_KEY = 'game_status'
 class GameRepository:
     @staticmethod
     def get_active_by_uid(game_uid: str) -> Game | None:
+        # A game is launchable only when it is active and its provider has not
+        # been disabled in the admin panel (games without a provider are fine).
         return (
             Game.objects.select_related('provider')
             .filter(game_uid=game_uid, is_active=True)
+            .filter(Q(provider__isnull=True) | Q(provider__is_active=True))
             .first()
         )
 

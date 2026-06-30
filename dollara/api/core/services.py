@@ -360,6 +360,9 @@ def list_games(
     offset: int = 0,
 ):
     qs = Game.objects.filter(is_active_web=True, is_active=True).select_related('provider')
+    # Hide games whose provider has been disabled in the admin panel. Games
+    # without a provider (provider_id NULL) stay visible.
+    qs = qs.filter(Q(provider__isnull=True) | Q(provider__is_active=True))
     if category:
         qs = qs.filter(category=category)
     if featured:

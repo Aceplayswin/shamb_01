@@ -45,6 +45,19 @@ export default function AdminProvidersPage() {
     }
   };
 
+  const toggleActive = async (p) => {
+    try {
+      await adminApi(`/api/v1/admin/providers/${p.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_active: !p.is_active }),
+      });
+      toast.success(p.is_active ? 'Provider disabled — its games are now hidden from players' : 'Provider enabled');
+      reload();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
   const columns = [
     {
       key: 'name',
@@ -65,7 +78,7 @@ export default function AdminProvidersPage() {
       key: 'actions',
       label: '',
       render: (r) => (
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-1.5">
           <Button
             variant="secondary"
             size="sm"
@@ -76,6 +89,9 @@ export default function AdminProvidersPage() {
             }}
           >
             Edit
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => toggleActive(r)}>
+            {r.is_active ? 'Disable' : 'Enable'}
           </Button>
         </div>
       ),
@@ -124,7 +140,10 @@ export default function AdminProvidersPage() {
           <Field label="Logo URL">
             <Input value={form.logo_url} onChange={(e) => setForm({ ...form, logo_url: e.target.value })} placeholder="https://…" />
           </Field>
-          <Toggle checked={form.is_active} onChange={(v) => setForm({ ...form, is_active: v })} label="Active" />
+          <div>
+            <Toggle checked={form.is_active} onChange={(v) => setForm({ ...form, is_active: v })} label="Enabled" />
+            <p className="mt-1.5 text-xs text-slate-500">When disabled, all of this provider&apos;s games are hidden from players on the site.</p>
+          </div>
         </form>
       </Modal>
     </AdminShell>
