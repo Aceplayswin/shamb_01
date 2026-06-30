@@ -79,6 +79,53 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# --------------------------------------------------------------------------- #
+# Logging — game-play lifecycle to rotating files under logs/.
+#
+# The 'games' logger (see core/game_logging.py) writes a greppable, plain-text
+# record of every launch, settlement (bet/win/loss/balance) and failure to
+# logs/games.log; everything WARNING+ (interruptions, rejected callbacks,
+# decrypt/internal errors) is mirrored to logs/games_error.log so problems are
+# easy to find and diagnose. Files rotate so they never grow unbounded.
+# --------------------------------------------------------------------------- #
+LOG_DIR = BASE_DIR / 'logs'
+LOG_DIR.mkdir(exist_ok=True)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'game': {'format': '%(asctime)s %(levelname)s %(message)s'},
+    },
+    'handlers': {
+        'games_file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': str(LOG_DIR / 'games.log'),
+            'maxBytes': 10 * 1024 * 1024,
+            'backupCount': 10,
+            'formatter': 'game',
+            'level': 'INFO',
+            'encoding': 'utf-8',
+        },
+        'games_error_file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': str(LOG_DIR / 'games_error.log'),
+            'maxBytes': 5 * 1024 * 1024,
+            'backupCount': 10,
+            'formatter': 'game',
+            'level': 'WARNING',
+            'encoding': 'utf-8',
+        },
+    },
+    'loggers': {
+        'games': {
+            'handlers': ['games_file', 'games_error_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
+
 # Schema is applied via SQL (database/init.sql per tenant, database/master.sql
 # for the control plane), so Django migrations are disabled for both apps.
 MIGRATION_MODULES = {'core': None, 'tenants': None}

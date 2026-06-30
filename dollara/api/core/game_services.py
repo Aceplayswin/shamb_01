@@ -24,6 +24,7 @@ from django.conf import settings
 from django.db import IntegrityError
 from django.utils import timezone
 
+from core import game_logging
 from core.game_schemas import CallbackPayload, LaunchRequest
 from core.models import (
     GameRound,
@@ -75,60 +76,70 @@ def launch_game(user_id: int, body: dict) -> dict:
     balance_error, server_error}.
     """
     req = LaunchRequest.parse(body)
-
-    user = User.objects.filter(id=user_id, role=User.Role.USER).first()
-    if not user:
-        raise GameError('auth_error', 'User not found')
-    if user.account_status != User.AccountStatus.ACTIVE:
-        raise GameError('account_error', 'Account is not active')
-
-    if not GameSettingsRepository.is_games_enabled():
-        raise GameError('game_off', 'Games are temporarily disabled')
-
-    game = GameRepository.get_active_by_uid(req.game_uid)
-    if not game:
-        raise GameError('game_not_found', 'Game not available')
-
-    wallet = WalletRepository.get(user_id)
-    if not wallet:
-        raise GameError('balance_error', 'Wallet not found')
-    available = wallet.main_balance - wallet.locked_balance
-    if available < _min_launch_balance():
-        raise GameError(
-            'balance_error',
-            f'Minimum balance of {_min_launch_balance()} required to play',
-        )
+    game_logging.launch_attempt(user_id, req.game_uid, req.game_name)
 
     try:
-        launch_url = game_provider.request_launch_url(
-            user_id=user_id,
-            game_uid=req.game_uid,
-            credit_amount=f'{available:.2f}',
-            language=req.language,
-            platform=req.platform,
-        )
-    except game_provider.ProviderConfigError as exc:
-        raise GameError('server_error', str(exc)) from exc
-    except game_provider.ProviderError as exc:
-        raise GameError('server_error', str(exc)) from exc
+        user = User.objects.filter(id=user_id, role=User.Role.USER).first()
+        if not user:
+            raise GameError('auth_error', 'User not found')
+        if user.account_status != User.AccountStatus.ACTIVE:
+            raise GameError('account_error', 'Account is not active')
 
-    member_account = game_provider.build_member_account(user_id)
-    game_name = req.game_name or game.name
+        if not GameSettingsRepository.is_games_enabled():
+            raise GameError('game_off', 'Games are temporarily disabled')
 
-    with tenant_atomic():
-        session = GameSessionRepository.create(
-            session_uid=_new_session_uid(),
-            user_id=user_id,
-            game_id=game.id,
-            game_uid=req.game_uid,
-            game_name=game_name,
-            member_account=member_account,
-            launch_url=launch_url,
-            currency=wallet.currency,
-            status=GameSession.Status.WAIT,
-        )
-        GameRepository.increment_play_count(game.id)
+        game = GameRepository.get_active_by_uid(req.game_uid)
+        if not game:
+            raise GameError('game_not_found', 'Game not available')
 
+        wallet = WalletRepository.get(user_id)
+        if not wallet:
+            raise GameError('balance_error', 'Wallet not found')
+        available = wallet.main_balance - wallet.locked_balance
+        if available < _min_launch_balance():
+            raise GameError(
+                'balance_error',
+                f'Minimum balance of {_min_launch_balance()} required to play',
+            )
+
+        try:
+            launch_url = game_provider.request_launch_url(
+                user_id=user_id,
+                game_uid=req.game_uid,
+                credit_amount=f'{available:.2f}',
+                language=req.language,
+                platform=req.platform,
+            )
+        except game_provider.ProviderConfigError as exc:
+            raise GameError('server_error', str(exc)) from exc
+        except game_provider.ProviderError as exc:
+            raise GameError('server_error', str(exc)) from exc
+
+        member_account = game_provider.build_member_account(user_id)
+        game_name = req.game_name or game.name
+
+        with tenant_atomic():
+            session = GameSessionRepository.create(
+                session_uid=_new_session_uid(),
+                user_id=user_id,
+                game_id=game.id,
+                game_uid=req.game_uid,
+                game_name=game_name,
+                member_account=member_account,
+                launch_url=launch_url,
+                currency=wallet.currency,
+                status=GameSession.Status.WAIT,
+            )
+            GameRepository.increment_play_count(game.id)
+    except GameError as exc:
+        # The launch was interrupted before the game could open — record the
+        # exact reason (bad account, no balance, aggregator unreachable, …).
+        game_logging.launch_failed(user_id, req.game_uid, exc.code, str(exc), req.game_name)
+        raise
+
+    game_logging.launch_success(
+        user_id, req.game_uid, session.session_uid, game_name, launch_url,
+    )
     return {
         'status_code': 'success',
         'data': {
@@ -173,6 +184,7 @@ def process_callback(envelope: dict, raw_body: str | None = None) -> dict:
             raw_payload=raw_body, decrypted_payload=None,
             result='error', message=str(exc),
         )
+        game_logging.decrypt_error(str(exc))
         raise GameError('decrypt_error', str(exc)) from exc
 
     # 2. Validate the payload shape.
@@ -186,7 +198,13 @@ def process_callback(envelope: dict, raw_body: str | None = None) -> dict:
             raw_payload=raw_body, decrypted_payload=plain,
             result='rejected', message=str(exc),
         )
+        game_logging.rejected(
+            plain.get('serial_number'), plain.get('member_account'),
+            plain.get('game_uid'), str(exc),
+        )
         raise GameError('invalid_params', str(exc)) from exc
+
+    game_logging.callback_received(cb.serial_number, cb.member_account, cb.game_uid)
 
     user_id_str = game_provider.strip_member_account(cb.member_account)
     try:
@@ -196,6 +214,10 @@ def process_callback(envelope: dict, raw_body: str | None = None) -> dict:
             serial_number=cb.serial_number, member_account=cb.member_account,
             game_uid=cb.game_uid, raw_payload=raw_body, decrypted_payload=plain,
             result='rejected', message='Unresolvable member_account',
+        )
+        game_logging.rejected(
+            cb.serial_number, cb.member_account, cb.game_uid,
+            'Unresolvable member_account',
         )
         raise GameError('auth_error', 'Unknown member_account')
 
@@ -208,6 +230,7 @@ def process_callback(envelope: dict, raw_body: str | None = None) -> dict:
             game_uid=cb.game_uid, raw_payload=raw_body, decrypted_payload=plain,
             result='heartbeat', message='Balance sync',
         )
+        game_logging.heartbeat(user_id, cb.game_uid, cb.serial_number, balance)
         return game_provider.build_ack(f'{balance:.2f}', cb.timestamp)
 
     # 4. Fast idempotency pre-check (avoids opening a txn for known duplicates).
@@ -219,6 +242,7 @@ def process_callback(envelope: dict, raw_body: str | None = None) -> dict:
             game_uid=cb.game_uid, raw_payload=raw_body, decrypted_payload=plain,
             result='duplicate', message='Duplicate serial_number (pre-check)',
         )
+        game_logging.duplicate(user_id, cb.game_uid, cb.serial_number, 'pre-check')
         return game_provider.build_ack(f'{balance:.2f}', cb.timestamp)
 
     # 5. Settle atomically under a wallet row lock.
@@ -233,12 +257,16 @@ def process_callback(envelope: dict, raw_body: str | None = None) -> dict:
             game_uid=cb.game_uid, raw_payload=raw_body, decrypted_payload=plain,
             result='duplicate', message='Duplicate serial_number (race)',
         )
+        game_logging.duplicate(user_id, cb.game_uid, cb.serial_number, 'race')
         return game_provider.build_ack(f'{balance:.2f}', cb.timestamp)
     except Wallet.DoesNotExist:
         CallbackLogRepository.record(
             serial_number=cb.serial_number, member_account=cb.member_account,
             game_uid=cb.game_uid, raw_payload=raw_body, decrypted_payload=plain,
             result='rejected', message='Wallet not found',
+        )
+        game_logging.rejected(
+            cb.serial_number, cb.member_account, cb.game_uid, 'Wallet not found',
         )
         raise GameError('auth_error', 'Wallet not found')
 
@@ -247,6 +275,10 @@ def process_callback(envelope: dict, raw_body: str | None = None) -> dict:
         game_uid=cb.game_uid, raw_payload=raw_body, decrypted_payload=plain,
         result='settled',
         message=f'bet={cb.bet_amount} win={cb.win_amount} bal={settlement.credit_amount}',
+    )
+    game_logging.settled(
+        user_id, cb.game_uid, cb.serial_number,
+        cb.bet_amount, cb.win_amount, settlement.credit_amount,
     )
     return game_provider.build_ack(f'{settlement.credit_amount:.2f}', cb.timestamp)
 
