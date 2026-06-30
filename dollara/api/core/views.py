@@ -6,7 +6,7 @@ from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from core import admin_services, game_admin_services, game_services, services
+from core import admin_services, game_admin_services, game_logging, game_services, services
 from core.ai import chat_respond, fraud_score, pytorch_version, welcome_call
 from core.game_services import GameError
 from core.geo import detect_geo_from_ip
@@ -305,7 +305,8 @@ def games_callback(request):
         # Provider-shaped error envelope (non-zero code) so the aggregator can
         # retry/alert without us leaking internals.
         return JsonResponse({'code': 1, 'msg': str(e), 'payload': ''}, status=200)
-    except Exception:
+    except Exception as e:
+        game_logging.callback_error(f'{type(e).__name__}: {e}')
         return JsonResponse({'code': 1, 'msg': 'internal_error', 'payload': ''}, status=200)
 
 
