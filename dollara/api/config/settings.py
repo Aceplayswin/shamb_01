@@ -72,6 +72,11 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 STATIC_URL = 'static/'
+# Admin-uploaded images (game thumbnails, provider logos). Served locally —
+# swap to S3/Cloudinary storage later by pointing DEFAULT_FILE_STORAGE at it,
+# the upload view already goes through django.core.files.storage.default_storage.
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Schema is applied via SQL (database/init.sql per tenant, database/master.sql

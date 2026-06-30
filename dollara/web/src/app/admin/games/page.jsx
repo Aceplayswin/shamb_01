@@ -13,6 +13,7 @@ import {
   Input,
   Select,
   Toggle,
+  ImageUploadField,
   toast,
   useAdminData,
 } from '@/components/admin/AdminShell';
@@ -238,23 +239,12 @@ export default function AdminGamesPage() {
               </Field>
             </div>
           </div>
-          <Field label="Image URL">
-            <div className="flex items-center gap-3">
-              <span className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-700 bg-slate-950">
-                {form.thumbnail_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={form.thumbnail_url} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <ImageIcon className="h-5 w-5 text-slate-600" />
-                )}
-              </span>
-              <Input
-                value={form.thumbnail_url}
-                onChange={(e) => setForm({ ...form, thumbnail_url: e.target.value })}
-                placeholder="https://…/game.png"
-              />
-            </div>
-          </Field>
+          <ImageUploadField
+            label="Image"
+            value={form.thumbnail_url}
+            onChange={(url) => setForm({ ...form, thumbnail_url: url })}
+            placeholder="https://…/game.png"
+          />
           <div className="flex flex-wrap gap-6 pt-2">
             <Toggle checked={form.is_featured} onChange={(v) => setForm({ ...form, is_featured: v })} label="Featured" />
             <Toggle checked={form.is_active_web} onChange={(v) => setForm({ ...form, is_active_web: v })} label="Active on web" />

@@ -27,9 +27,11 @@ import {
   ChevronUp,
   ChevronDown,
   Loader2,
+  Image as ImageIcon,
+  UploadCloud,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
-import { adminApi, clearAdminToken, getAdminRole, getAdminToken } from '@/services/adminApi';
+import { adminApi, adminUploadImage, clearAdminToken, getAdminRole, getAdminToken } from '@/services/adminApi';
 import { useBranding } from '@/hooks/useBranding';
 
 const NAV_GROUPS = [
@@ -426,6 +428,88 @@ export function Toggle({ checked, onChange, label }) {
       </span>
       {label}
     </button>
+  );
+}
+
+const UPLOAD_ACCEPT = '.png,.jpg,.jpeg,.webp,.gif,.svg';
+const UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+
+export function ImageUploadField({ id, label, value, onChange, placeholder = 'https://…' }) {
+  const [mode, setMode] = useState('url');
+  const [uploading, setUploading] = useState(false);
+  const inputId = id || `image-upload-${label?.replace(/\s+/g, '-').toLowerCase() || 'field'}`;
+
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > UPLOAD_MAX_BYTES) {
+      toast.error('File too large (max 5MB)');
+      return;
+    }
+    setUploading(true);
+    try {
+      const { url } = await adminUploadImage(file);
+      onChange(url);
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <Field label={label}>
+      <div className="flex items-center gap-3">
+        <span className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-700 bg-slate-950">
+          {value ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={value} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <ImageIcon className="h-5 w-5 text-slate-600" />
+          )}
+        </span>
+        <div className="flex-1">
+          <div className="mb-1.5 flex gap-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setMode('url')}
+              className={`rounded px-2 py-0.5 font-semibold transition ${mode === 'url' ? 'bg-indigo-500/15 text-indigo-300' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              Image URL
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('upload')}
+              className={`rounded px-2 py-0.5 font-semibold transition ${mode === 'upload' ? 'bg-indigo-500/15 text-indigo-300' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              Upload
+            </button>
+          </div>
+          {mode === 'url' ? (
+            <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+          ) : (
+            <div>
+              <label
+                htmlFor={inputId}
+                className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-slate-400 transition hover:border-indigo-500 hover:text-indigo-300"
+              >
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                {uploading ? 'Uploading…' : 'Choose image…'}
+              </label>
+              <input
+                id={inputId}
+                type="file"
+                accept={UPLOAD_ACCEPT}
+                className="hidden"
+                disabled={uploading}
+                onChange={handleFile}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </Field>
   );
 }
 

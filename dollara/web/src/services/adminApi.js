@@ -51,6 +51,35 @@ export async function adminApi(path, options = {}) {
   return res.json();
 }
 
+export async function adminUploadImage(file) {
+  const token = getAdminToken();
+  const body = new FormData();
+  body.append('file', file);
+
+  const res = await fetch(`${API_URL}/api/v1/admin/upload`, {
+    method: 'POST',
+    headers: {
+      ...tenantHeaders(),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body,
+  });
+
+  if (res.status === 401) {
+    clearAdminToken();
+    if (typeof window !== 'undefined') {
+      window.location.href = '/admin/login';
+    }
+    throw new Error('Session expired');
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error ?? 'Upload failed');
+  }
+  return res.json();
+}
+
 export async function adminLogin(username, password) {
   const res = await fetch(`${API_URL}/api/v1/admin/auth/login`, {
     method: 'POST',

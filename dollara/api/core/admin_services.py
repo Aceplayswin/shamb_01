@@ -1,8 +1,10 @@
 """Admin-only business logic for the management panel."""
 
+import uuid
 from datetime import timedelta
 from decimal import Decimal
 
+from django.core.files.storage import default_storage
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
@@ -19,7 +21,25 @@ from core.models import (
     Wallet,
 )
 from core.services import get_user_settings
-from tenants.state import tenant_atomic
+from tenants.state import get_current_tenant_slug, tenant_atomic
+
+UPLOAD_ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'}
+UPLOAD_MAX_BYTES = 5 * 1024 * 1024
+
+
+def upload_admin_image(file) -> str:
+    """Save an admin-uploaded image (game thumbnail, provider logo) and return
+    its storage path. Caller turns this into an absolute URL."""
+    ext = file.name.rsplit('.', 1)[-1].lower() if '.' in file.name else ''
+    if ext not in UPLOAD_ALLOWED_EXTENSIONS:
+        raise ValueError(f'Unsupported file type: .{ext or "unknown"}')
+    if file.size > UPLOAD_MAX_BYTES:
+        raise ValueError('File too large (max 5MB)')
+
+    tenant_slug = get_current_tenant_slug() or 'default'
+    filename = f'{uuid.uuid4().hex}.{ext}'
+    path = default_storage.save(f'uploads/{tenant_slug}/{filename}', file)
+    return default_storage.url(path)
 
 
 def _serialize_user(u: User, wallet: Wallet | None = None, user_settings: UserSetting | None = None) -> dict:
