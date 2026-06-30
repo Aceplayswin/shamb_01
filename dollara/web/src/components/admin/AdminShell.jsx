@@ -630,17 +630,23 @@ export function DataTable({
   pageSize = 0,
 }) {
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [page, setPage] = useState(0);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(t);
+  }, [query]);
 
   const filtered = useMemo(() => {
     if (!rows) return [];
-    if (!searchable || !query.trim()) return rows;
-    const q = query.toLowerCase();
+    if (!searchable || !debouncedQuery.trim()) return rows;
+    const q = debouncedQuery.toLowerCase();
     const keys = searchKeys ?? columns.map((c) => c.key);
     return rows.filter((row) =>
       keys.some((k) => String(row[k] ?? '').toLowerCase().includes(q))
     );
-  }, [rows, query, searchable, searchKeys, columns]);
+  }, [rows, debouncedQuery, searchable, searchKeys, columns]);
 
   const totalPages = pageSize ? Math.ceil(filtered.length / pageSize) : 1;
   const pageRows = pageSize ? filtered.slice(page * pageSize, page * pageSize + pageSize) : filtered;

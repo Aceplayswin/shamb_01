@@ -222,10 +222,11 @@ def games_list(request):
     category = request.GET.get('category')
     featured_param = request.GET.get('featured')
     featured = True if featured_param == 'true' else None
+    search = request.GET.get('search')
     limit = int(request.GET.get('limit', 50))
     offset = int(request.GET.get('offset', 0))
     return JsonResponse(
-        services.list_games(category, featured, limit, offset),
+        services.list_games(category, featured, limit, offset, search),
         safe=False,
     )
 
