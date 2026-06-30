@@ -19,10 +19,6 @@ const STYLES = {
     error: 'mt-4 text-center text-sm text-red-400',
     msg: 'mt-4 text-center text-sm text-brand-300',
     link: 'text-brand-400',
-    iframeBar: 'flex items-center justify-between border-b border-white/10 px-4 py-2',
-    iframeTitle: 'text-sm font-semibold text-white',
-    exitBtn: 'rounded bg-surface-700 px-3 py-1 text-xs text-slate-300 hover:bg-surface-600',
-    iframe: 'h-[calc(100vh-8rem)] w-full border-0 lg:h-[calc(100vh-5rem)]',
     loading: 'mx-auto max-w-lg flex-1 px-4 py-12 text-center text-slate-400',
   },
   theme2: {
@@ -40,10 +36,6 @@ const STYLES = {
     error: 'mt-4 text-center text-sm text-rose-400',
     msg: 'mt-4 text-center text-sm text-amber-300',
     link: 'text-amber-400',
-    iframeBar: 'flex items-center justify-between border-b border-white/5 bg-[#0d1420] px-4 py-2',
-    iframeTitle: 'text-sm font-semibold text-white',
-    exitBtn: 'rounded-lg border border-white/10 px-3 py-1 text-xs text-slate-300 hover:border-amber-400/50',
-    iframe: 'h-[calc(100vh-8rem)] w-full border-0 lg:h-[calc(100vh-5rem)]',
     loading: 'mx-auto max-w-lg px-4 py-12 text-center text-slate-400',
   },
 };
@@ -54,8 +46,7 @@ export function GamePlayView({ slug, variant = 'theme1' }) {
     game,
     notFound,
     launching,
-    gameUrl,
-    setGameUrl,
+    redirecting,
     error,
     betAmount,
     setBetAmount,
@@ -82,21 +73,16 @@ export function GamePlayView({ slug, variant = 'theme1' }) {
     );
   }
 
-  if (gameUrl) {
+  // Aggregator games redirect the whole tab to the provider's URL (full screen,
+  // no Dollara chrome). While that navigation kicks in, show a minimal notice
+  // with a manual retry in case the browser blocked the redirect.
+  if (redirecting) {
     return (
-      <main className="flex flex-1 flex-col">
-        <div className={s.iframeBar}>
-          <h1 className={s.iframeTitle}>{game.name}</h1>
-          <button type="button" onClick={() => setGameUrl('')} className={s.exitBtn}>
-            Exit game
-          </button>
-        </div>
-        <iframe
-          src={gameUrl}
-          title={game.name}
-          className={s.iframe}
-          allow="fullscreen; autoplay; payment"
-        />
+      <main className={s.loading}>
+        Opening {game.name}…{' '}
+        <button type="button" onClick={launchGame} className={s.link}>
+          Tap to retry
+        </button>
       </main>
     );
   }
