@@ -32,6 +32,13 @@ const STYLES = {
     item: 'flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-slate-200 transition hover:bg-white/5',
     logout: 'flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-400 transition hover:bg-red-500/10',
   },
+  theme3: {
+    button:
+      'grid h-9 w-9 place-items-center overflow-hidden rounded-full border border-[#c79a3b]/40 bg-gradient-to-br from-[#e9c56b] to-[#b8862f] text-xs font-black text-[#241b0e] shadow-sm transition hover:brightness-105',
+    menu: 'absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-xl border border-black/[0.08] bg-white py-1 shadow-xl',
+    item: 'flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-[#1b1726] transition hover:bg-[#f4f2f9]',
+    logout: 'flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-[#e5484d] transition hover:bg-[#e5484d]/10',
+  },
 };
 
 export function ProfileMenu({ variant = 'theme1', buttonClassName }) {

@@ -106,6 +106,43 @@ body {
   }
 }
 
+/* ── Theme 3 (Velocity) ──────────────────────────────────────────────────────
+   A light cream lobby. Scoped to `.theme3-root` so it renders correctly no matter
+   what the app-wide light/dark toggle is set to (mirrors how theme2 pins its dark
+   palette). Everything inside the theme3 shell inherits this cream surface. */
+.theme3-root {
+  --t3-bg-a: #f4f2f9;
+  --t3-bg-b: #e9e6f2;
+  --t3-bg-c: #efeaf3;
+  --t3-ink: #1b1726;
+  --t3-muted: #6b6579;
+  --t3-gold: #c79a3b;
+  --t3-footer: #241b3a;
+
+  color: var(--t3-ink);
+  background:
+    radial-gradient(70% 55% at 0% 0%, rgba(199, 154, 59, 0.1) 0%, transparent 55%),
+    radial-gradient(60% 50% at 100% 0%, rgba(120, 96, 180, 0.12) 0%, transparent 55%),
+    linear-gradient(160deg, var(--t3-bg-a) 0%, var(--t3-bg-b) 55%, var(--t3-bg-c) 100%);
+  background-attachment: fixed;
+  color-scheme: light;
+}
+
+/* Native form controls inside theme3 should render light. */
+.theme3-root input,
+.theme3-root select,
+.theme3-root textarea {
+  color-scheme: light;
+}
+
+/* Faint dotted grid used behind the lower marketing sections. */
+.theme3-grid {
+  background-image:
+    linear-gradient(rgba(27, 23, 38, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(27, 23, 38, 0.04) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
 /* Slim custom scrollbar for the page itself */
 ::-webkit-scrollbar {
   width: 10px;
