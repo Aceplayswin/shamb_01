@@ -1,10 +1,15 @@
-# Ultraconic White‑Label Gaming Platform — Technical Documentation
+# White‑Label Gaming Platform — Technical Documentation
 
 > A multi‑tenant, white‑label online gaming (casino / sports / slots / lottery) platform.
-> One central **control plane** (Super Admin) provisions and brands many isolated
+> One central **control plane** (Super Admin) onboards and brands many isolated
 > **products** (e.g. Dollara, Product B, Product C). Each product ships a Django API,
-> a Next.js web app (with swappable themes), and a React Native mobile app — all driven
-> from the same shared database‑per‑tenant architecture.
+> a Next.js web app (with swappable themes), and a React Native mobile app.
+>
+> Each product is a **self‑contained deployment that owns its own database**. The control
+> plane never connects to a product's database: products **pull their config** (identity,
+> branding, live theme, signing keys) from Super Admin over HTTP, and Super Admin **pulls
+> product data back over a cryptographically‑signed webhook**. The only thing the two share
+> is HTTP — see [§5](#5-control-plane--products-config--data-channel).
 
 This README is the canonical engineering reference for the whole monorepo. It is written
 for a senior engineer onboarding cold: it explains *what* each part is, *why* it exists,
@@ -19,7 +24,7 @@ this document is derived from the code as it exists in the repository.
 2. [Repository Layout](#2-repository-layout)
 3. [Technology Stack](#3-technology-stack)
 4. [High‑Level Architecture](#4-high-level-architecture)
-5. [Multi‑Tenancy: Database‑per‑Tenant](#5-multi-tenancy-database-per-tenant)
+5. [Control Plane ↔ Products: Config & Data Channel](#5-control-plane--products-config--data-channel)
 6. [Tenant Resolution & Request Flow](#6-tenant-resolution--request-flow)
 7. [Authentication & Authorization](#7-authentication--authorization)
 8. [Branding & Theme System](#8-branding--theme-system)
@@ -50,23 +55,30 @@ The platform is a **B2B SaaS gaming framework**. A platform operator runs a sing
 **Super Admin** control plane. Through it they onboard *products* (white‑label brands).
 Each product is a fully isolated tenant with:
 
-- its **own MySQL database** (users, wallets, games, transactions, …);
+- its **own MySQL database** (users, wallets, games, transactions, …) that only its own
+  API connects to;
 - its **own branding** (name, logo, colors, support contacts) authored centrally;
 - a **live theme** (complete UI/UX skin) selected centrally;
-- a **product API** (`dollara/api`) that serves only that tenant's data;
+- a **product API** (`dollara/api`) that pulls its config from Super Admin and serves only
+  its own data;
 - a **web** front end (`dollara/web`) and **mobile** app (`dollara/mobile`).
 
-`dollara/` is the reference product implementation. To launch "Product B", you provision
-a new tenant from Super Admin and deploy copies of the same `dollara/*` codebases pointed
-at the new tenant slug — no code fork is required for branding or theming.
+`dollara/` is the reference product implementation. To launch "Product B", you create the
+product in Super Admin (which provisions its DB and issues its signing key pair) and deploy
+copies of the same `dollara/*` codebases pointed at Super Admin (`SUPER_ADMIN_URL` +
+`PRODUCT_CONFIG_TOKEN`) and at the new product's own database — no code fork is required for
+branding or theming.
 
 The headline technical features:
 
 | Capability | Where it lives | Notes |
 |---|---|---|
-| Database‑per‑tenant isolation | `dollara/api/tenants/`, `middleware/` | Dynamic connection registration + DB router |
-| Central provisioning | `super_admin/api/services/tenant_provisioning.py` | Creates DB + applies `init.sql` |
-| White‑label branding | master `branding` table + public endpoint | Served to web/mobile at runtime |
+| Isolated product database | each product's own `default` DB (`MYSQL_*`) | No cross‑product DB access; one deployment = one product |
+| Control‑plane config pull (HTTP) | `dollara/api/services/control_plane.py` | Product fetches identity/branding/theme/keys; cached w/ last‑known‑good |
+| Signed webhook data channel | `super_admin/api/services/webhook_client.py` + `dollara/api/core/webhook_views.py` | RSA‑PSS‑signed pulls; product reads its **own** DB and answers |
+| Product signing credentials | `super_admin/api/services/{crypto_keys,product_credentials}.py` | RSA‑2048 key pair per product; rotate/audit (`webhook_deliveries`) |
+| Central provisioning | `super_admin/api/services/tenant_provisioning.py` | Creates the product DB, applies `init.sql`, issues the key pair |
+| White‑label branding | master `branding` table → config pull + public endpoint | Served to web/mobile at runtime |
 | Per‑product theme switching | master `product_themes` table + `dollara/web/src/themes/` | A theme is a whole UI, not a color swap |
 | External game aggregator | `dollara/api/services/game_provider.py` + `core/game_services.py` | AES‑256 launch + idempotent callback settlement |
 | In‑process AI | `dollara/api/core/ai/` | PyTorch fraud scoring, welcome‑call & chat scripts |
@@ -87,22 +99,29 @@ shamb_01/                         ← git root
 │   │   ├── config/               ← settings, urls, wsgi, health view
 │   │   ├── core/                 ← per-tenant model mirror + seed_master command
 │   │   ├── middleware/           ← db_router (control-plane → master DB)
-│   │   ├── services/             ← branding, tenant_provisioning, tenant_resolver
-│   │   ├── tenants/              ← master models, views, themes catalog, auth, urls
-│   │   └── database/master.sql   ← master/control-plane schema
+│   │   ├── services/             ← branding, tenant_provisioning, product_credentials,
+│   │   │                            crypto_keys, webhook_client (signed data pulls)
+│   │   ├── tenants/              ← master models, views, themes, auth, urls, config API
+│   │   ├── docs/                 ← product_verifier_reference.py (drop-in for products)
+│   │   ├── database/master.sql   ← master/control-plane schema (+ migrations/)
+│   │   └── WEBHOOK_DATA_CHANNEL.md ← the signed data-channel contract
 │   └── web/                      ← Next.js console (port 3001)
-│       └── src/app/              ← login, overview, products (CRUD + branding + themes)
+│       └── src/app/              ← login, overview, products (CRUD + branding + themes
+│                                    + credentials + webhook data viewer)
 │
 └── dollara/                      ← REFERENCE PRODUCT (one tenant)
     ├── api/                      ← Django product API (port 5000)
     │   ├── config/               ← settings, test_settings, urls, asgi, wsgi
-    │   ├── core/                 ← all per-tenant features (auth, wallet, games, admin, ai)
+    │   ├── core/                 ← all product features (auth, wallet, games, admin, ai)
     │   │   ├── ai/               ← PyTorch fraud + welcome-call + chat
+    │   │   ├── webhook_views.py  ← verifies Super Admin's signed data pulls
+    │   │   ├── game_logging.py   ← game-play lifecycle → rotating logs/
     │   │   └── tests/            ← gaming-module unit/integration tests
-    │   ├── middleware/           ← TenantResolverMiddleware + TenantRouter
-    │   ├── services/             ← branding, tenant_resolver, game_provider
-    │   ├── tenants/              ← read-only master-DB model mirror + state
-    │   └── database/init.sql     ← per-tenant schema + 263-game seed catalog
+    │   ├── middleware/           ← TenantResolverMiddleware + TenantRouter (→ default)
+    │   ├── services/             ← control_plane (HTTP config pull), tenant_resolver,
+    │   │                            branding, super_admin_keys, webhook_verify, game_provider
+    │   ├── tenants/              ← runtime tenant state + public branding view (no models)
+    │   └── database/init.sql     ← this product's schema + 263-game seed catalog
     ├── web/                      ← Next.js player web app (port 3000)
     │   └── src/
     │       ├── app/              ← App-Router routes (player + /admin console)
@@ -112,15 +131,16 @@ shamb_01/                         ← git root
     │       ├── services/         ← api, adminApi, graphql, tenant
     │       ├── store/            ← zustand auth + light/dark theme
     │       └── middleware.js     ← tenant cookie/header injection
-    ├── mobile/                   ← React Native app (Android + iOS)
-    │   └── src/                  ← screens, navigation, store, services, branding
-    ├── games.md / gamesv1.md     ← legacy PHP aggregator analysis (source for the rebuild)
-    └── research.md               ← sample aggregator launch response
+    └── mobile/                   ← React Native app (Android + iOS)
+        └── src/                  ← screens, navigation, store, services, branding
 ```
 
-> **Important:** `super_admin` and `dollara` are siblings. The product API only *reads*
-> the master DB; it never exposes Super Admin endpoints. Conversely the Super Admin API
-> only writes the master DB and provisions/inspects tenant DBs.
+> **Important:** `super_admin` and `dollara` are siblings that only ever talk over **HTTP**.
+> The product API connects to its **own** database and never exposes Super Admin endpoints;
+> it *pulls* its config from Super Admin. Super Admin owns the master DB and provisions
+> products, but reads product data **only** by making signed webhook calls to each product —
+> it never connects to a product's database. (The gaming module's design notes, once in
+> `dollara/games.md` / `gamesv1.md` / `research.md`, now live in `dollara/api/docs/GAMES.md`.)
 
 ---
 
@@ -137,8 +157,8 @@ shamb_01/                         ← git root
 | **MySQL** (mysqlclient) | 8 / 2.2 | Master DB + one DB per tenant |
 | **PyJWT** | 2.9 | HS256 JWT auth tokens |
 | **bcrypt** | 4.2 | Password & OTP hashing |
-| **cryptography** | 43+ | AES‑256‑ECB for aggregator payloads — *product API only* |
-| **requests** | 2.32 | Outbound aggregator HTTP — *product API only* |
+| **cryptography** | 43+ | AES‑256‑ECB for aggregator payloads (product API) + **RSA‑2048 / RSA‑PSS(SHA‑256)** signing/verification for the Super Admin ↔ product webhook data channel (both APIs) |
+| **requests** | 2.32 | Outbound aggregator HTTP (product API) + Super Admin's signed webhook pulls; the product uses stdlib `urllib` for its control‑plane config fetch |
 | **PyTorch + NumPy** | 2.5 / 2.0 | In‑process fraud‑scoring MLP — *product API only* |
 | **django-cors-headers** | 4.6 | CORS for the SPA front ends |
 | **python-dotenv** | 1.0 | `.env` loading |
@@ -185,29 +205,30 @@ graph TD
     SAA["super_admin/api<br/>Django :8000"]
   end
 
-  subgraph Product["Product (per tenant, e.g. Dollara)"]
+  subgraph Product["Product (self-contained, e.g. Dollara)"]
     DW["dollara/web<br/>Next.js :3000"]
     DM["dollara/mobile<br/>React Native"]
     DA["dollara/api<br/>Django :5000"]
+    T1[("dollara DB<br/>(the product owns it)")]
   end
 
-  MASTER[("Master MySQL DB<br/>products, urls, branding,<br/>databases, product_themes,<br/>super-admin users")]
-  T1[("dollara_db<br/>(tenant)")]
-  T2[("productb_db<br/>(tenant)")]
+  MASTER[("Master MySQL DB<br/>products, urls, branding, databases,<br/>product_themes, product_credentials,<br/>webhook_deliveries, super-admin users")]
+  T2[("productb DB<br/>(other product owns it)")]
   AGG["External Game<br/>Aggregator"]
 
   SAW -->|JWT REST| SAA
   SAA -->|read/write| MASTER
-  SAA -->|provision: CREATE DB + init.sql| T1
-  SAA -->|provision| T2
+  SAA -. "provision once: CREATE DB + init.sql + issue RSA key" .-> T1
+  SAA -. "provision once" .-> T2
 
   DW -->|X-Tenant REST + GraphQL| DA
   DM -->|X-Tenant REST + GraphQL| DA
   DW -->|public branding + theme| SAA
   DM -->|public branding| SAA
 
-  DA -->|read tenant config| MASTER
-  DA -->|tenant data via router| T1
+  DA -->|"GET /products/&lt;slug&gt;/config<br/>(X-Product-Token, cached)"| SAA
+  SAA -->|"signed webhook GET data<br/>(RSA-PSS over HTTP)"| DA
+  DA -->|owns &amp; reads| T1
   DA <-->|AES launch / callbacks| AGG
 ```
 
@@ -220,7 +241,7 @@ graph LR
   C --> D[Django Views<br/>HTTP only]
   D --> E[Service Layer<br/>business logic]
   E --> F[Repository / ORM]
-  F --> G[(Tenant MySQL)]
+  F --> G[(Product MySQL)]
   E --> H[Provider Service<br/>AES + HTTP]
   H --> I[Aggregator]
 ```
@@ -232,58 +253,139 @@ speaks the aggregator's wire protocol.
 
 ---
 
-## 5. Multi‑Tenancy: Database‑per‑Tenant
+## 5. Control Plane ↔ Products: Config & Data Channel
 
-This is the backbone of the platform. There is **one master/control‑plane database** and
-**one isolated database per product**.
+This is the backbone of the platform. **Super Admin and a product only ever talk over
+HTTP.** Super Admin never opens a connection into a product's database, and a product
+never connects to the master/control‑plane database. Two signed HTTP channels replace what
+used to be direct cross‑database access:
 
-- The Django `default` connection always points at the **master** DB
-  (`dollara/api/config/settings.py`, `super_admin/api/config/settings.py`).
-- Each tenant DB is exposed to Django as a **dynamically registered** connection alias
-  `tenant_<slug>` (slug dashes → underscores). See
-  [`tenants/state.py#register_tenant_connection`](dollara/api/tenants/state.py).
-- A **database router** (`middleware/db_router.py`) sends the control‑plane app
-  (`tenants`) to `default`, and every other app (`core` features) to the *currently
-  resolved* tenant connection.
+| Channel | Direction | Auth | Purpose |
+|---|---|---|---|
+| **Config pull** | product → Super Admin | shared secret (`X-Product-Token`) | Product fetches its identity, branding, live theme, and signing public keys |
+| **Data pull (webhook)** | Super Admin → product | RSA‑PSS signature (`X-SA-Signature`) | Super Admin reads a product's data; the *product* reads its own DB and answers |
+
+> **Historical note.** Earlier revisions used a *database‑per‑tenant* model: one master DB
+> plus dynamically‑registered `tenant_<slug>` connections, with Super Admin opening MySQL
+> connections straight into each product's DB. That coupling is gone. Each `dollara/api`
+> process now serves **one** product and keeps all feature data on its Django `default`
+> connection (`MYSQL_*`). The old router/thread‑local machinery remains but is inert —
+> `get_current_db()` returns `None`, so `TenantRouter` always targets `default`
+> ([`middleware/db_router.py`](dollara/api/middleware/db_router.py)), and the `tenants` app
+> now defines **no models** ([`tenants/models.py`](dollara/api/tenants/models.py)).
+
+### 5.1 Config pull — the product fetches its own config
+
+On every request the tenant resolver needs the product's identity. Instead of reading the
+master DB, [`services/control_plane.py`](dollara/api/services/control_plane.py) fetches it
+from Super Admin:
+
+```
+GET {SUPER_ADMIN_URL}/api/v1/products/<slug>/config
+    X-Product-Token: <shared secret>   # must equal Super Admin's PRODUCT_CONFIG_TOKEN
+```
+
+The response (built by `product_config` in
+[`super_admin/api/tenants/views.py`](super_admin/api/tenants/views.py)) carries the
+product record, branding, active/known themes, and **public‑only** signing credentials:
+
+```jsonc
+{
+  "slug": "dollara",
+  "product":     { "id": 1, "slug": "dollara", "name": "Dollara", "status": "active" },
+  "branding":    { "product_name": "...", "logo_url": "...", "theme_color": "...", ... },
+  "theme":       { "active_theme": "theme1", "known_themes": ["theme1","theme2","theme3"] },
+  "credentials": [ { "key_id": "sak_...", "public_pem": "...", "fingerprint": "...",
+                     "is_active": true, "delivered_to_product_at": "..." } ]
+}
+```
+
+Caching keeps this off the hot path and survives control‑plane blips:
 
 ```mermaid
 graph TD
-  REQ[Incoming request] --> MW[TenantResolverMiddleware]
-  MW -->|set thread-local<br/>db_alias = tenant_dollara| TL[(thread-local state)]
-  ORM[core ORM query] --> RT{TenantRouter._db_for}
-  RT -->|app_label == tenants| DEF[default = master]
-  RT -->|else| CUR[get_current_db&#40;&#41; → tenant_dollara]
-  TL -.read.-> CUR
+  REQ["get_product_config(slug)"] --> F{"fresh cache?<br/>(TTL: CONTROL_PLANE_CACHE_TTL, 60s)"}
+  F -->|hit| RET[return config]
+  F -->|miss| CD{"in cooldown?<br/>(recent failure)"}
+  CD -->|yes| LKG["serve last-known-good<br/>(24h)"]
+  CD -->|no| HTTP["HTTP GET Super Admin"]
+  HTTP -->|ok| STORE["cache fresh + LKG"] --> RET
+  HTTP -->|fail| SET["set cooldown (10s)"] --> LKG
 ```
 
-Key files:
+`branding.py`, `super_admin_keys.py`, and `tenant_resolver.py` all read through this one
+cache, so a config change (new branding, theme switch, key rotation) propagates to the
+product within one TTL with **no redeploy**.
 
-- [`dollara/api/tenants/state.py`](dollara/api/tenants/state.py) — thread‑local current
-  tenant, `register_tenant_connection()`, `use_tenant()` context manager, and
-  `tenant_atomic()` (an `atomic()` bound to the resolved connection so money movements
-  commit on the right DB).
-- [`dollara/api/middleware/db_router.py`](dollara/api/middleware/db_router.py) —
-  `TenantRouter`. `CONTROL_PLANE_APPS = {'tenants'}` always go to `default`;
-  `allow_migrate` blocks feature schema from ever landing on master.
-- [`dollara/api/middleware/tenant.py`](dollara/api/middleware/tenant.py) —
-  `TenantResolverMiddleware`. Resolves the tenant at the start of every request and
-  **always clears the thread‑local in a `finally`** so connections never leak across the
-  worker thread pool.
+### 5.2 Data pull — Super Admin's signed webhook
 
-> **Why thread‑local, not request attribute?** The router (`db_for_read/write`) has no
-> access to the request object — only the model. A thread‑local lets the router read the
-> active tenant for the in‑flight request without threading it through every call.
+When an operator views a product's data in the console, Super Admin does **not** query the
+product's DB. It signs an HTTP `GET` and asks the product for the rows; the product reads
+its **own** database and returns them. The full byte‑for‑byte contract is in
+[`super_admin/api/WEBHOOK_DATA_CHANNEL.md`](super_admin/api/WEBHOOK_DATA_CHANNEL.md).
 
-The **master DB schema** is disjoint between the two backends' ORMs:
+```mermaid
+sequenceDiagram
+  participant OP as Operator (console)
+  participant SAA as super_admin/api<br/>(holds PRIVATE key)
+  participant DA as dollara/api<br/>(holds PUBLIC key)
+  participant DB as Product DB
+  OP->>SAA: GET .../data-webhook/users
+  SAA->>SAA: build signing-string; sign RSA-PSS/SHA-256 with private_pem
+  SAA->>DA: GET /api/v1/webhooks/super-admin/data/users<br/>X-SA-{Product,Key-Id,Timestamp,Nonce,Signature}
+  DA->>DA: resolve public key by X-SA-Key-Id (from config)
+  DA->>DA: reject if timestamp > 300s old (replay guard)
+  DA->>DA: rebuild signing-string, verify signature
+  DA->>DB: read OWN db (whitelisted columns, no secrets)
+  DA-->>SAA: JSON rows (same shape the console renders)
+  SAA->>SAA: audit the call in webhook_deliveries
+```
 
-- `super_admin/api/tenants/models.py` defines the **writable** master models
-  (`Product`, `ProductTheme`, `Branding`, `Url`, `Database`, `User`, `UserSession`).
-- `dollara/api/tenants/models.py` is a **read‑only mirror** of the subset Dollara needs
-  (`Product`, `ProductTheme`, `Branding`, `Url`, `Database`) — it reads tenant config &
-  branding but never writes the control plane.
+The **signing‑string** both sides agree on (6 lines joined by `\n`):
 
-Django migrations are **disabled** for both apps (`MIGRATION_MODULES = {'core': None,
-'tenants': None}`); all schema is applied via raw SQL (`master.sql` / `init.sql`).
+```
+<METHOD>                 e.g. GET
+<path + query string>    e.g. /api/v1/webhooks/super-admin/data/users?page=1&page_size=50
+<key_id>                 e.g. sak_3f9c…
+<unix timestamp>
+<nonce>                  random hex
+<hex SHA-256 of the raw body>   (empty body → sha256(""))
+```
+
+RSA‑PSS with MGF1(SHA‑256) and max salt length. The product side lives in
+[`core/webhook_views.py`](dollara/api/core/webhook_views.py) (endpoint + dataset whitelist,
+mirroring the console's `_DATASETS` column‑for‑column, secret columns never selected) and
+[`services/webhook_verify.py`](dollara/api/services/webhook_verify.py) (the verifier — a
+faithful copy of [`docs/product_verifier_reference.py`](super_admin/api/docs/product_verifier_reference.py)
+so the two sides cannot drift). The public key is resolved by `X-SA-Key-Id` in
+[`services/super_admin_keys.py`](dollara/api/services/super_admin_keys.py), primarily from
+the config pull (so a rotation is honoured with no redeploy) and, as a fallback, from
+`SUPER_ADMIN_WEBHOOK_KEY_ID` / `SUPER_ADMIN_WEBHOOK_PUBLIC_KEY` env vars.
+
+### 5.3 Signing credentials (`product_credentials`)
+
+Every product gets an **RSA‑2048 key pair** at creation, managed by
+[`super_admin/api/services/{crypto_keys,product_credentials}.py`](super_admin/api/services/product_credentials.py):
+
+- Super Admin keeps `private_pem` (never leaves the control plane) and **signs** every pull.
+- The product receives `public_pem` (via the config pull) and **verifies** every pull.
+- **Rotation** issues a new pair and retires the old; because the product resolves the key
+  live by `key_id`, rotations need no product redeploy.
+- Every pull is written to the master **`webhook_deliveries`** audit table.
+
+Console endpoints: `…/credential`, `…/credential/generate`, `…/credential/rotate`,
+`…/credential/mark-delivered` (see [§10](#10-component-super_adminapi-control-plane-api)).
+
+### 5.4 Where the master schema lives
+
+The master DB is owned entirely by `super_admin/api`. Its writable ORM models
+(`super_admin/api/tenants/models.py`) are `Product`, `ProductTheme`, `Branding`, `Url`,
+`Database`, `ProductCredential`, `WebhookDelivery`, `User`, `UserSession`. The product side
+has **no master mirror models at all** — it reads everything it needs over HTTP.
+
+Django migrations are **disabled** for both backends (`MIGRATION_MODULES`); all schema is
+applied via raw SQL (`master.sql` + `migrations/001_webhook_data_channel.sql` for the new
+tables; `init.sql` per product).
 
 ---
 
@@ -300,30 +402,35 @@ A request's tenant is resolved in **priority order** by
    still resolve correctly.
 4. **`DEFAULT_TENANT`** (default `dollara`) — development fallback for `localhost`.
 
-Once a `Product` is found, the resolver looks up its row in the master `databases` table
-and registers the tenant connection; if no row exists it falls back to `MYSQL_*` env
-(single‑tenant/dev). It then sets the thread‑local context.
+The resolver tries each candidate slug against the **control‑plane config** (§5.1) and
+takes the first that resolves — so a bad `X-Tenant` header falls through to the host, then
+the JWT claim, then `DEFAULT_TENANT`. It no longer touches any database: it just records
+the resolved slug in the thread‑local (for logging / JWT claims / branding lookups). All
+feature data lives on the Django `default` connection, so there is no per‑request DB
+switching.
 
 ```mermaid
 sequenceDiagram
   participant C as Client (web/mobile)
   participant MW as TenantResolverMiddleware
   participant R as resolve_tenant()
-  participant M as Master DB
+  participant CP as control_plane cache
+  participant SA as Super Admin (on miss)
   participant ORM as core ORM
-  participant T as Tenant DB
+  participant DB as Product DB (default)
 
   C->>MW: HTTP request (Host / X-Tenant / Bearer JWT)
   MW->>R: host, header_slug, jwt_slug
-  R->>M: Product.objects.filter(slug=…)
-  M-->>R: Product
-  R->>M: Database.objects.filter(product=…)
-  M-->>R: connection details
-  R->>R: register_tenant_connection("tenant_dollara")
-  R->>R: set_current_tenant(slug, alias)  [thread-local]
+  loop candidate slugs (most specific first)
+    R->>CP: get_product_config(slug)
+    CP-->>SA: HTTP GET .../config (only on cache miss)
+    SA-->>CP: product + branding + theme + keys
+    CP-->>R: config (or None → try next slug)
+  end
+  R->>R: set_current_tenant(resolved_slug)  [thread-local]
   MW->>ORM: get_response(request)
-  ORM->>T: queries routed via TenantRouter
-  T-->>ORM: tenant data
+  ORM->>DB: queries routed to `default`
+  DB-->>ORM: product data
   MW->>MW: finally: clear_current_tenant()
 ```
 
@@ -427,7 +534,10 @@ graph LR
 - Web: [`hooks/useBranding.jsx`](dollara/web/src/hooks/useBranding.jsx) fetches branding
   via [`services/tenant.js#fetchBranding`](dollara/web/src/services/tenant.js), sets CSS
   variables (`--brand`, `--accent`), document title, and favicon. It prefers the platform
-  public endpoint and falls back to the product API's `/api/v1/branding`.
+  public endpoint and falls back to the product API's `/api/v1/branding`. That product
+  fallback no longer reads the master `branding` table — [`services/branding.py`](dollara/api/services/branding.py)
+  now returns branding straight from the control‑plane config pull (§5.1), with safe
+  defaults if the control plane can't be reached.
 - Mobile: [`src/branding.js`](dollara/mobile/src/branding.js) provides `useBranding()` and
   `useThemeColors()` (merges brand colors over base tokens).
 
@@ -437,7 +547,8 @@ Per [the theme architecture](.claude/projects/e--Dancika-shamb-01/memory/theme-s
 
 - **Single source of truth for valid keys:**
   [`super_admin/api/tenants/themes.py`](super_admin/api/tenants/themes.py) — `THEME_CATALOG`
-  (`theme1` "Classic", `theme2` "Aurora"), `THEME_KEYS`, `DEFAULT_THEME='theme1'`.
+  (`theme1` "Classic", `theme2` "Aurora", `theme3` "Velocity"), `THEME_KEYS`,
+  `DEFAULT_THEME='theme1'`.
 - **Storage:** master **`product_themes`** table — one row per catalog theme per product,
   with `is_active` (exactly one = the live theme) and `is_enabled`. Logic lives in
   `themes.py`: `ensure_product_themes()` (idempotent seed, guarantees exactly one active),
@@ -481,6 +592,9 @@ graph TD
 **theme2** = "WAXCASINO" style (dark navy, hover‑expand left icon sidebar, sticky topbar
 with balance + Deposit, full footer; uses explicit hex colors and ignores the light/dark
 toggle). Shared theme2 primitives live in `themes/theme2/components/ui.jsx`.
+**theme3** = "Velocity" — a light cream lobby with a top nav, a category pill bar, and
+**modal** (rather than full‑page) auth (`themes/theme3/shell/` + `components/AuthModal.jsx`,
+`shell/authModalContext.jsx`).
 
 There is also an *unrelated* **light/dark toggle** for theme1 (`store/theme.js`,
 `ThemeToggle.jsx`, `ThemeHydrate.jsx`) that toggles a `light` class on `<html>`.
@@ -621,13 +735,17 @@ searchable round history.
 
 ## 10. Component: `super_admin/api` (Control Plane API)
 
-**Port 8000.** Operates exclusively on the master DB; provisions/inspects tenant DBs.
-Deployed at `admin.ultraconic.com`.
+**Port 8000.** Owns the master DB and provisions each product's database **once** at
+creation. At runtime it never connects to a product DB — it reads product data over the
+signed webhook (§5.2) and delivers each product its config over HTTP (§5.1). Deployed at
+`ranamatch.com`.
 
-**App layout:** `config/` (settings, urls, health), `core/` (per‑tenant model mirror used
-only for cross‑tenant user inspection; `seed_master` command), `middleware/db_router.py`,
-`services/` (`branding`, `tenant_provisioning`, `tenant_resolver`), `tenants/` (master
-models, views, `themes.py`, `auth_jwt.py`, `auth_middleware.py`, `urls.py`, `state.py`).
+**App layout:** `config/` (settings, urls, health), `core/` (per‑product model mirror used
+by the webhook/data reads; `seed_master` command), `middleware/db_router.py`, `services/`
+(`branding`, `tenant_provisioning`, **`product_credentials`** + **`crypto_keys`** for the
+RSA key pair, **`webhook_client`** for signed data pulls, `tenant_resolver`), `tenants/`
+(master models, views, `themes.py`, `auth_jwt.py`, `auth_middleware.py`, `urls.py`,
+`state.py`), `docs/product_verifier_reference.py` (the drop‑in the product side copies).
 
 ### Provisioning (`services/tenant_provisioning.py`)
 
@@ -635,15 +753,18 @@ models, views, `themes.py`, `auth_jwt.py`, `auth_middleware.py`, `urls.py`, `sta
 
 1. `update_or_create` the master `Product` (idempotent);
 2. `ensure_product_themes` (seed theme rows, theme1 active);
-3. upsert `Branding` and `Url`;
-4. upsert `Database` row (defaults: `<slug>_db`, master host/creds);
-5. shell out to the `mysql` CLI: `CREATE DATABASE IF NOT EXISTS` then apply
+3. **`issue_credential(product)`** — generate the RSA‑2048 webhook key pair (Super Admin
+   keeps the private key; the product gets the public one);
+4. upsert `Branding` and `Url`;
+5. upsert `Database` row (defaults: `<slug>_db`, master host/creds);
+6. shell out to the `mysql` CLI: `CREATE DATABASE IF NOT EXISTS` then apply
    `TENANT_SCHEMA_PATH` (`database/init.sql`) — `CREATE TABLE IF NOT EXISTS`, so re‑runs
    don't destroy data;
-6. register the tenant connection and mark `is_provisioned = True`.
+7. register the connection (setup only) and mark `is_provisioned = True`.
 
 > Requires the `mysql` client binary on the host. `db_password` is passed via `MYSQL_PWD`
-> env to avoid it appearing in the process list.
+> env to avoid it appearing in the process list. After provisioning, the product reads its
+> **own** DB; Super Admin only reaches it over the signed webhook.
 
 ```mermaid
 sequenceDiagram
@@ -652,15 +773,16 @@ sequenceDiagram
   participant PP as provision_product
   participant M as Master DB
   participant CLI as mysql CLI
-  participant T as New Tenant DB
+  participant T as New Product DB
   W->>V: POST /super-admin/products/create {slug,name,db,urls,branding}
   V->>PP: provision_product(...)
   PP->>M: upsert Product, Themes, Branding, Url, Database
+  PP->>M: issue_credential → RSA key pair (product_credentials)
   PP->>CLI: CREATE DATABASE IF NOT EXISTS <slug>_db
   PP->>CLI: mysql <db> < init.sql
   CLI->>T: tables + 263-game seed + default admin
   PP->>M: Database.is_provisioned = true
-  V-->>W: 201 serialized product
+  V-->>W: 201 serialized product (+ private key revealed once)
 ```
 
 ### Endpoint map (`tenants/urls.py`)
@@ -677,7 +799,7 @@ All under `/api/v1/`. Auth = `super_admin` JWT unless noted.
 | PATCH | `super-admin/products/<slug>/update` | Rename / change slug / status |
 | POST | `super-admin/products/<slug>/disable` | Disable (status) |
 | DELETE | `super-admin/products/<slug>/delete` | Delete control‑plane records (DB kept) |
-| POST | `super-admin/products/<slug>/provision` | (Re)create + seed tenant DB |
+| POST | `super-admin/products/<slug>/provision` | (Re)create + seed the product DB |
 | PATCH | `super-admin/products/<slug>/database` | Edit DB connection |
 | GET/PUT | `super-admin/products/<slug>/urls` | FE/BE URLs |
 | GET/PUT | `super-admin/products/<slug>/branding` | Branding |
@@ -686,19 +808,32 @@ All under `/api/v1/`. Auth = `super_admin` JWT unless noted.
 | POST | `super-admin/products/<slug>/themes/activate` | Set live theme |
 | PATCH | `super-admin/products/<slug>/themes/<key>/enabled` | Enable/disable a theme |
 | POST | `super-admin/test-connection` | Probe FE/BE URL or DB connectivity |
-| GET | `super-admin/products/<slug>/users` | Cross‑tenant user peek (switches DB context) |
+| GET | `super-admin/products/<slug>/credential` | Active credential (public material) |
+| POST | `super-admin/products/<slug>/credential/generate` | Issue first key pair (private key revealed **once**) |
+| POST | `super-admin/products/<slug>/credential/rotate` | New key pair, retire old (private key revealed **once**) |
+| POST | `super-admin/products/<slug>/credential/mark-delivered` | Record the product installed the public key |
+| GET | `super-admin/products/<slug>/data-webhook/summary` | Counts + aggregates, **pulled over the signed webhook** |
+| GET | `super-admin/products/<slug>/data-webhook/<dataset>` | Paginated rows, **pulled over the signed webhook** |
+| GET | `super-admin/products/<slug>/data-webhook/deliveries` | Webhook call audit trail (`webhook_deliveries`) |
+| GET | `super-admin/products/<slug>/data/summary` | *(deprecated)* counts via direct DB — removed once every product ships the webhook |
+| GET | `super-admin/products/<slug>/data/<dataset>` | *(deprecated)* rows via direct DB |
+| GET | `super-admin/products/<slug>/users` | *(deprecated)* cross‑product user peek via direct DB |
 | GET | `public/products/<slug>/branding` | **Public** branding for product FE |
 | GET | `public/products/<slug>/theme` | **Public** live theme for product FE |
+| GET | `products/<slug>/config` | Product config pull — auth = `X-Product-Token` (§5.1) |
 
 `test_connection` does an HTTP HEAD/GET (TLS verification disabled) for URLs, or a direct
-`MySQLdb.connect` for databases. `product_users` resolves + `use_tenant()`s into the
-tenant DB and reads `core.models.User` (the only place this API touches a tenant DB's
-feature tables).
+`MySQLdb.connect` for databases. The **`data-webhook/*`** endpoints are the new default: the
+console pulls product data by calling the product's signed webhook
+([`services/webhook_client.py`](super_admin/api/services/webhook_client.py)) rather than
+opening a connection into the product DB. The direct‑DB `data/*` and `users` endpoints
+(which `use_tenant()` into the product DB) are kept only during migration and will be
+removed once every product implements the webhook.
 
 ### `seed_master` command
 
 Creates the platform super admin (`superadmin` / `Admin@123`) and provisions three initial
-products (`dollara`, `productb`, `productc`), each with its own tenant DB. `--skip-provision`
+products (`dollara`, `productb`, `productc`), each with its own product DB. `--skip-provision`
 creates only master records.
 
 ---
@@ -730,20 +865,25 @@ header, 401→redirect‑to‑login handling, and one named function per endpoin
 
 ## 12. Component: `dollara/api` (Product Backend)
 
-**Port 5000 (ASGI via Daphne).** Serves a single resolved tenant. Three surfaces: REST
-(`core/urls.py`), GraphQL (`/graphql`), WebSocket (`/ws`).
+**Port 5000 (ASGI via Daphne).** Serves a single product and connects only to that
+product's own database (`default` / `MYSQL_*`). Four HTTP/WS surfaces: REST
+(`core/urls.py`), GraphQL (`/graphql`), WebSocket (`/ws`), and the Super Admin **data
+webhook** (`/api/v1/webhooks/super-admin/data/<resource>`). Its control‑plane config is
+pulled from Super Admin over HTTP (§5.1).
 
 ### Module map
 
 | Module | Responsibility |
 |---|---|
-| `config/settings.py` | DB‑per‑tenant config, middleware order, JWT, `GAME_PROVIDER`, mock‑launch, CORS |
+| `config/settings.py` | Own‑DB config, control‑plane (`SUPER_ADMIN_URL`/`PRODUCT_CONFIG_TOKEN`), middleware order, JWT, `GAME_PROVIDER`, mock‑launch, rotating game logs, CORS |
 | `config/asgi.py` | `ProtocolTypeRouter` (HTTP = Django, WS = Channels) |
 | `core/views.py` | All REST controllers (auth, settings, wallet, games, geo, admin, AI) |
+| `core/webhook_views.py` | Verifies Super Admin's signed data pulls, reads own DB (§5.2) |
 | `core/services.py` | Player/admin business logic (auth, OTP, wallet, deposits/withdrawals, bets, dashboards) |
 | `core/admin_services.py` | Admin panel logic (users, txns, games, providers, bonuses, settings, charts) |
 | `core/game_services.py` | Gaming launch + idempotent callback settlement + reporting |
 | `core/game_admin_services.py` | Gaming status toggle + GGR analytics |
+| `core/game_logging.py` | Structured game‑play lifecycle logging → rotating `logs/games*.log` |
 | `core/game_schemas.py` | Launch/callback validators |
 | `core/repositories.py` | Gaming data access + wallet locking |
 | `core/ai/services.py` | PyTorch fraud MLP, welcome‑call script, chatbot |
@@ -751,11 +891,14 @@ header, 401→redirect‑to‑login handling, and one named function per endpoin
 | `core/consumers.py` + `core/routing.py` | WebSocket live ticker (`/ws`) |
 | `core/geo.py` | IP→country/currency/payment‑methods config |
 | `core/middleware.py` + `core/auth_jwt.py` | JWT middleware + `require_auth` + token helpers |
+| `services/control_plane.py` | HTTP config pull from Super Admin (cached, last‑known‑good) |
+| `services/super_admin_keys.py` | Resolve the Super Admin public key by `X-SA-Key-Id` |
+| `services/webhook_verify.py` | Verify RSA‑PSS signature + replay window on inbound pulls |
 | `services/game_provider.py` | Aggregator wire protocol (AES + HTTP) |
-| `services/branding.py` | Branding serialization from master DB |
-| `services/tenant_resolver.py` | Tenant resolution + dynamic connection registration |
-| `middleware/tenant.py`, `middleware/db_router.py` | Tenant middleware + DB router |
-| `tenants/models.py`, `tenants/state.py`, `tenants/views.py` | Master mirror + thread‑local + public branding view |
+| `services/branding.py` | Branding from the control‑plane config (safe defaults) |
+| `services/tenant_resolver.py` | Resolve the product via the control‑plane config (no DB) |
+| `middleware/tenant.py`, `middleware/db_router.py` | Tenant middleware + router (always `default`) |
+| `tenants/state.py`, `tenants/views.py` | Runtime tenant thread‑local + public branding view (no models) |
 
 ### Wallet & money flow
 
@@ -908,6 +1051,8 @@ erDiagram
   products ||--o| urls : has
   products ||--o| databases : has
   products ||--o{ product_themes : has
+  products ||--o{ product_credentials : has
+  product_credentials ||--o{ webhook_deliveries : audits
   users ||--o{ user_sessions : has
 
   products {
@@ -915,6 +1060,21 @@ erDiagram
     varchar slug UK
     varchar name
     enum status "active|disabled"
+  }
+  product_credentials {
+    int id PK
+    int product_id FK
+    varchar key_id UK "e.g. sak_..."
+    text private_pem "never leaves Super Admin"
+    text public_pem "delivered to product"
+    bool is_active "one active per product"
+  }
+  webhook_deliveries {
+    int id PK
+    int product_id FK
+    varchar resource
+    enum status "pending|success|failed"
+    int http_status
   }
   product_themes {
     bigint id PK
@@ -951,11 +1111,13 @@ erDiagram
 
 | Table | Purpose | Notes |
 |---|---|---|
-| `products` | Tenant catalog | `slug` is the tenant key; `status` gates the public theme |
+| `products` | Product catalog | `slug` is the product key; `status` gates the public theme |
 | `product_themes` | Per‑product theme rows | exactly one `is_active`; `is_enabled` hides from activation |
+| `product_credentials` | RSA‑2048 webhook signing keys | one active per product; `private_pem` stays in Super Admin, `public_pem` delivered to the product; rotated keys retained for audit |
+| `webhook_deliveries` | Signed data‑pull audit log | one row per pull (`resource`, `status`, `http_status`, `duration_ms`, `nonce`) |
 | `branding` | White‑label branding | 1:1 with product |
 | `urls` | FE/BE URLs | 1:1 |
-| `databases` | Tenant DB connection details | host/port/user/password/`is_provisioned` |
+| `databases` | Product DB connection details (setup/provision only) | host/port/user/password/`is_provisioned` |
 | `users` | Platform super admins | seeded `superadmin`/`Admin@123` |
 | `user_sessions` | Active super‑admin sessions | single‑session enforcement |
 
@@ -1102,6 +1264,18 @@ Bearer <jwt>`. Tenant header: `X-Tenant: <slug>` (or resolved by host).
 See [§10](#10-component-super_adminapi-control-plane-api) for the full `super-admin/*` and
 `public/*` map.
 
+### 16.4 Super Admin ↔ Product data channel
+
+| Method | Host | Path | Auth | Purpose |
+|---|---|---|---|---|
+| GET | Super Admin `:8000` | `/api/v1/products/<slug>/config` | `X-Product-Token` | Product pulls its config (§5.1) |
+| GET | Product `:5000` | `/api/v1/webhooks/super-admin/data/summary` | `X-SA-Signature` (RSA‑PSS) | Super Admin pulls counts/aggregates (§5.2) |
+| GET | Product `:5000` | `/api/v1/webhooks/super-admin/data/<dataset>` | `X-SA-Signature` (RSA‑PSS) | Super Admin pulls paginated rows |
+
+Signed‑request headers: `X-SA-Product`, `X-SA-Key-Id`, `X-SA-Timestamp`, `X-SA-Nonce`,
+`X-SA-Signature`. Full contract in
+[`super_admin/api/WEBHOOK_DATA_CHANNEL.md`](super_admin/api/WEBHOOK_DATA_CHANNEL.md).
+
 ---
 
 ## 17. Startup & Execution Flow
@@ -1114,11 +1288,15 @@ sequenceDiagram
   participant SQL as MySQL
   participant SA as super_admin/api
   Op->>SQL: CREATE DATABASE dollara_master
-  Op->>SQL: mysql dollara_master < master.sql  (tables + superadmin)
+  Op->>SQL: mysql dollara_master < master.sql (tables + superadmin)
+  Op->>SQL: mysql dollara_master < migrations/001_webhook_data_channel.sql
   Op->>SA: python manage.py seed_master
   SA->>SQL: create superadmin + provision dollara/productb/productc
-  SA->>SQL: per tenant: CREATE DATABASE + init.sql (263 games, admin)
+  SA->>SQL: per product: CREATE DB + init.sql (263 games, admin) + issue RSA key pair
 ```
+
+> The product API is then pointed at Super Admin (`SUPER_ADMIN_URL` +
+> `PRODUCT_CONFIG_TOKEN`) and at its **own** database — it never opens the master DB.
 
 ### Product API process startup (`config/asgi.py` → settings)
 
@@ -1127,8 +1305,9 @@ sequenceDiagram
   participant D as Daphne (ASGI)
   participant S as settings.py
   participant AI as core.ai
-  D->>S: load .env, configure default=master DB, register TenantRouter
-  S->>S: build GAME_PROVIDER from env
+  D->>S: load .env, configure default = this product's OWN DB
+  S->>S: read SUPER_ADMIN_URL + PRODUCT_CONFIG_TOKEN (control-plane pull)
+  S->>S: build GAME_PROVIDER from env; configure rotating game logs
   D->>AI: import → instantiate FraudNet (Xavier init, eval)
   Note over D: HTTP → Django app; WS → Channels URLRouter(/ws)
 ```
@@ -1145,10 +1324,10 @@ sequenceDiagram
   participant V as View
   C->>Cors: request
   Cors->>Sec: 
-  Sec->>Ten: resolve tenant → set thread-local DB
+  Sec->>Ten: resolve product via control-plane config (cached)
   Ten->>Jwt: attach request.auth (if Bearer)
   Jwt->>V: require_auth gate → handler
-  V->>V: service → repository → tenant DB
+  V->>V: service → repository → product DB (default)
   V-->>C: JSON
   Ten->>Ten: finally: clear thread-local
 ```
@@ -1166,7 +1345,11 @@ provider stack. `BrandProvider` fetches branding (applies CSS vars/title/favicon
 
 | Rule | Where | Why |
 |---|---|---|
-| One product = one isolated DB | `TenantRouter` + resolver | Hard data isolation between brands |
+| One product = one isolated DB it alone connects to | product's `default` DB; Super Admin never connects at runtime | Hard data isolation between brands |
+| Super Admin reads product data only over the signed webhook | `webhook_client` → product `webhook_views` | No shared DB credentials; every pull is RSA‑PSS‑signed + audited |
+| Signed pulls reject stale requests (>300s) | `webhook_verify` | Replay protection on the data channel |
+| Config pulled over HTTP + cached with last‑known‑good | `control_plane.get_product_config` | Product survives a brief control‑plane outage |
+| Key rotation needs no product redeploy | `super_admin_keys` resolves by `X-SA-Key-Id` from live config | Zero‑downtime credential rotation |
 | Exactly one active theme per product | `themes.set_active_theme`/`ensure_product_themes` | Deterministic "live theme" |
 | Disabled product → no theme | `public_product_theme` | Lets FE show maintenance |
 | Min deposit ₹100 (mobile), min withdrawal ₹500 | wallet store / `create_withdrawal` | Operational floors |
@@ -1197,9 +1380,12 @@ provider stack. `BrandProvider` fetches branding (applies CSS vars/title/favicon
 | `PORT` | API port (default 5000) |
 | `DJANGO_SECRET_KEY` / `JWT_SECRET` / `JWT_REFRESH_SECRET` | Secrets (JWT HS256) |
 | `ALLOWED_HOSTS` | Comma list |
-| `MASTER_MYSQL_*` | Master DB connection (`default`) |
-| `MYSQL_*` | Default creds for tenant DBs / single‑tenant fallback |
-| `DEFAULT_TENANT` | Slug for localhost (default `dollara`) |
+| `SUPER_ADMIN_URL` | Control‑plane base URL for the config pull (default `http://localhost:8000`) |
+| `PRODUCT_CONFIG_TOKEN` | Shared secret sent as `X-Product-Token` on the config pull — must match Super Admin |
+| `CONTROL_PLANE_CACHE_TTL` / `CONTROL_PLANE_HTTP_TIMEOUT` | Config cache TTL (default 60s) / fetch timeout (default 10s) |
+| `MYSQL_*` | This product's **own** feature database (the `default` connection) |
+| `DEFAULT_TENANT` | This instance's single product slug (default `dollara`) |
+| `SUPER_ADMIN_WEBHOOK_KEY_ID` / `_PUBLIC_KEY` / `_PRODUCT` | Optional: pin a signing key when the config pull is unreachable (else keys come from config) |
 | `GAME_AGENCY_UID` / `GAME_AES_SECRET_KEY` / `GAME_PLAYER_PREFIX` | Aggregator identity + crypto |
 | `GAME_SERVER_URL` / `GAME_LAUNCH_PATH` | Aggregator launch endpoint |
 | `GAME_MOCK_LAUNCH` | `1` ⇒ local mock frame |
@@ -1211,7 +1397,8 @@ provider stack. `BrandProvider` fetches branding (applies CSS vars/title/favicon
 ### `super_admin/api/.env`
 
 `MASTER_MYSQL_*`, `MYSQL_*` (for provisioning), `JWT_SECRET`, `PORT` (8000),
-`TENANT_SCHEMA_PATH` (override path to `init.sql`).
+`TENANT_SCHEMA_PATH` (override path to `init.sql`), and `PRODUCT_CONFIG_TOKEN` — the shared
+secret products must present to pull their config (empty ⇒ the config endpoint fails closed).
 
 ### Frontend env
 
@@ -1242,27 +1429,29 @@ provider stack. `BrandProvider` fetches branding (applies CSS vars/title/favicon
 ### Local development (recommended order)
 
 ```bash
-# 1) Master schema (once)
+# 1) Master schema (once) — base tables + the webhook data-channel tables
 mysql -u root -e "CREATE DATABASE IF NOT EXISTS dollara_master CHARACTER SET utf8mb4;"
 mysql -u root dollara_master < super_admin/api/database/master.sql
+mysql -u root dollara_master < super_admin/api/database/migrations/001_webhook_data_channel.sql
 
-# 2) Super Admin API (:8000) — also provisions tenant DBs
+# 2) Super Admin API (:8000) — provisions each product's DB + issues its RSA key
 cd super_admin/api
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env
-python manage.py seed_master          # creates superadmin + dollara/productb/productc DBs
+cp .env.example .env                  # set PRODUCT_CONFIG_TOKEN (shared with the product)
+python manage.py seed_master          # superadmin + dollara/productb/productc DBs + credentials
 python manage.py runserver 0.0.0.0:8000
 
 # 3) Super Admin Web (:3001)
 cd ../web && npm install && cp .env.example .env && npm run dev
 
-# 4) Product API (:5000)
+# 4) Product API (:5000) — connects to its OWN DB, pulls config from Super Admin
 cd ../../dollara/api
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
-# (if not seeded by super-admin) mysql dollara_db < database/init.sql
+cp .env.example .env                  # MYSQL_* = this product's DB; SUPER_ADMIN_URL +
+                                      # PRODUCT_CONFIG_TOKEN must match Super Admin
+# (if the product DB wasn't seeded by provisioning) mysql dollara_db < database/init.sql
 python manage.py runserver 0.0.0.0:5000     # Daphne/ASGI for WS
 
 # 5) Product Web (:3000)
@@ -1274,6 +1463,10 @@ npm run start          # Metro
 npm run android        # or: npm run ios
 ```
 
+> **Shortcut:** once each service has its venv + `.env`, `./start.sh` from the repo root
+> launches all four dev services (both APIs + both webs) at once, teeing each to
+> `logs/<service>.log`. Ctrl+C stops everything.
+
 > On Windows the repo's shell is PowerShell/Git‑Bash; activate venvs accordingly. The
 > project memory notes the product API venv may live at
 > `dollara/api/venv/Scripts/python.exe`.
@@ -1281,16 +1474,24 @@ npm run android        # or: npm run ios
 ### Default credentials
 
 - Super Admin: `superadmin` / `Admin@123`
-- Per‑tenant product admin (each tenant DB): `superadmin` / `Admin@123`
+- Per‑product admin (each product DB): `superadmin` / `Admin@123`
 
 ### Production notes (from code/READMEs)
 
-- Super Admin → `admin.ultraconic.com`; products → `<product>.com`.
+- Super Admin → `ranamatch.com`; products → `<product>.com`.
 - Product API HTTP path can run under **gunicorn**; WebSockets need the **Daphne/ASGI**
   path. Run behind a reverse proxy that routes `/ws` to the ASGI server.
 - Set `NODE_ENV=production` (turns off `DEBUG` and CORS allow‑all — you must then set
   explicit CORS/`ALLOWED_HOSTS`).
 - Provisioning needs the `mysql` CLI on the Super Admin host.
+- **Network paths (both directions):** each product must reach Super Admin (`SUPER_ADMIN_URL`)
+  for its config pull, and Super Admin must reach each product's `be_url` for signed webhook
+  data pulls. Set the product's `be_url` (Super Admin → product URLs) before pulling data.
+- **Secrets:** keep `PRODUCT_CONFIG_TOKEN` and every product's `private_pem` secret. The
+  private key is revealed only once on generate/rotate — capture it then. Rotate via the
+  console; products pick up the new key with no redeploy.
+- Products created before the webhook channel existed won't have a credential — click
+  **Generate** (or re‑run `provision`) to issue one.
 
 ---
 
@@ -1323,8 +1524,14 @@ python manage.py test core.tests --settings=config.test_settings
 
 **Strengths**
 
-- **Hard tenant isolation** at the DB level; control‑plane app can never migrate onto a
-  tenant DB.
+- **Hard product isolation:** each product owns its DB and is the only process that
+  connects to it. Super Admin holds **no** product DB credentials at runtime.
+- **Signed data channel:** Super Admin → product pulls are RSA‑PSS(SHA‑256) signed with a
+  per‑product key, bound to method + path + timestamp + nonce + body hash, with a 300s
+  replay window; secret columns (password hashes, 2FA secrets) are never returned; every
+  pull is audited (`webhook_deliveries`).
+- **Zero‑downtime key rotation:** the product resolves the signing key by `key_id` from its
+  live config, so rotating a compromised key needs no product redeploy.
 - **bcrypt** password & OTP hashing; **HS256 JWT** with expiry and tenant binding.
 - **Idempotent, row‑locked, atomic** money settlement — the highest‑risk path is the most
   carefully guarded.
@@ -1339,6 +1546,8 @@ python manage.py test core.tests --settings=config.test_settings
 | Area | Issue | Recommendation |
 |---|---|---|
 | Secrets | Default `JWT_SECRET`/`DJANGO_SECRET_KEY` are dev placeholders; bcrypt hash for `Admin@123` is committed in SQL | Rotate all secrets and the default admin password before any non‑local deploy |
+| Config token | `PRODUCT_CONFIG_TOKEN` is a shared bearer secret guarding the config pull (which returns public keys only, never `private_pem`) | Use a strong random token per platform, always over TLS, and rotate it; the endpoint already fails closed if the token is unset |
+| Channel TLS | `control_plane.py` and the webhook client currently create SSL contexts with verification disabled (`CERT_NONE`) | Enable proper certificate verification (or CA pinning) for both HTTP channels in production |
 | OTP delivery | OTPs are logged/returned in `DEBUG`, never sent | Integrate Twilio/MSG91 and never expose OTP in responses |
 | `test_connection` | TLS verification disabled (`CERT_NONE`) | Acceptable for a health probe; keep it strictly admin‑only (it is) and consider SSRF allow‑listing |
 | Callback auth | Auth is *solely* possession of the AES key; no source‑IP allow‑list | Add aggregator IP allow‑listing + replay/timestamp window |
@@ -1353,8 +1562,10 @@ python manage.py test core.tests --settings=config.test_settings
 
 ## 23. Performance Review
 
-- **Tenant connections are cached** and only re‑registered when config changes
-  (`register_tenant_connection` compares before swapping) — good.
+- **Control‑plane config is cached in‑process** (fresh TTL + 24h last‑known‑good + failure
+  cooldown), so tenant resolution — which runs on every request — makes at most one HTTP
+  call per TTL and keeps serving through a brief Super Admin outage. Note the cache is
+  `LocMemCache`, so it is **per‑process**: each worker warms and rotates keys independently.
 - **Repositories use `select_related`** on hot list paths (games, sessions, rounds, txns).
 - **Settlement holds a row lock briefly** inside a single atomic block — correct, but high
   callback volume per player will serialize on that wallet row (expected for correctness).
@@ -1387,8 +1598,10 @@ python manage.py test core.tests --settings=config.test_settings
 
 | Item | Detail |
 |---|---|
-| Duplicated master state logic | `tenants/state.py`, `middleware/db_router.py`, `auth_jwt.py`, `auth_middleware.py` are near‑copies across both backends — intentional (separate services) but drift‑prone. |
-| Duplicated tenant `User`/`UserSetting`/`Wallet`… models | `dollara/api/core/models.py` and `super_admin/api/core/models.py` overlap; the super‑admin copy lacks the gaming extensions. Keep in sync manually. |
+| Vestigial multi‑tenant machinery | dollara's `TenantRouter`, `tenants/state.py` thread‑local, `use_tenant`, and `tenant_atomic` remain but now always resolve to `default` — dead weight that can mislead. Remove or clearly document as inert. |
+| Hand‑synced signing contract | `webhook_verify.py` is a copy of `docs/product_verifier_reference.py`, and the product's `_DATASETS` mirrors Super Admin's `_DATASETS` column‑for‑column. Both must be edited in lockstep or the channel silently drifts. |
+| Duplicated auth/state logic | `auth_jwt.py`, `auth_middleware.py`, and the (now inert) tenant state are near‑copies across both backends — intentional (separate services) but drift‑prone. |
+| Duplicated tenant `User`/`UserSetting`/`Wallet`… models | `dollara/api/core/models.py` and `super_admin/api/core/models.py` overlap; the super‑admin copy (used by the webhook/data reads) lacks the gaming extensions. Keep in sync manually. |
 | `available` balance formula differs | Backend `main − locked` vs mobile `main + bonus − locked − exposure`. Reconcile to avoid UX/accounting mismatch. |
 | Withdrawal stages are cosmetic | Auto‑approve regardless of stage outcome. |
 | Fraud model untrained | Advisory only. |
@@ -1409,11 +1622,15 @@ multi‑tenant primitives into a versioned internal package to stop drift.
 
 | Term | Meaning |
 |---|---|
-| **Control plane / Super Admin** | The central service that manages products, branding, themes, and tenant DB provisioning. |
+| **Control plane / Super Admin** | The central service that manages products, branding, themes, provisioning, and the signing credentials — and talks to products only over HTTP. |
 | **Product / Tenant** | A white‑label brand (e.g. Dollara) with its own DB, branding, theme, API, web, mobile. |
-| **Master DB** | The control‑plane database holding products/urls/branding/databases/themes/super‑admin users. |
-| **Tenant DB** | A product's isolated database (users, wallets, games, transactions, …). |
-| **Slug** | A product's stable identifier (e.g. `dollara`); used for tenant resolution and DB alias `tenant_<slug>`. |
+| **Master DB** | The control‑plane database holding products/urls/branding/databases/themes/`product_credentials`/`webhook_deliveries`/super‑admin users. |
+| **Product DB** | A product's isolated database (users, wallets, games, transactions, …) — connected to only by that product's own API. |
+| **Config pull** | The product's HTTP fetch of its identity/branding/theme/public keys from Super Admin (`GET /products/<slug>/config`, `X-Product-Token`), cached. |
+| **Signed webhook data channel** | Super Admin's RSA‑PSS‑signed HTTP pulls of a product's data; the product verifies the signature and reads its own DB. |
+| **Product credential** | The RSA‑2048 key pair per product: Super Admin signs pulls with `private_pem`, the product verifies with `public_pem`. |
+| **`key_id`** | The identifier for a credential (e.g. `sak_…`); lets the product pick the right public key across rotations. |
+| **Slug** | A product's stable identifier (e.g. `dollara`); used for config resolution and as the `X-Tenant` value. |
 | **Branding** | Per‑product white‑label data (name, logo, colors, support, legal URLs). |
 | **Theme** | A complete UI/UX skin (`theme1`, `theme2`): own shell + own version of every page. |
 | **Live theme** | The single `is_active` theme a product renders. |
@@ -1434,21 +1651,26 @@ multi‑tenant primitives into a versioned internal package to stop drift.
 
 | File | Role |
 |---|---|
-| `config/settings.py` | Master‑only DB, JWT, `TENANT_SCHEMA_PATH`, migrations off |
+| `config/settings.py` | Master‑only DB, JWT, `TENANT_SCHEMA_PATH`, `PRODUCT_CONFIG_TOKEN`, migrations off |
 | `config/urls.py` / `config/views.py` | Routing + health |
-| `tenants/models.py` | Writable master models (Product/Theme/Branding/Url/Database/User/Session) |
-| `tenants/views.py` | Products CRUD, branding, themes, public endpoints, cross‑tenant peek, connection tests |
-| `tenants/themes.py` | Theme catalog + `ensure/set/get` active theme |
+| `tenants/models.py` | Writable master models (Product/Theme/Branding/Url/Database/**ProductCredential/WebhookDelivery**/User/Session) |
+| `tenants/views.py` | Products CRUD, branding, themes, credentials, webhook data pulls, `product_config`, public endpoints, connection tests |
+| `tenants/themes.py` | Theme catalog (theme1/2/3) + `ensure/set/get` active theme |
 | `tenants/urls.py` | Endpoint map |
 | `tenants/auth_jwt.py` / `tenants/auth_middleware.py` | JWT + `require_auth` |
-| `tenants/state.py` | Thread‑local + dynamic connection registration |
-| `services/tenant_provisioning.py` | Create DB + apply `init.sql` |
-| `services/tenant_resolver.py` | Resolve/activate tenant (for cross‑tenant peeks) |
+| `tenants/state.py` | Thread‑local + connection registration (provisioning/webhook reads) |
+| `services/tenant_provisioning.py` | Create DB + apply `init.sql` + issue RSA credential |
+| `services/product_credentials.py` | Credential lifecycle (generate/rotate/deliver) |
+| `services/crypto_keys.py` | RSA key gen + RSA‑PSS signing primitives (shared contract) |
+| `services/webhook_client.py` | Signed data pulls to a product's webhook |
+| `services/tenant_resolver.py` | Resolve/activate a product (for webhook/data reads) |
 | `services/branding.py` | Branding serialization |
 | `middleware/db_router.py` | Control‑plane→master routing |
-| `core/models.py` | Per‑tenant model mirror (for cross‑tenant user reads) |
-| `core/management/commands/seed_master.py` | Seed admin + initial products |
-| `database/master.sql` | Master schema + default super admin |
+| `core/models.py` | Per‑product model mirror (used by the webhook/data reads) |
+| `core/management/commands/seed_master.py` | Seed admin + initial products + credentials |
+| `database/master.sql` (+ `migrations/001_webhook_data_channel.sql`) | Master schema + default super admin + webhook tables |
+| `docs/product_verifier_reference.py` | Drop‑in reference the product side copies |
+| `WEBHOOK_DATA_CHANNEL.md` | The signed data‑channel contract (both sides) |
 
 ### `super_admin/web`
 
@@ -1465,27 +1687,33 @@ multi‑tenant primitives into a versioned internal package to stop drift.
 
 | File | Role |
 |---|---|
-| `config/settings.py` / `test_settings.py` | App config; SQLite test config |
+| `config/settings.py` / `test_settings.py` | App config (own DB, control‑plane, game logs); SQLite test config |
 | `config/asgi.py` / `wsgi.py` | ASGI (HTTP+WS) / WSGI entry |
+| `config/urls.py` | Root routing incl. the Super Admin data webhook |
 | `core/views.py` | All REST controllers |
+| `core/webhook_views.py` | Verifies Super Admin's signed data pulls; reads own DB |
 | `core/services.py` | Player/admin core logic |
 | `core/admin_services.py` | Admin panel logic + charts |
 | `core/game_services.py` | Launch + settlement + reporting |
 | `core/game_admin_services.py` | Gaming status + analytics |
+| `core/game_logging.py` | Game‑play lifecycle → rotating `logs/games*.log` |
 | `core/game_schemas.py` | Launch/callback validators |
 | `core/repositories.py` | Gaming data access + locking |
-| `core/models.py` | All tenant ORM models (incl. gaming) |
+| `core/models.py` | All product ORM models (incl. gaming) |
 | `core/ai/services.py` | Fraud MLP + welcome call + chat |
 | `core/graphql_schema.py` | Strawberry schema |
 | `core/consumers.py` / `core/routing.py` | WS live ticker |
 | `core/geo.py` | Geo config (placeholder) |
 | `core/middleware.py` / `core/auth_jwt.py` | JWT middleware + helpers |
 | `core/urls.py` | REST route map |
+| `services/control_plane.py` | HTTP config pull (cached, last‑known‑good) |
+| `services/super_admin_keys.py` | Resolve Super Admin public key by `X-SA-Key-Id` |
+| `services/webhook_verify.py` | RSA‑PSS verify + replay window (copy of the reference) |
 | `services/game_provider.py` | AES + aggregator HTTP |
-| `services/branding.py` / `services/tenant_resolver.py` | Branding + tenant resolution |
-| `middleware/tenant.py` / `middleware/db_router.py` | Tenant middleware + router |
-| `tenants/models.py` / `state.py` / `views.py` | Master mirror + thread‑local + public branding |
-| `database/init.sql` | Tenant schema + 263‑game seed |
+| `services/branding.py` / `services/tenant_resolver.py` | Branding + product resolution (via control plane) |
+| `middleware/tenant.py` / `middleware/db_router.py` | Tenant middleware + router (always `default`) |
+| `tenants/state.py` / `views.py` | Runtime tenant thread‑local + public branding (no models) |
+| `database/init.sql` | Product schema + 263‑game seed |
 | `docs/GAMES.md` | Gaming module deep‑dive |
 
 ### `dollara/web`
