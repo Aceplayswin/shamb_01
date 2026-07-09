@@ -26,6 +26,11 @@ THEME_CATALOG = [
         'name': 'Theme 3 — Velocity',
         'description': 'Light cream lobby with a top nav, category pill bar, and modal auth.',
     },
+    {
+        'key': 'theme4',
+        'name': 'Theme 4 — Exchange',
+        'description': 'Teal sports-exchange lobby with ticker bar, category nav, and back/lay odds boards.',
+    },
 ]
 
 THEME_KEYS = [t['key'] for t in THEME_CATALOG]

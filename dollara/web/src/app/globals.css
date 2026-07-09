@@ -143,6 +143,52 @@ body {
   background-size: 28px 28px;
 }
 
+/* ── Theme 4 (Exchange) ──────────────────────────────────────────────────────
+   A teal sports-exchange lobby (Radhe Exchange reference): dark ticker bar, teal
+   gradient header, dense odds tables with classic back/lay blue-pink cells.
+   Scoped to `.theme4-root` so the palette holds regardless of the app-wide
+   light/dark toggle (mirrors theme2/theme3 scoping). */
+.theme4-root {
+  --t4-teal: #0e7480;        /* header gradient base */
+  --t4-teal-bright: #17a2b0; /* header gradient top */
+  --t4-nav: #0a5560;         /* nav strip / section bars */
+  --t4-ink: #13272b;
+  --t4-muted: #5d7378;
+  --t4-back: #72bbef;        /* back odds (blue) */
+  --t4-lay: #faa9ba;         /* lay odds (pink) */
+  --t4-live: #e5342c;
+
+  color: var(--t4-ink);
+  background: #e7edee;
+  color-scheme: light;
+}
+
+/* Native form controls inside theme4 should render light. */
+.theme4-root input,
+.theme4-root select,
+.theme4-root textarea {
+  color-scheme: light;
+}
+
+/* Teal chrome gradients reused across the theme4 shell. */
+.theme4-header {
+  background: linear-gradient(180deg, var(--t4-teal-bright) 0%, var(--t4-teal) 100%);
+}
+.theme4-bar {
+  background: linear-gradient(180deg, #10808d 0%, #0a5560 100%);
+}
+
+/* Dotted texture over the teal promo arrow cards. */
+.theme4-dots {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.14) 1.5px, transparent 1.5px);
+  background-size: 18px 18px;
+}
+
+/* Right-pointing chevron edge on the promo cards. */
+.theme4-arrow {
+  clip-path: polygon(0 0, calc(100% - 34px) 0, 100% 50%, calc(100% - 34px) 100%, 0 100%);
+}
+
 /* Slim custom scrollbar for the page itself */
 ::-webkit-scrollbar {
   width: 10px;
