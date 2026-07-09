@@ -1,12 +1,13 @@
-"""White-label branding serialization for the current tenant."""
+"""White-label branding for the current tenant.
+
+Branding is authored in Super Admin and delivered to dollara over the
+control-plane config endpoint (see :mod:`services.control_plane`) — dollara no
+longer reads the master ``branding`` table directly.
+"""
 
 from __future__ import annotations
 
-from django.db.utils import OperationalError, ProgrammingError
-
-from tenants.models import Branding, Product
-
-_MISSING_TABLE_ERRORS = (ProgrammingError, OperationalError)
+from services.control_plane import get_product_config
 
 DEFAULT_BRANDING = {
     'slug': None,
@@ -24,52 +25,12 @@ DEFAULT_BRANDING = {
     'extra': None,
 }
 
-BRANDING_FIELDS = (
-    'product_name',
-    'logo_url',
-    'favicon_url',
-    'theme_color',
-    'secondary_color',
-    'splash_url',
-    'app_icon_url',
-    'support_email',
-    'support_phone',
-    'terms_url',
-    'privacy_url',
-    'extra',
-)
-
-
-def default_branding_for_product(product: Product) -> dict:
-    data = dict(DEFAULT_BRANDING)
-    data['product_name'] = product.name
-    return data
-
-
-def serialize_branding(product: Product, branding: Branding | None) -> dict:
-    if branding is None:
-        data = default_branding_for_product(product)
-    else:
-        data = {field: getattr(branding, field) for field in BRANDING_FIELDS}
-    data['slug'] = product.slug
-    return data
-
-
-def get_branding_for_product(product: Product) -> dict:
-    try:
-        branding = Branding.objects.filter(product=product).first()
-    except _MISSING_TABLE_ERRORS:
-        branding = None
-    return serialize_branding(product, branding)
-
 
 def get_branding_for_slug(slug: str | None) -> dict:
+    """Branding for a product slug, or safe defaults when it can't be resolved."""
     if not slug:
         return dict(DEFAULT_BRANDING)
-    try:
-        product = Product.objects.filter(slug=slug).first()
-    except _MISSING_TABLE_ERRORS:
-        product = None
-    if not product:
+    config = get_product_config(slug)
+    if not config or not config.get('branding'):
         return dict(DEFAULT_BRANDING)
-    return get_branding_for_product(product)
+    return config['branding']

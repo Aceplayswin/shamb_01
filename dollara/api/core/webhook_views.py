@@ -34,7 +34,7 @@ from services.super_admin_keys import resolve_signing_key
 from services.webhook_verify import (HEADER_KEY_ID, HEADER_PRODUCT, SignatureError,
                                      verify_incoming)
 from services.tenant_resolver import resolve_tenant
-from tenants.state import tenant_db_alias_for, use_tenant
+from tenants.state import use_tenant
 
 # dataset key -> (model, ordering, whitelisted columns). Mirrors ``_DATASETS`` in
 # super_admin/api/tenants/views.py byte-for-byte (same keys, labels, order,
@@ -274,7 +274,9 @@ def super_admin_data_webhook(request, resource):
     resolved = resolve_tenant(header_slug=slug)
     if not resolved:
         return _error('Product not found', 404)
-    alias = resolved.db_alias or tenant_db_alias_for(slug)
+    # Feature data lives on the ``default`` connection (this instance serves one
+    # product); ``None`` lets the router target it.
+    alias = resolved.db_alias or None
 
     # 4. Read this product's OWN database and return the console's JSON shapes.
     try:

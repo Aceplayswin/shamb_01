@@ -1,24 +1,20 @@
-"""Runtime tenant context: thread-local current tenant + dynamic DB connection
-registration.
+"""Runtime tenant context: the thread-local current tenant.
 
 This module is intentionally low-level and free of model imports so it can be
 imported by the database router, middleware, services, and the feature code in
 ``core`` without creating import cycles.
 
-Database-per-tenant strategy
-----------------------------
-- The ``default`` Django connection points at the master/control-plane DB.
-- Each tenant (product) gets its own MySQL database, exposed to Django as a
-  dynamically-registered connection alias ``tenant_<slug>``.
-- ``TenantRouter`` reads :func:`get_current_db` to route ORM access for the
-  feature apps (``core``) to the resolved tenant connection, while the
-  ``tenants`` control-plane app always stays on ``default``.
+This instance serves a single product and all feature data lives on the Django
+``default`` connection (``MYSQL_*``). The thread-local still tracks the resolved
+product slug (used for logging, JWT tenant claims, and branding lookups); the DB
+alias is normally ``None`` so :class:`~middleware.db_router.TenantRouter` targets
+``default``.
 """
 
 import threading
 from contextlib import contextmanager
 
-from django.db import DEFAULT_DB_ALIAS, connections, transaction
+from django.db import DEFAULT_DB_ALIAS, transaction
 
 _state = threading.local()
 
@@ -49,49 +45,6 @@ def get_current_db() -> str | None:
     control-plane requests and management commands keep working.
     """
     return getattr(_state, 'db_alias', None)
-
-
-def register_tenant_connection(
-    alias: str,
-    *,
-    name: str,
-    host: str,
-    port: str | int,
-    user: str,
-    password: str,
-) -> str:
-    """Idempotently register (or refresh) a tenant DB connection alias.
-
-    Builds the connection config from the ``default`` (master) connection so
-    that engine/options stay consistent, overriding only the credentials and
-    database name. Mutating ``connections.databases`` at runtime is supported by
-    Django; missing keys are filled in lazily by ``connections[alias]``.
-    """
-    base = connections.databases.get(DEFAULT_DB_ALIAS, {})
-    config = {
-        'ENGINE': base.get('ENGINE', 'django.db.backends.mysql'),
-        'NAME': name,
-        'USER': user,
-        'PASSWORD': password,
-        'HOST': host,
-        'PORT': str(port),
-        'OPTIONS': dict(base.get('OPTIONS', {'charset': 'utf8mb4'})),
-        'TIME_ZONE': base.get('TIME_ZONE'),
-        'CONN_MAX_AGE': base.get('CONN_MAX_AGE', 0),
-        'CONN_HEALTH_CHECKS': base.get('CONN_HEALTH_CHECKS', False),
-        'AUTOCOMMIT': base.get('AUTOCOMMIT', True),
-        'ATOMIC_REQUESTS': base.get('ATOMIC_REQUESTS', False),
-    }
-    existing = connections.databases.get(alias)
-    if existing != config:
-        # Drop any stale cached connection so the new config takes effect.
-        if alias in connections.databases and alias in getattr(connections, '_connections', {}):
-            try:
-                connections[alias].close()
-            except Exception:
-                pass
-        connections.databases[alias] = config
-    return alias
 
 
 @contextmanager

@@ -9,45 +9,32 @@ Determines the active tenant (product) for a request from, in priority order:
 3. A ``tenant`` claim embedded in the JWT.
 4. A development fallback (``DEFAULT_TENANT`` setting) for ``localhost``.
 
-Once resolved, the tenant's isolated database connection is registered and the
-thread-local tenant context is set so the ORM (via ``TenantRouter``) transparently
-targets the right database. No hardcoded product logic lives here.
+The tenant's control-plane record (identity + status) is fetched from Super Admin
+over HTTP (see :mod:`services.control_plane`) — dollara no longer reads the master
+database. This instance serves a single product, so all feature data lives on the
+Django ``default`` connection (``MYSQL_*``); there is no per-tenant DB switching.
 """
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
 from django.conf import settings
-from django.core.cache import cache
-from django.db.utils import OperationalError, ProgrammingError
 
-from tenants.models import Database, Product
-from tenants.state import register_tenant_connection, set_current_tenant, tenant_db_alias_for
+from services.control_plane import get_product_config, invalidate as invalidate_config
+from tenants.state import set_current_tenant
 
 _LOCAL_HOSTS = {'localhost', '127.0.0.1', '0.0.0.0', 'testserver'}
-
-# Optional control-plane tables (``databases``, ``branding``, ...) may not be
-# provisioned in every deployment — only ``products`` is required for tenant
-# resolution. Treat a missing optional table as "no row" instead of a hard 500.
-_MISSING_TABLE_ERRORS = (ProgrammingError, OperationalError)
-
-
-def _first_or_none(queryset):
-    """``.first()`` that tolerates an optional control-plane table being absent."""
-    try:
-        return queryset.first()
-    except _MISSING_TABLE_ERRORS:
-        return None
 
 
 @dataclass
 class ResolvedTenant:
-    product_id: int
+    product_id: int | None
     slug: str
     name: str
     status: str
+    # Feature data lives on the ``default`` connection; kept for API compatibility
+    # with callers that read ``db_alias`` (empty => the router uses ``default``).
     db_alias: str
 
 
@@ -68,49 +55,23 @@ def _slug_from_host(host: str) -> str | None:
     return None
 
 
-def _product_for_request(host: str, header_slug: str | None, jwt_slug: str | None) -> Product | None:
-    # 1. Explicit header slug.
-    if header_slug:
-        product = Product.objects.filter(slug=header_slug).first()
-        if product:
-            return product
+def _candidate_slugs(host: str, header_slug: str | None, jwt_slug: str | None) -> list[str]:
+    """Ordered, de-duplicated tenant slugs to try, most specific first."""
+    ordered: list[str] = []
+    seen: set[str] = set()
 
-    # 2. Subdomain heuristic from request host.
+    def add(slug: str | None) -> None:
+        if slug and slug not in seen:
+            seen.add(slug)
+            ordered.append(slug)
+
+    add(header_slug)
     clean_host = _strip_port(host)
     if clean_host and clean_host not in _LOCAL_HOSTS:
-        sub_slug = _slug_from_host(clean_host)
-        if sub_slug:
-            product = Product.objects.filter(slug=sub_slug).first()
-            if product:
-                return product
-
-    # 3. JWT tenant claim.
-    if jwt_slug:
-        product = Product.objects.filter(slug=jwt_slug).first()
-        if product:
-            return product
-
-    # 4. Development fallback.
-    default_slug = getattr(settings, 'DEFAULT_TENANT', None)
-    if default_slug:
-        return Product.objects.filter(slug=default_slug).first()
-    return None
-
-
-def _register_env_tenant_db(alias: str) -> str | None:
-    """Register MYSQL_* from the environment for single-tenant / dev deployments."""
-    db_name = os.getenv('MYSQL_DATABASE')
-    if not db_name:
-        return None
-    register_tenant_connection(
-        alias,
-        name=db_name,
-        host=os.getenv('MYSQL_HOST', 'localhost'),
-        port=os.getenv('MYSQL_PORT', '3306'),
-        user=os.getenv('MYSQL_USER', 'root'),
-        password=os.getenv('MYSQL_PASSWORD', ''),
-    )
-    return alias
+        add(_slug_from_host(clean_host))
+    add(jwt_slug)
+    add(getattr(settings, 'DEFAULT_TENANT', None))
+    return ordered
 
 
 def resolve_tenant(
@@ -121,39 +82,26 @@ def resolve_tenant(
 ) -> ResolvedTenant | None:
     """Resolve and activate the tenant for the current thread.
 
-    Returns the resolved tenant (and sets the thread-local context + registers
-    the DB connection) or ``None`` when no tenant could be determined.
+    Returns the resolved tenant (and sets the thread-local context) or ``None``
+    when no tenant could be determined / the control plane is unreachable.
     """
-    product = _product_for_request(host, header_slug, jwt_slug)
-    if not product:
-        set_current_tenant(None, None)
-        return None
-
-    alias = tenant_db_alias_for(product.slug)
-    db = _first_or_none(Database.objects.filter(product_id=product.id))
-    if db:
-        register_tenant_connection(
-            alias,
-            name=db.db_name,
-            host=db.db_host,
-            port=db.db_port,
-            user=db.db_user,
-            password=db.db_password,
+    for slug in _candidate_slugs(host, header_slug, jwt_slug):
+        config = get_product_config(slug)
+        if not config:
+            continue
+        product = config.get('product') or {}
+        resolved_slug = product.get('slug') or slug
+        set_current_tenant(resolved_slug, None)
+        return ResolvedTenant(
+            product_id=product.get('id'),
+            slug=resolved_slug,
+            name=product.get('name', resolved_slug),
+            status=product.get('status', ''),
+            db_alias='',
         )
-        active_alias = alias
-    else:
-        # Route feature data to MYSQL_* when configured. Without this, core models
-        # fall back to the master DB while a databases row may later point deposits
-        # at the tenant DB — causing FK failures (user on master, tx on tenant).
-        active_alias = _register_env_tenant_db(alias)
-    set_current_tenant(product.slug, active_alias)
-    return ResolvedTenant(
-        product_id=product.id,
-        slug=product.slug,
-        name=product.name,
-        status=product.status,
-        db_alias=active_alias or '',
-    )
+
+    set_current_tenant(None, None)
+    return None
 
 
 def activate_tenant_by_slug(slug: str) -> ResolvedTenant | None:
@@ -162,4 +110,4 @@ def activate_tenant_by_slug(slug: str) -> ResolvedTenant | None:
 
 
 def invalidate_tenant_cache(slug: str) -> None:
-    cache.delete(f'tenant:resolve:{slug}')
+    invalidate_config(slug)

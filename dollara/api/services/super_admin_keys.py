@@ -3,13 +3,13 @@
 Given the ``X-SA-Key-Id`` on a request, find the public key to verify it against
 (and which product/tenant the request is for).
 
-Primary source: the shared control-plane ``product_credentials`` table — the same
-master DB Super Admin writes to (see ``super_admin/api/database/master.sql`` and
-``tenants.models.ProductCredential``). Reading it live means a key rotation in the
-Super Admin console is honoured immediately, with no redeploy.
+Primary source: the control-plane config Super Admin delivers over HTTP (see
+:mod:`services.control_plane`) — the ``credentials`` list for this product carries
+the public half of every issued key. Because it is fetched live (and cached
+briefly), a key rotation in the Super Admin console is honoured with no redeploy.
 
-Fallback: deployments where dollara does NOT share Super Admin's master DB can pin
-a single key via env vars::
+Fallback: deployments that cannot reach the config endpoint can pin a single key
+via env vars::
 
     SUPER_ADMIN_WEBHOOK_KEY_ID=sak_...
     SUPER_ADMIN_WEBHOOK_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
@@ -21,7 +21,9 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from tenants.models import ProductCredential
+from django.conf import settings
+
+from services.control_plane import get_product_config
 
 
 @dataclass(frozen=True)
@@ -59,12 +61,13 @@ def resolve_signing_key(key_id: str) -> SuperAdminKey | None:
     if pinned:
         return pinned
 
-    cred = (
-        ProductCredential.objects.select_related('product')
-        .filter(key_id=key_id)
-        .order_by('-created_at')
-        .first()
-    )
-    if not cred:
+    # This instance serves a single product; its config carries every public key.
+    slug = getattr(settings, 'DEFAULT_TENANT', None)
+    config = get_product_config(slug) if slug else None
+    if not config:
         return None
-    return SuperAdminKey(public_pem=cred.public_pem, product_slug=cred.product.slug)
+    product_slug = (config.get('product') or {}).get('slug') or slug
+    for cred in config.get('credentials', []):
+        if cred.get('key_id') == key_id and cred.get('public_pem'):
+            return SuperAdminKey(public_pem=cred['public_pem'], product_slug=product_slug)
+    return None

@@ -35,28 +35,37 @@ ROOT_URLCONF = 'config.urls'
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
-# --- Multi-tenant database-per-tenant configuration ---
-# `default` is the master / control-plane database (products, urls, branding,
-# databases, product_themes — see super_admin/api/database/master.sql). Tenant
-# databases are registered dynamically at runtime by the
-# tenant resolver (see services/tenant_resolver.py + tenants/state.py) and routed
-# via middleware.db_router.TenantRouter.
+# --- Database ---
+# `default` is this product's OWN feature database (MYSQL_*). dollara no longer
+# connects to Super Admin's master/control-plane database — that data (product
+# identity, branding, theme, webhook public keys) is fetched over HTTP from Super
+# Admin and cached; see services/control_plane.py. This instance serves a single
+# product, so there is no per-tenant DB switching: all feature models live here.
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.getenv('MASTER_MYSQL_DATABASE', os.getenv('MYSQL_DATABASE', 'dollara_master')),
-        'USER': os.getenv('MASTER_MYSQL_USER', os.getenv('MYSQL_USER', 'root')),
-        'PASSWORD': os.getenv('MASTER_MYSQL_PASSWORD', os.getenv('MYSQL_PASSWORD', '')),
-        'HOST': os.getenv('MASTER_MYSQL_HOST', os.getenv('MYSQL_HOST', 'localhost')),
-        'PORT': os.getenv('MASTER_MYSQL_PORT', os.getenv('MYSQL_PORT', '3306')),
+        'NAME': os.getenv('MYSQL_DATABASE', 'dollara'),
+        'USER': os.getenv('MYSQL_USER', 'root'),
+        'PASSWORD': os.getenv('MYSQL_PASSWORD', ''),
+        'HOST': os.getenv('MYSQL_HOST', 'localhost'),
+        'PORT': os.getenv('MYSQL_PORT', '3306'),
         'OPTIONS': {'charset': 'utf8mb4'},
     }
 }
 
 DATABASE_ROUTERS = ['middleware.db_router.TenantRouter']
 
+# --- Control plane (Super Admin) ---
+# Where to fetch this product's control-plane config, and the shared secret that
+# authenticates the pull (must match Super Admin's PRODUCT_CONFIG_TOKEN).
+SUPER_ADMIN_URL = os.getenv('SUPER_ADMIN_URL', 'http://localhost:8000').rstrip('/')
+PRODUCT_CONFIG_TOKEN = os.getenv('PRODUCT_CONFIG_TOKEN', '')
+# How long (seconds) to cache a fetched config before re-checking Super Admin.
+CONTROL_PLANE_CACHE_TTL = int(os.getenv('CONTROL_PLANE_CACHE_TTL', '60'))
+CONTROL_PLANE_HTTP_TIMEOUT = int(os.getenv('CONTROL_PLANE_HTTP_TIMEOUT', '10'))
+
 # Default tenant slug used for local development hosts (localhost/127.0.0.1)
-# where no domain/subdomain is available.
+# where no domain/subdomain is available. This instance's single product.
 DEFAULT_TENANT = os.getenv('DEFAULT_TENANT', 'dollara')
 
 # In-process cache and channel layers (no Redis).

@@ -64,6 +64,12 @@ JWT_SECRET = os.getenv('JWT_SECRET', 'dev-secret-change-in-production')
 JWT_EXPIRY_DAYS = 7
 API_PORT = int(os.getenv('PORT', '8000'))
 
+# Shared secret a product API sends (X-Product-Token) to pull its own
+# control-plane config from GET /api/v1/products/<slug>/config. Products read
+# their branding/theme/webhook public keys over that endpoint instead of
+# connecting to this master database directly. Empty => endpoint fails closed.
+PRODUCT_CONFIG_TOKEN = os.getenv('PRODUCT_CONFIG_TOKEN', '')
+
 # Path to the shared per-tenant schema applied when provisioning products.
 TENANT_SCHEMA_PATH = os.getenv(
     'TENANT_SCHEMA_PATH',
