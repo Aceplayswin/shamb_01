@@ -13,6 +13,7 @@ out/
 # Env
 .env
 .env.local
+.env.production
 .env.*.local
 CREDENTIALS.txt
 
