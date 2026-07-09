@@ -18,7 +18,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from tenants.auth_jwt import sign_token
-from tenants.auth_middleware import require_auth
+from tenants.auth_middleware import require_auth, require_product_token
 from services.branding import BRANDING_FIELDS, get_branding_for_product, serialize_branding
 from services.product_credentials import (
     get_active_credential, issue_credential, mark_delivered, rotate_credential,
@@ -28,8 +28,8 @@ from services.tenant_provisioning import ProvisioningError, provision_product
 from services.tenant_resolver import invalidate_tenant_cache
 from services.webhook_client import WebhookError, call_product
 from tenants.models import (
-    Branding, Database, Product, ProductTheme, Url, User, UserSession,
-    WebhookDelivery,
+    Branding, Database, Product, ProductCredential, ProductTheme, Url, User,
+    UserSession, WebhookDelivery,
 )
 from tenants.state import tenant_db_alias_for, use_tenant
 from tenants.themes import (
@@ -497,6 +497,57 @@ def public_product_theme(request, slug):
         'active_theme': active,
         'status': product.status,
         'known_themes': THEME_KEYS,
+    })
+
+
+# --- Product config delivery (token-authenticated, server-to-server) ---
+# A product's own API pulls everything it used to read from this master database
+# (identity, branding, live theme, webhook public keys) from here, so products no
+# longer open a MySQL connection to the control plane. Authenticated with the
+# shared X-Product-Token secret (see auth_middleware.require_product_token).
+
+@require_product_token
+@require_http_methods(['GET'])
+def product_config(request, slug):
+    """Deliver a product's control-plane config over HTTP.
+
+    Returns the product identity + status, white-label branding, the live theme,
+    and the product's webhook credentials — **public keys only** (``private_pem``
+    never leaves Super Admin). All active/rotated credentials are returned so the
+    product can verify any ``X-SA-Key-Id`` it sees across a key rotation.
+    """
+    product = Product.objects.filter(slug=slug).first()
+    if not product:
+        return _error('Product not found', 404)
+
+    branding = Branding.objects.filter(product=product).first()
+    credentials = [
+        {
+            'key_id': c.key_id,
+            'public_pem': c.public_pem,
+            'fingerprint': c.fingerprint,
+            'is_active': c.is_active,
+            'delivered_to_product_at': (
+                c.delivered_to_product_at.isoformat()
+                if c.delivered_to_product_at else None
+            ),
+        }
+        for c in ProductCredential.objects.filter(product=product).order_by('-created_at')
+    ]
+    return JsonResponse({
+        'slug': product.slug,
+        'product': {
+            'id': product.id,
+            'slug': product.slug,
+            'name': product.name,
+            'status': product.status,
+        },
+        'branding': serialize_branding(product, branding),
+        'theme': {
+            'active_theme': get_active_theme(product),
+            'known_themes': THEME_KEYS,
+        },
+        'credentials': credentials,
     })
 
 

@@ -1,8 +1,9 @@
 # Dollara Product API (Django)
 
-Multi-tenant, white-label gaming backend for **product deployments** (Dollara,
-Product B, Product C, ...). Each product has its own isolated MySQL database.
-Branding, themes, and URLs are configured in the master DB via Super Admin.
+White-label gaming backend for a **single product deployment**. The product owns
+one MySQL database (its feature data). It does **not** connect to Super Admin's
+master/control-plane database — its identity, branding, live theme and webhook
+public keys are fetched from Super Admin over HTTP and cached.
 
 > **Super Admin** (product onboarding, master DB management, branding, themes)
 > lives in the separate [`super_admin/api`](../../super_admin/api) service.
@@ -12,7 +13,7 @@ Branding, themes, and URLs are configured in the master DB via Super Admin.
 - **Django 5** + **Django REST Framework**
 - **Strawberry GraphQL**
 - **Django Channels** (WebSocket at `/ws`)
-- **MySQL** (master read + database-per-tenant)
+- **MySQL** (this product's own feature database)
 - **PyTorch** fraud detection, welcome-call scripts, support chatbot (`core/ai/`)
 - **JWT** authentication (product admins, users)
 - **bcrypt** password hashing
@@ -20,23 +21,25 @@ Branding, themes, and URLs are configured in the master DB via Super Admin.
 ## Architecture
 
 ```
-                       ┌─────────────────────────────────────┐
-Super Admin API ─────► │  Master MySQL DB (master.sql)        │
-(super_admin/api)      │  products, urls, branding, databases │
-                       │  product_themes                      │
-                       └─────────────────────────────────────┘
-                                 │ TenantRouter (database-per-tenant)
-        ┌────────────────────────┼────────────────────────┐
-        ▼                        ▼                         ▼
-  dollara_db               productb_db               productc_db
-  (users, wallets,         (isolated copy            (isolated copy
-   games, txns, ...)        of init.sql schema)       of init.sql schema)
+  Super Admin API                       Dollara Product API
+  (super_admin/api)                      (this service)
+  ┌──────────────────────┐   HTTPS GET   ┌──────────────────────────┐
+  │ Master MySQL DB       │ ◀──────────  │ services/control_plane.py │
+  │ products, branding,   │  X-Product-  │  (fetch + cache config)   │
+  │ themes, credentials   │  Token       │            │              │
+  └──────────────────────┘  ──────────▶ │            ▼              │
+        (never touched                   │      dollara feature DB   │
+         directly by dollara)            │  (users, wallets, games,  │
+                                         │   txns — the `default`     │
+                                         │   connection, MYSQL_*)     │
+                                         └──────────────────────────┘
 ```
 
-- `tenants/` — read-only control-plane models (mirror of `super_admin/api`).
-- `services/` — `tenant_resolver`, `branding`.
-- `middleware/` — `TenantResolverMiddleware` + `TenantRouter`.
-- `core/` — per-tenant features (auth, wallet, games, transactions, admin, AI).
+- `services/control_plane.py` — fetches this product's config from Super Admin.
+- `services/` — `tenant_resolver`, `branding`, `super_admin_keys` (all HTTP-backed).
+- `tenants/` — runtime tenant context (`state.py`) + public branding view; no models.
+- `middleware/` — `TenantResolverMiddleware` + `TenantRouter` (everything on `default`).
+- `core/` — product features (auth, wallet, games, transactions, admin, AI).
 
 ### Tenant resolution
 

@@ -47,4 +47,9 @@ urlpatterns = [
     # Public (no auth) — product frontends resolve branding + live theme here.
     path('public/products/<slug:slug>/branding', views.public_product_branding),
     path('public/products/<slug:slug>/theme', views.public_product_theme),
+
+    # Product config delivery (X-Product-Token auth) — a product's own API pulls
+    # its identity/branding/theme/webhook public keys instead of connecting to
+    # this master database. See views.product_config.
+    path('products/<slug:slug>/config', views.product_config),
 ]
