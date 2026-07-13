@@ -28,7 +28,7 @@ ROOT_URLCONF = 'config.urls'
 WSGI_APPLICATION = 'config.wsgi.application'
 
 # Master / control-plane database only. Tenant databases are registered at runtime
-# when provisioning or inspecting products.
+# when inspecting products.
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
@@ -69,9 +69,3 @@ API_PORT = int(os.getenv('PORT', '8000'))
 # their branding/theme/webhook public keys over that endpoint instead of
 # connecting to this master database directly. Empty => endpoint fails closed.
 PRODUCT_CONFIG_TOKEN = os.getenv('PRODUCT_CONFIG_TOKEN', '')
-
-# Path to the shared per-tenant schema applied when provisioning products.
-TENANT_SCHEMA_PATH = os.getenv(
-    'TENANT_SCHEMA_PATH',
-    str(BASE_DIR / 'database' / 'init.sql'),
-)
