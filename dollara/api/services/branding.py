@@ -26,12 +26,11 @@ DEFAULT_BRANDING = {
 }
 
 
-def get_branding_for_slug(slug: str | None = None) -> dict:
+def get_branding() -> dict:
     """Branding for this product, or safe defaults when it can't be resolved.
 
     dollara serves a single product identified by its api_key, so branding comes
-    from the control-plane config; the ``slug`` argument is accepted only for
-    backward compatibility and is not used to select the product.
+    from the control-plane config — there is no tenant/slug argument.
     """
     config = get_product_config()
     if not config or not config.get('branding'):

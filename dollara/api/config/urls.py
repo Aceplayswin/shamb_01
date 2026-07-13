@@ -6,7 +6,7 @@ from strawberry.django.views import GraphQLView
 from core.graphql_schema import schema
 from core.views import games_callback, health, landing
 from core.webhook_views import super_admin_data_webhook
-from tenants.views import public_branding
+from tenants.views import public_branding, public_theme
 
 urlpatterns = [
     # Root GET: interactive status page for a direct browser hit. Also answers
@@ -18,8 +18,10 @@ urlpatterns = [
     # Winco/Huidu legacy callback path (https://api.host/game/) — same handler as
     # /api/v1/games/callback. Set GAME_CALLBACK_PATH=/game/ for shared agency accounts.
     path('game/', games_callback),
-    # Public, tenant-resolved white-label branding.
+    # Public white-label branding + live theme for this product's own frontends.
+    # Key-resolved (single product) — no tenant/slug argument.
     path('api/v1/branding', public_branding),
+    path('api/v1/theme', public_theme),
     # Super Admin signed-webhook data channel (Phase 2). Authenticated by the
     # X-SA-Signature, not JWT; reads this product's OWN database. <resource> is
     # 'summary' or a dataset key. See core/webhook_views.py.

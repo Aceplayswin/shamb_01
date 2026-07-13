@@ -14,10 +14,10 @@ class Product(models.Model):
         DISABLED = 'disabled', 'Disabled'
 
     id = models.BigAutoField(primary_key=True)
-    slug = models.SlugField(max_length=63, unique=True)
     name = models.CharField(max_length=150)
-    # Secret issued once at creation. Super Admin uses this (not the slug) to
-    # verify which product a request/connection belongs to.
+    # The product's identity: a secret issued on demand that Super Admin uses to
+    # verify which product a request/connection belongs to. Products are addressed
+    # by ``id`` in the console and by ``api_key`` on the product config pull.
     api_key = models.CharField(max_length=64, unique=True, null=True, blank=True)
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.ACTIVE, db_index=True

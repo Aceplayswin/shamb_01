@@ -1,4 +1,4 @@
-import { API_URL, tenantHeaders } from './tenant';
+import { API_URL } from './tenant';
 
 export async function graphql(query, variables = {}) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
@@ -6,7 +6,6 @@ export async function graphql(query, variables = {}) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...tenantHeaders(),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify({ query, variables }),

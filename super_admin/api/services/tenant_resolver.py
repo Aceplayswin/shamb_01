@@ -1,94 +1,42 @@
 """Tenant Resolver Service.
 
-Determines the active tenant (product) for a request from, in priority order:
-
-1. An explicit ``X-Tenant-Key`` header — the product's secret ``api_key``,
-   issued once at creation. This is the verification step: the slug alone is
-   public/guessable and is never trusted to identify a product on its own.
-2. The request host matched against the ``urls.host_url`` column.
-3. A ``tenant`` claim embedded in the JWT.
-4. A development fallback (``DEFAULT_TENANT`` setting) for ``localhost``.
+Determines the active tenant (product) for a request from its secret ``api_key``
+(the ``X-Tenant-Key`` header), which is the product's verified identity. Products
+are identified by key/id, not by a public slug.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from django.conf import settings
 from django.core.cache import cache
 
 from tenants.models import Database, Product
 from tenants.state import register_tenant_connection, set_current_tenant, tenant_db_alias_for
 
-_LOCAL_HOSTS = {'localhost', '127.0.0.1', '0.0.0.0', 'testserver'}
-
 
 @dataclass
 class ResolvedTenant:
     product_id: int
-    slug: str
     name: str
     status: str
     db_alias: str
 
 
-def _strip_port(host: str) -> str:
-    return (host or '').split(':')[0].strip().lower()
-
-
-def _slug_from_host(host: str) -> str | None:
-    host = _strip_port(host)
-    if not host or host in _LOCAL_HOSTS:
-        return None
-    labels = host.split('.')
-    if len(labels) >= 2:
-        candidate = labels[0]
-        if candidate not in {'www', 'api', 'admin'}:
-            return candidate
-    return None
-
-
-def _product_for_request(host: str, header_key: str | None, jwt_slug: str | None) -> Product | None:
-    # 1. Explicit product key — the verified identity of the connection.
+def _product_for_request(header_key: str | None) -> Product | None:
+    # The product's api_key is the verified identity of the connection.
     if header_key:
-        product = Product.objects.filter(api_key=header_key).first()
-        if product:
-            return product
-
-    # 2. Subdomain heuristic from request host.
-    clean_host = _strip_port(host)
-    if clean_host and clean_host not in _LOCAL_HOSTS:
-        sub_slug = _slug_from_host(clean_host)
-        if sub_slug:
-            product = Product.objects.filter(slug=sub_slug).first()
-            if product:
-                return product
-
-    # 3. JWT tenant claim.
-    if jwt_slug:
-        product = Product.objects.filter(slug=jwt_slug).first()
-        if product:
-            return product
-
-    # 4. Development fallback.
-    default_slug = getattr(settings, 'DEFAULT_TENANT', None)
-    if default_slug:
-        return Product.objects.filter(slug=default_slug).first()
+        return Product.objects.filter(api_key=header_key).first()
     return None
 
 
-def resolve_tenant(
-    *,
-    host: str = '',
-    header_key: str | None = None,
-    jwt_slug: str | None = None,
-) -> ResolvedTenant | None:
-    product = _product_for_request(host, header_key, jwt_slug)
+def resolve_tenant(*, header_key: str | None = None) -> ResolvedTenant | None:
+    product = _product_for_request(header_key)
     if not product:
         set_current_tenant(None, None)
         return None
 
-    alias = tenant_db_alias_for(product.slug)
+    alias = tenant_db_alias_for(product.id)
     db = Database.objects.filter(product_id=product.id).first()
     if db:
         register_tenant_connection(
@@ -99,10 +47,9 @@ def resolve_tenant(
             user=db.db_user,
             password=db.db_password,
         )
-    set_current_tenant(product.slug, alias)
+    set_current_tenant(str(product.id), alias)
     return ResolvedTenant(
         product_id=product.id,
-        slug=product.slug,
         name=product.name,
         status=product.status,
         db_alias=alias,
@@ -113,5 +60,5 @@ def activate_tenant_by_key(api_key: str) -> ResolvedTenant | None:
     return resolve_tenant(header_key=api_key)
 
 
-def invalidate_tenant_cache(slug: str) -> None:
-    cache.delete(f'tenant:resolve:{slug}')
+def invalidate_tenant_cache(product_id) -> None:
+    cache.delete(f'tenant:resolve:{product_id}')

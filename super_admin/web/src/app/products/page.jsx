@@ -6,13 +6,13 @@ import Swal from 'sweetalert2';
 import {
   Box, CheckCircle2, Database, Eye, EyeOff, Globe, Loader2,
   MinusCircle, Palette, Pencil, Plus, Power, Server, Trash2, Wifi, X, XCircle,
-  Check, Circle, Paintbrush, BarChart3,
+  Check, Circle, Paintbrush, BarChart3, KeyRound, Copy, RefreshCw,
 } from 'lucide-react';
 import {
   listProducts, disableProduct, updateProduct, deleteProduct,
   updateUrls, updateDatabase, testConnection,
   getProductThemes, activateProductTheme, setProductThemeEnabled,
-  getBranding, updateBranding,
+  getBranding, updateBranding, generateApiKey,
 } from '@/services/api';
 import { useTheme } from '../providers';
 import DashboardLayout, { useDashboard } from '../components/DashboardLayout';
@@ -53,7 +53,6 @@ function EditProductModal({ product, onClose, onSaved, theme }) {
 
   const [form, setForm] = useState({
     name:        product.name,
-    slug:        product.slug,
     fe_url:      product.urls?.fe_url  || '',
     be_url:      product.urls?.be_url  || '',
     db_host:     product.database?.db_host || '',
@@ -135,9 +134,9 @@ function EditProductModal({ product, onClose, onSaved, theme }) {
     setSaving(true);
     try {
       const calls = [
-        updateProduct(product.slug, { name: form.name.trim(), slug: form.slug.trim().toLowerCase() }),
-        updateUrls(product.slug, { fe_url: form.fe_url.trim(), be_url: form.be_url.trim() }),
-        updateDatabase(product.slug, {
+        updateProduct(product.id, { name: form.name.trim() }),
+        updateUrls(product.id, { fe_url: form.fe_url.trim(), be_url: form.be_url.trim() }),
+        updateDatabase(product.id, {
           db_host:     form.db_host.trim(),
           db_user:     form.db_user.trim(),
           db_name:     form.db_name.trim(),
@@ -160,8 +159,7 @@ function EditProductModal({ product, onClose, onSaved, theme }) {
   const labelCls = 'mb-1.5 block text-xs font-semibold text-gray-500 dark:text-gray-400';
 
   const fields = [
-    { key: 'name',        label: 'Product Name',  placeholder: 'My Platform',                type: 'text',     span: false, statusKey: null       },
-    { key: 'slug',        label: 'Slug',           placeholder: 'my-platform',                type: 'text',     span: false, statusKey: null       },
+    { key: 'name',        label: 'Product Name',  placeholder: 'My Platform',                type: 'text',     span: true,  statusKey: null       },
     { key: 'fe_url',      label: 'Frontend URL',   placeholder: 'https://myplatform.com',     type: 'text',     span: true,  statusKey: 'fe_url'   },
     { key: 'be_url',      label: 'Backend URL',    placeholder: 'https://api.myplatform.com', type: 'text',     span: true,  statusKey: 'be_url'   },
     { key: 'db_host',     label: 'DB Host',        placeholder: 'db.example.com',             type: 'text',     span: false, statusKey: null       },
@@ -185,7 +183,7 @@ function EditProductModal({ product, onClose, onSaved, theme }) {
               <h2 className="font-display text-sm font-bold text-gray-900 dark:text-white">
                 Edit — {product.name}
               </h2>
-              <p className="text-xs text-gray-400">/{product.slug} · Test connection then save</p>
+              <p className="text-xs text-gray-400">Test connection then save</p>
             </div>
           </div>
           <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-200">
@@ -306,7 +304,7 @@ function BrandingModal({ product, onClose, onSaved, theme }) {
     (async () => {
       setLoading(true);
       try {
-        const data = await getBranding(product.slug);
+        const data = await getBranding(product.id);
         if (!cancelled) {
           setForm({
             product_name: data.product_name || product.name,
@@ -330,7 +328,7 @@ function BrandingModal({ product, onClose, onSaved, theme }) {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product.slug]);
+  }, [product.id]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -341,7 +339,7 @@ function BrandingModal({ product, onClose, onSaved, theme }) {
     }
     setSaving(true);
     try {
-      await updateBranding(product.slug, {
+      await updateBranding(product.id, {
         ...form,
         product_name: form.product_name.trim(),
       });
@@ -488,7 +486,7 @@ function ThemesModal({ product, onClose, onSaved, theme }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await getProductThemes(product.slug);
+      const res = await getProductThemes(product.id);
       setRows(res.themes || []);
     } catch (e) {
       swal({ icon: 'error', title: 'Failed to load themes', text: e.message });
@@ -496,14 +494,14 @@ function ThemesModal({ product, onClose, onSaved, theme }) {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product.slug]);
+  }, [product.id]);
 
   useEffect(() => { load(); }, [load]);
 
   const activate = async (key) => {
     setBusyKey(`${key}:activate`);
     try {
-      const res = await activateProductTheme(product.slug, key);
+      const res = await activateProductTheme(product.id, key);
       setRows(res.themes || []);
       onSaved?.();
     } catch (e) {
@@ -516,7 +514,7 @@ function ThemesModal({ product, onClose, onSaved, theme }) {
   const toggleEnabled = async (key, next) => {
     setBusyKey(`${key}:enabled`);
     try {
-      const res = await setProductThemeEnabled(product.slug, key, next);
+      const res = await setProductThemeEnabled(product.id, key, next);
       setRows(res.themes || []);
       onSaved?.();
     } catch (e) {
@@ -646,6 +644,93 @@ function ThemesModal({ product, onClose, onSaved, theme }) {
   );
 }
 
+/* ── API key section ──
+   The product's api_key is its PRODUCT_CONFIG_TOKEN: the secret its own API holds
+   to pull config and identify itself to Super Admin. Shown here so the operator
+   can copy it into the product's env; regenerating invalidates the old value. */
+function ApiKeySection({ product, onChanged, theme }) {
+  const swal = (opts) => swalThemed(opts, theme);
+  const [reveal, setReveal] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const key = product.api_key || '';
+  const masked = key ? `${key.slice(0, 6)}${'•'.repeat(Math.max(key.length - 10, 6))}${key.slice(-4)}` : '';
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(key);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      swal({ icon: 'error', title: 'Copy failed', text: 'Select and copy the key manually.' });
+    }
+  };
+
+  const generate = async () => {
+    if (key) {
+      const res = await swal({
+        icon: 'warning',
+        title: 'Regenerate API key?',
+        text: 'The current key stops working immediately. Update the product’s PRODUCT_CONFIG_TOKEN with the new value or it can no longer reach Super Admin.',
+        showCancelButton: true, confirmButtonText: 'Regenerate', confirmButtonColor: '#ef4444',
+      });
+      if (!res.isConfirmed) return;
+    }
+    setBusy(true);
+    try {
+      await generateApiKey(product.id);
+      setReveal(true);
+      await onChanged?.();
+    } catch (e) {
+      swal({ icon: 'error', title: 'Could not generate key', text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-900/60">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+          <KeyRound className="h-3.5 w-3.5" /> API Key
+          <span className="font-normal text-gray-400">· product&apos;s PRODUCT_CONFIG_TOKEN</span>
+        </p>
+        {key ? (
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <code className="rounded bg-white px-2 py-1 font-mono text-xs text-gray-800 ring-1 ring-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:ring-gray-700">
+              {reveal ? key : masked}
+            </code>
+            <button onClick={() => setReveal((v) => !v)} title={reveal ? 'Hide' : 'Reveal'}
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700">
+              {reveal ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            </button>
+            <button onClick={copy} title="Copy"
+              className="flex h-7 items-center gap-1 rounded-lg border border-gray-200 px-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700">
+              {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+            <button onClick={generate} disabled={busy} title="Regenerate"
+              className="flex h-7 items-center gap-1 rounded-lg border border-amber-200 px-2 text-xs font-semibold text-amber-600 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-900 dark:text-amber-400 dark:hover:bg-amber-950/40">
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              Regenerate
+            </button>
+          </div>
+        ) : (
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-xs text-gray-400">No key yet</span>
+            <button onClick={generate} disabled={busy}
+              className="flex h-7 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-60">
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
+              Generate Key
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ── Products page ── */
 function ProductsContent() {
   const { refreshKey, openAddModal } = useDashboard();
@@ -669,9 +754,9 @@ function ProductsContent() {
   useEffect(() => { load(); }, [load, refreshKey]);
 
   const toggleStatus = async (p) => {
-    setBusy(`${p.slug}:status`);
+    setBusy(`${p.id}:status`);
     try {
-      await (p.status === 'active' ? disableProduct(p.slug) : updateProduct(p.slug, { status: 'active' }));
+      await (p.status === 'active' ? disableProduct(p.id) : updateProduct(p.id, { status: 'active' }));
       await load();
     } catch (err) {
       swal({ icon: 'error', title: 'Status update failed', text: err.message });
@@ -685,8 +770,8 @@ function ProductsContent() {
       showCancelButton: true, confirmButtonText: 'Delete', confirmButtonColor: '#ef4444',
     });
     if (!res.isConfirmed) return;
-    setBusy(`${p.slug}:delete`);
-    try { await deleteProduct(p.slug); await load(); }
+    setBusy(`${p.id}:delete`);
+    try { await deleteProduct(p.id); await load(); }
     catch (err) { swal({ icon: 'error', title: 'Delete failed', text: err.message }); }
     finally { setBusy(null); }
   };
@@ -760,21 +845,21 @@ function ProductsContent() {
           ) : (
             <ul className="divide-y divide-gray-100 dark:divide-gray-700">
               {products.map((p) => (
-                <li key={p.slug} className="p-5">
+                <li key={p.id} className="p-5">
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-sm font-black text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400">
                       {p.name.charAt(0).toUpperCase()}
                     </span>
                     <div>
                       <p className="font-semibold text-gray-900 dark:text-white">{p.name}</p>
-                      <p className="text-xs text-gray-400">/{p.slug}</p>
+                      <p className="text-xs text-gray-400">ID #{p.id}</p>
                     </div>
                     <span className={`rounded-full px-2.5 py-0.5 text-[0.6rem] font-bold uppercase ${p.status === 'active' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}`}>
                       {p.status}
                     </span>
                     <div className="ml-auto flex flex-wrap gap-2">
                       <Link
-                        href={`/products/${p.slug}/data`}
+                        href={`/products/${p.id}/data`}
                         className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-400 dark:hover:bg-indigo-950 transition-colors"
                       >
                         <BarChart3 className="h-3.5 w-3.5" /> View Data
@@ -788,14 +873,17 @@ function ProductsContent() {
                       <button onClick={() => setThemeTarget(p)} className={actionBtn}>
                         <Palette className="h-3.5 w-3.5" /> Themes
                       </button>
-                      <button onClick={() => toggleStatus(p)} disabled={busy === `${p.slug}:status`} className={actionBtn}>
+                      <button onClick={() => toggleStatus(p)} disabled={busy === `${p.id}:status`} className={actionBtn}>
                         <Power className="h-3.5 w-3.5" /> {p.status === 'active' ? 'Disable' : 'Enable'}
                       </button>
-                      <button onClick={() => confirmDelete(p)} disabled={busy === `${p.slug}:delete`} className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-500 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950 disabled:opacity-50 transition-colors">
+                      <button onClick={() => confirmDelete(p)} disabled={busy === `${p.id}:delete`} className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-500 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950 disabled:opacity-50 transition-colors">
                         <Trash2 className="h-3.5 w-3.5" /> Delete
                       </button>
                     </div>
                   </div>
+
+                  {/* API key — the product's PRODUCT_CONFIG_TOKEN */}
+                  <ApiKeySection product={p} onChanged={load} theme={theme} />
 
                   {/* Info cards */}
                   <div className="mt-4 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-5">

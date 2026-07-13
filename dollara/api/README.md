@@ -43,15 +43,12 @@ public keys are fetched from Super Admin over HTTP and cached.
 
 ### Tenant resolution
 
-A request's tenant is resolved (in priority order) from:
-
-1. `X-Tenant` / `X-Tenant-ID` header (mobile app, server-to-server).
-2. Request host / subdomain (`dollara.localhost` → `dollara`).
-3. The `tenant` claim in the JWT.
-4. `DEFAULT_TENANT` (development fallback for `localhost`).
-
-The resolver looks up the tenant's connection in the master `databases` table
-and registers a dynamic Django connection (`tenant_<slug>`).
+This instance serves a single product and identifies it by its own api_key
+(`PRODUCT_CONFIG_TOKEN`): on each request the middleware pulls the product's
+control-plane config from Super Admin (keyed by that api_key, cached) and exposes
+the resolved product as `request.tenant`. There is no slug, host, or JWT tenant
+selection — a request has a tenant iff a valid key is configured. All feature data
+lives on the Django `default` connection (`MYSQL_*`).
 
 ### Branding & themes
 

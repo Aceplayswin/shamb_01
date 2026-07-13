@@ -21,7 +21,7 @@ from core.models import (
     Wallet,
     WithdrawalStage,
 )
-from tenants.state import get_current_tenant_slug, tenant_atomic
+from tenants.state import get_current_tenant_id, tenant_atomic
 
 
 def _hash_password(password: str) -> str:
@@ -174,7 +174,7 @@ def register_with_otp(
         phone_verified=True,
         ai_voice_executive_id=voice_id,
     )
-    token = sign_token({'sub': user.id, 'role': User.Role.USER}, tenant=get_current_tenant_slug())
+    token = sign_token({'sub': user.id, 'role': User.Role.USER}, tenant=get_current_tenant_id())
     return {
         'userId': user.id,
         'username': username,
@@ -204,7 +204,7 @@ def create_demo_session() -> dict:
     )
     token = sign_token(
         {'sub': user.id, 'role': User.Role.USER, 'type': 'demo'},
-        tenant=get_current_tenant_slug(),
+        tenant=get_current_tenant_id(),
     )
     cache.set(
         f'demo:{user.id}',
@@ -228,7 +228,7 @@ def login_user(phone: str, password: str) -> dict:
     prefs = get_user_settings(user)
     if prefs and prefs.is_demo:
         payload['type'] = 'demo'
-    return {'token': sign_token(payload, tenant=get_current_tenant_slug()), 'userId': user.id}
+    return {'token': sign_token(payload, tenant=get_current_tenant_id()), 'userId': user.id}
 
 
 def login_admin(username: str, password: str) -> dict:
@@ -242,7 +242,7 @@ def login_admin(username: str, password: str) -> dict:
     admin.last_login_at = timezone.now()
     admin.save(update_fields=['last_login_at'])
     return {
-        'token': sign_token({'sub': admin.id, 'role': admin.role}, tenant=get_current_tenant_slug()),
+        'token': sign_token({'sub': admin.id, 'role': admin.role}, tenant=get_current_tenant_id()),
         'role': admin.role,
     }
 

@@ -14,12 +14,10 @@ const ENV = (typeof process !== 'undefined' && process.env) || {};
 
 const DEFAULT_API_URL =
   Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000';
-const DEFAULT_PLATFORM_URL =
-  Platform.OS === 'android' ? 'http://10.0.2.2:8000' : 'http://localhost:8000';
 
+// The product API identifies itself from its own api_key, so the app sends no
+// tenant — this build simply points at that product's API_URL.
 export const API_URL = ENV.API_URL || DEFAULT_API_URL;
-export const PLATFORM_API_URL = ENV.PLATFORM_API_URL || DEFAULT_PLATFORM_URL;
-export const TENANT_SLUG = ENV.TENANT_SLUG || 'dollara';
 
 // Fallback branding shown before the platform branding response arrives.
 export const DEFAULT_BRANDING = {

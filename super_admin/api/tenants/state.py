@@ -9,7 +9,7 @@ Database-per-tenant strategy
 ----------------------------
 - The ``default`` Django connection points at the master/control-plane DB.
 - Each tenant (product) gets its own MySQL database, exposed to Django as a
-  dynamically-registered connection alias ``tenant_<slug>``.
+  dynamically-registered connection alias ``tenant_<id>``.
 - ``TenantRouter`` reads :func:`get_current_db` to route ORM access for the
   feature apps (``core``) to the resolved tenant connection, while the
   ``tenants`` control-plane app always stays on ``default``.
@@ -23,23 +23,23 @@ from django.db import DEFAULT_DB_ALIAS, connections, transaction
 _state = threading.local()
 
 
-def tenant_db_alias_for(slug: str) -> str:
-    """Stable Django connection alias for a product slug."""
-    return 'tenant_' + str(slug).replace('-', '_')
+def tenant_db_alias_for(product_id) -> str:
+    """Stable Django connection alias for a product (keyed by its id)."""
+    return 'tenant_' + str(product_id).replace('-', '_')
 
 
-def set_current_tenant(product_slug: str | None, db_alias: str | None) -> None:
-    _state.product_slug = product_slug
+def set_current_tenant(tenant_id: str | None, db_alias: str | None) -> None:
+    _state.tenant_id = tenant_id
     _state.db_alias = db_alias
 
 
 def clear_current_tenant() -> None:
-    _state.product_slug = None
+    _state.tenant_id = None
     _state.db_alias = None
 
 
-def get_current_tenant_slug() -> str | None:
-    return getattr(_state, 'product_slug', None)
+def get_current_tenant_id() -> str | None:
+    return getattr(_state, 'tenant_id', None)
 
 
 def get_current_db() -> str | None:
@@ -95,15 +95,15 @@ def register_tenant_connection(
 
 
 @contextmanager
-def use_tenant(product_slug: str | None, db_alias: str | None):
+def use_tenant(tenant_id: str | None, db_alias: str | None):
     """Temporarily switch the active tenant (e.g. for admin cross-tenant ops)."""
-    prev_slug = get_current_tenant_slug()
+    prev_id = get_current_tenant_id()
     prev_db = get_current_db()
-    set_current_tenant(product_slug, db_alias)
+    set_current_tenant(tenant_id, db_alias)
     try:
         yield
     finally:
-        set_current_tenant(prev_slug, prev_db)
+        set_current_tenant(prev_id, prev_db)
 
 
 def tenant_atomic():

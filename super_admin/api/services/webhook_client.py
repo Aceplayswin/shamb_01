@@ -9,7 +9,7 @@ Wire contract (mirrors :mod:`services.crypto_keys`):
 
     GET  {be_url}/api/v1/webhooks/super-admin/data/{resource}?{query}
     Headers:
-        X-SA-Product:   <product slug>
+        X-SA-Product:   <product id>
         X-SA-Key-Id:    <credential.key_id>
         X-SA-Timestamp: <unix seconds>
         X-SA-Nonce:     <random hex>
@@ -72,7 +72,7 @@ def _product_base_url(product: Product) -> str:
     be_url = (url.be_url if url else '').strip().rstrip('/')
     if not be_url:
         raise WebhookError(
-            f"Product '{product.slug}' has no backend URL configured; set its be_url first."
+            f"Product '{product.name}' has no backend URL configured; set its be_url first."
         )
     return be_url
 
@@ -93,7 +93,7 @@ def call_product(
     credential = get_active_credential(product)
     if not credential:
         raise WebhookError(
-            f"Product '{product.slug}' has no active webhook credential; "
+            f"Product '{product.name}' has no active webhook credential; "
             f"generate one before pulling data."
         )
 
@@ -133,7 +133,7 @@ def call_product(
         req.add_header('Accept', 'application/json')
         if raw_body is not None:
             req.add_header('Content-Type', 'application/json')
-        req.add_header(HEADER_PRODUCT, product.slug)
+        req.add_header(HEADER_PRODUCT, str(product.id))
         req.add_header(HEADER_KEY_ID, credential.key_id)
         req.add_header(HEADER_TIMESTAMP, timestamp)
         req.add_header(HEADER_NONCE, nonce)

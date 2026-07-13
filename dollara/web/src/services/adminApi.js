@@ -1,4 +1,4 @@
-import { API_URL, tenantHeaders } from './tenant';
+import { API_URL } from './tenant';
 
 export function getAdminToken() {
   if (typeof window === 'undefined') return null;
@@ -29,9 +29,7 @@ export async function adminApi(path, options = {}) {
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
-      ...tenantHeaders(),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      'Content-Type': 'application/json',      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   });
@@ -58,9 +56,7 @@ export async function adminUploadImage(file) {
 
   const res = await fetch(`${API_URL}/api/v1/admin/upload`, {
     method: 'POST',
-    headers: {
-      ...tenantHeaders(),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    headers: {      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body,
   });
@@ -83,7 +79,7 @@ export async function adminUploadImage(file) {
 export async function adminLogin(username, password) {
   const res = await fetch(`${API_URL}/api/v1/admin/auth/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...tenantHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
   });
   if (!res.ok) {

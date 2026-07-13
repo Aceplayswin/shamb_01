@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 
-from tenants.state import get_current_tenant_slug
+from tenants.state import get_current_tenant_id
 
 log = logging.getLogger('games')
 
@@ -45,9 +45,9 @@ def _fmt(**fields) -> str:
 
 
 def _emit(level: int, event: str, **fields) -> None:
-    slug = get_current_tenant_slug() or '-'
+    tenant = get_current_tenant_id() or '-'
     body = _fmt(**fields)
-    message = f'{event} tenant={slug}'
+    message = f'{event} tenant={tenant}'
     if body:
         message = f'{message} {body}'
     log.log(level, message)

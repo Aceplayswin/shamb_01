@@ -21,7 +21,6 @@ from tenants.state import set_current_tenant
 @dataclass
 class ResolvedTenant:
     product_id: int | None
-    slug: str
     name: str
     status: str
     # Feature data lives on the ``default`` connection; kept for API compatibility
@@ -34,7 +33,8 @@ def resolve_tenant() -> ResolvedTenant | None:
 
     Returns the resolved tenant (and sets the thread-local context) or ``None``
     when no key is configured / the control plane is unreachable and no
-    last-known-good config is cached.
+    last-known-good config is cached. Identity is the product id + name Super
+    Admin returns for our api_key — there is no slug.
     """
     config = get_product_config()
     if not config:
@@ -42,12 +42,11 @@ def resolve_tenant() -> ResolvedTenant | None:
         return None
 
     product = config.get('product') or {}
-    slug = product.get('slug') or ''
-    set_current_tenant(slug or None, None)
+    product_id = product.get('id')
+    set_current_tenant(str(product_id) if product_id is not None else None, None)
     return ResolvedTenant(
-        product_id=product.get('id'),
-        slug=slug,
-        name=product.get('name', slug),
+        product_id=product_id,
+        name=product.get('name', ''),
         status=product.get('status', ''),
         db_alias='',
     )

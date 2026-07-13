@@ -21,7 +21,7 @@ from core.models import (
     Wallet,
 )
 from core.services import get_user_settings
-from tenants.state import get_current_tenant_slug, tenant_atomic
+from tenants.state import get_current_tenant_id, tenant_atomic
 
 UPLOAD_ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'}
 UPLOAD_MAX_BYTES = 5 * 1024 * 1024
@@ -36,9 +36,9 @@ def upload_admin_image(file) -> str:
     if file.size > UPLOAD_MAX_BYTES:
         raise ValueError('File too large (max 5MB)')
 
-    tenant_slug = get_current_tenant_slug() or 'default'
+    tenant_key = get_current_tenant_id() or 'default'
     filename = f'{uuid.uuid4().hex}.{ext}'
-    path = default_storage.save(f'uploads/{tenant_slug}/{filename}', file)
+    path = default_storage.save(f'uploads/{tenant_key}/{filename}', file)
     return default_storage.url(path)
 
 

@@ -81,13 +81,13 @@ function OverviewContent() {
         ) : (
           <ul className="divide-y divide-gray-100 dark:divide-gray-700">
             {products.slice(0, 6).map((p) => (
-              <li key={p.slug} className="flex items-center gap-3 px-5 py-3">
+              <li key={p.id} className="flex items-center gap-3 px-5 py-3">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-xs font-black text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400">
                   {p.name.charAt(0).toUpperCase()}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{p.name}</p>
-                  <p className="text-xs text-gray-400">/{p.slug}</p>
+                  <p className="text-xs text-gray-400">ID #{p.id}</p>
                 </div>
                 <span className={`rounded-full px-2.5 py-0.5 text-[0.6rem] font-bold uppercase ${p.status === 'active' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}`}>
                   {p.status}

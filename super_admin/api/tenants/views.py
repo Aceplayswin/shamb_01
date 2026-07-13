@@ -20,13 +20,13 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from tenants.auth_jwt import sign_token
-from tenants.auth_middleware import require_auth, require_product_token
+from tenants.auth_middleware import require_auth
 from services.branding import BRANDING_FIELDS, get_branding_for_product, serialize_branding
 from services.product_credentials import (
     get_active_credential, issue_credential, mark_delivered, rotate_credential,
     serialize_credential,
 )
-from services.tenant_provisioning import provision_product
+from services.tenant_provisioning import new_api_key, provision_product
 from services.tenant_resolver import invalidate_tenant_cache
 from services.webhook_client import WebhookError, call_product
 from tenants.models import (
@@ -82,7 +82,6 @@ def _serialize_product(product: Product) -> dict:
     cred = get_active_credential(product)
     return {
         'id': product.id,
-        'slug': product.slug,
         'name': product.name,
         'api_key': product.api_key,
         'status': product.status,
@@ -177,16 +176,14 @@ def products_list(request):
 def products_create(request):
     try:
         body = _json_body(request)
-        slug = body['slug'].strip().lower()
         name = body['name'].strip()
     except (KeyError, json.JSONDecodeError) as e:
         return _error(e)
-    if Product.objects.filter(slug=slug).exists():
-        return _error('A product with this slug already exists', 409)
+    if not name:
+        return _error('name is required')
     db = body.get('database') or {}
     urls = body.get('urls') or {}
     product = provision_product(
-        slug=slug,
         name=name,
         db_name=db.get('db_name'),
         db_host=db.get('db_host'),
@@ -197,14 +194,14 @@ def products_create(request):
         be_url=urls.get('be_url', ''),
         branding=body.get('branding'),
     )
-    invalidate_tenant_cache(slug)
+    invalidate_tenant_cache(product.id)
     return JsonResponse(_serialize_product(product), status=201)
 
 
 @require_auth(['super_admin'])
 @require_http_methods(['GET'])
-def product_detail(request, slug):
-    product = Product.objects.filter(slug=slug).first()
+def product_detail(request, product_id):
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
     return JsonResponse(_serialize_product(product))
@@ -213,60 +210,72 @@ def product_detail(request, slug):
 @csrf_exempt
 @require_auth(['super_admin'])
 @require_http_methods(['PATCH'])
-def product_update(request, slug):
-    product = Product.objects.filter(slug=slug).first()
+def product_update(request, product_id):
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
     body = _json_body(request)
-    old_slug = product.slug
-    if 'slug' in body:
-        new_slug = body['slug'].strip().lower()
-        if new_slug != product.slug:
-            if Product.objects.filter(slug=new_slug).exclude(pk=product.pk).exists():
-                return _error('A product with this slug already exists', 409)
-            product.slug = new_slug
     if 'name' in body:
         product.name = body['name']
     if 'status' in body and body['status'] in dict(Product.Status.choices):
         product.status = body['status']
-    product.save(update_fields=['slug', 'name', 'status', 'updated_at'])
-    invalidate_tenant_cache(old_slug)
-    invalidate_tenant_cache(product.slug)
+    product.save(update_fields=['name', 'status', 'updated_at'])
+    invalidate_tenant_cache(product.id)
     return JsonResponse(_serialize_product(product))
 
 
 @csrf_exempt
 @require_auth(['super_admin'])
 @require_http_methods(['POST'])
-def product_disable(request, slug):
-    updated = Product.objects.filter(slug=slug).update(status=Product.Status.DISABLED)
+def product_disable(request, product_id):
+    updated = Product.objects.filter(id=product_id).update(status=Product.Status.DISABLED)
     if not updated:
         return _error('Product not found', 404)
-    invalidate_tenant_cache(slug)
-    return JsonResponse({'slug': slug, 'status': Product.Status.DISABLED})
+    invalidate_tenant_cache(product_id)
+    return JsonResponse({'id': product_id, 'status': Product.Status.DISABLED})
 
 
 @csrf_exempt
 @require_auth(['super_admin'])
 @require_http_methods(['DELETE'])
-def product_delete(request, slug):
+def product_delete(request, product_id):
     """Delete the product's control-plane records. The isolated tenant database
     is intentionally NOT dropped here (irreversible); operators remove it
     manually after export."""
-    product = Product.objects.filter(slug=slug).first()
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
     product.delete()
-    invalidate_tenant_cache(slug)
-    return JsonResponse({'deleted': True, 'slug': slug})
+    invalidate_tenant_cache(product_id)
+    return JsonResponse({'deleted': True, 'id': product_id})
+
+
+# --- API key ---
+@csrf_exempt
+@require_auth(['super_admin'])
+@require_http_methods(['POST'])
+def product_api_key_generate(request, product_id):
+    """Generate (or regenerate) the product's api_key — its PRODUCT_CONFIG_TOKEN.
+
+    This is the secret the product's own API holds to pull its config and identify
+    itself to Super Admin. Regenerating invalidates the previous key: the product
+    must be updated with the new value before it can talk to Super Admin again.
+    """
+    product = Product.objects.filter(id=product_id).first()
+    if not product:
+        return _error('Product not found', 404)
+    product.api_key = new_api_key()
+    product.save(update_fields=['api_key', 'updated_at'])
+    invalidate_tenant_cache(product.id)
+    return JsonResponse({'id': product.id, 'api_key': product.api_key})
 
 
 # --- Database ---
 @csrf_exempt
 @require_auth(['super_admin'])
 @require_http_methods(['PATCH'])
-def product_database_update(request, slug):
-    product = Product.objects.filter(slug=slug).first()
+def product_database_update(request, product_id):
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
     db = Database.objects.filter(product=product).first()
@@ -295,8 +304,8 @@ def product_database_update(request, slug):
 @csrf_exempt
 @require_auth(['super_admin'])
 @require_http_methods(['GET', 'PUT'])
-def product_urls(request, slug):
-    product = Product.objects.filter(slug=slug).first()
+def product_urls(request, product_id):
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
     if request.method == 'GET':
@@ -311,7 +320,7 @@ def product_urls(request, slug):
         if field in body:
             defaults[field] = body[field].strip()
     Url.objects.update_or_create(product=product, defaults=defaults)
-    invalidate_tenant_cache(slug)
+    invalidate_tenant_cache(product.id)
     url_obj = Url.objects.get(product=product)
     return JsonResponse({
         'fe_url': url_obj.fe_url,
@@ -323,8 +332,8 @@ def product_urls(request, slug):
 @csrf_exempt
 @require_auth(['super_admin'])
 @require_http_methods(['GET', 'PUT'])
-def product_branding(request, slug):
-    product = Product.objects.filter(slug=slug).first()
+def product_branding(request, product_id):
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
     if request.method == 'GET':
@@ -343,7 +352,7 @@ def product_branding(request, slug):
     if not str(data.get('product_name', '')).strip():
         return _error('product_name cannot be empty')
     Branding.objects.update_or_create(product=product, defaults=data)
-    invalidate_tenant_cache(slug)
+    invalidate_tenant_cache(product.id)
     return JsonResponse(get_branding_for_product(product))
 
 
@@ -357,26 +366,26 @@ def themes_catalog(request):
 
 @require_auth(['super_admin'])
 @require_http_methods(['GET'])
-def product_themes(request, slug):
+def product_themes(request, product_id):
     """List a product's theme rows (one per catalog theme), with active/enabled
     flags. Rows are auto-seeded if missing."""
-    product = Product.objects.filter(slug=slug).first()
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
     rows = _product_theme_rows(product)
     active = next((r['theme_key'] for r in rows if r['is_active']), DEFAULT_THEME)
-    return JsonResponse({'slug': slug, 'themes': rows, 'active_theme': active})
+    return JsonResponse({'id': product.id, 'themes': rows, 'active_theme': active})
 
 
 @csrf_exempt
 @require_auth(['super_admin'])
 @require_http_methods(['POST'])
-def product_theme_activate(request, slug):
+def product_theme_activate(request, product_id):
     """Activate exactly one theme for a product (deactivates all others).
 
     Body: {"theme_key": "theme2"}
     """
-    product = Product.objects.filter(slug=slug).first()
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
     body = _json_body(request)
@@ -387,20 +396,20 @@ def product_theme_activate(request, slug):
         active = set_active_theme(product, theme_key)
     except ValueError as e:
         return _error(e)
-    invalidate_tenant_cache(product.slug)
-    return JsonResponse({'slug': slug, 'active_theme': active, 'themes': _product_theme_rows(product)})
+    invalidate_tenant_cache(product.id)
+    return JsonResponse({'id': product.id, 'active_theme': active, 'themes': _product_theme_rows(product)})
 
 
 @csrf_exempt
 @require_auth(['super_admin'])
 @require_http_methods(['PATCH'])
-def product_theme_set_enabled(request, slug, theme_key):
+def product_theme_set_enabled(request, product_id, theme_key):
     """Enable/disable a theme row for a product. A disabled theme cannot be the
     live theme; disabling the active theme moves Live to another enabled theme.
 
     Body: {"is_enabled": false}
     """
-    product = Product.objects.filter(slug=slug).first()
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
     if theme_key not in THEME_KEYS:
@@ -434,15 +443,15 @@ def product_theme_set_enabled(request, slug, theme_key):
         if fallback:
             set_active_theme(product, fallback.theme_key)
 
-    invalidate_tenant_cache(product.slug)
-    return JsonResponse({'slug': slug, 'themes': _product_theme_rows(product)})
+    invalidate_tenant_cache(product.id)
+    return JsonResponse({'id': product.id, 'themes': _product_theme_rows(product)})
 
 
 # --- Public (unauthenticated) branding + theme for product frontends ---
 @require_http_methods(['GET'])
-def public_product_branding(request, slug):
+def public_product_branding(request, product_id):
     """Public endpoint product frontends call for white-label branding."""
-    product = Product.objects.filter(slug=slug).first()
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
     payload = get_branding_for_product(product)
@@ -451,21 +460,21 @@ def public_product_branding(request, slug):
 
 
 @require_http_methods(['GET'])
-def public_product_theme(request, slug):
+def public_product_theme(request, product_id):
     """Public endpoint a product frontend calls to learn its live theme.
 
     Returns only the active theme key (and the known keys so the frontend can
     guard against rendering a theme it doesn't ship). No auth: this is read-only,
     non-sensitive presentation config. Disabled products report no theme so the
     frontend can show a maintenance state."""
-    product = Product.objects.filter(slug=slug).first()
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
     if not product.is_active:
-        return JsonResponse({'slug': slug, 'active_theme': None, 'status': product.status})
+        return JsonResponse({'id': product.id, 'active_theme': None, 'status': product.status})
     active = get_active_theme(product)
     return JsonResponse({
-        'slug': slug,
+        'id': product.id,
         'active_theme': active,
         'status': product.status,
         'known_themes': THEME_KEYS,
@@ -475,8 +484,8 @@ def public_product_theme(request, slug):
 # --- Product config delivery (token-authenticated, server-to-server) ---
 # A product's own API pulls everything it used to read from this master database
 # (identity, branding, live theme, webhook public keys) from here, so products no
-# longer open a MySQL connection to the control plane. Authenticated with the
-# shared X-Product-Token secret (see auth_middleware.require_product_token).
+# longer open a MySQL connection to the control plane. The product is identified
+# by its api_key (X-Product-Token); see product_config_self / _product_for_api_key.
 
 def _product_config_payload(product: Product) -> dict:
     """Build the control-plane config body Super Admin delivers to a product.
@@ -501,10 +510,8 @@ def _product_config_payload(product: Product) -> dict:
         for c in ProductCredential.objects.filter(product=product).order_by('-created_at')
     ]
     return {
-        'slug': product.slug,
         'product': {
             'id': product.id,
-            'slug': product.slug,
             'name': product.name,
             'status': product.status,
         },
@@ -549,30 +556,19 @@ def product_config_self(request):
     return JsonResponse(_product_config_payload(product))
 
 
-@require_product_token
-@require_http_methods(['GET'])
-def product_config(request, slug):
-    """Slug-addressed config delivery (legacy). Prefer ``product_config_self``,
-    which identifies the product from its api_key with no slug in the URL."""
-    product = Product.objects.filter(slug=slug).first()
-    if not product:
-        return _error('Product not found', 404)
-    return JsonResponse(_product_config_payload(product))
-
-
 # --- Cross-tenant inspection ---
 @require_auth(['super_admin'])
 @require_http_methods(['GET'])
-def product_users(request, slug):
+def product_users(request, product_id):
     from core.models import User as TenantUser
 
-    product = Product.objects.filter(slug=slug).first()
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
-    alias = tenant_db_alias_for(slug)
+    alias = tenant_db_alias_for(product.id)
     from services.tenant_resolver import resolve_tenant
     resolve_tenant(header_key=product.api_key)
-    with use_tenant(slug, alias):
+    with use_tenant(str(product.id), alias):
         users = list(
             TenantUser.objects.order_by('-created_at')[:100].values(
                 'id', 'username', 'full_name', 'phone', 'role', 'account_status', 'created_at'
@@ -689,35 +685,34 @@ def _jsonable(value):
     return value
 
 
-def _activate_tenant(slug):
-    """Resolve + activate the tenant DB connection for a product slug.
+def _activate_tenant(product):
+    """Resolve + activate the tenant DB connection for a product.
 
-    Looks the product up by slug (its public URL identifier) but verifies the
-    connection using its secret ``api_key``, not the slug itself.
+    Verifies the connection using the product's secret ``api_key``. Returns the
+    Django connection alias for the product's tenant database.
     """
     from services.tenant_resolver import resolve_tenant
-    product = Product.objects.filter(slug=slug).first()
     resolve_tenant(header_key=product.api_key if product else None)
-    return tenant_db_alias_for(slug)
+    return tenant_db_alias_for(product.id)
 
 
 @require_auth(['super_admin'])
 @require_http_methods(['GET'])
-def product_data_summary(request, slug):
+def product_data_summary(request, product_id):
     """High-level counts + balance/financial totals from a product's tenant DB.
 
     Drives the stat cards on the product data explorer. Returns a `datasets`
     list (key + label + row count) plus headline aggregates."""
     from django.db.models import Count, Sum
 
-    product = Product.objects.filter(slug=slug).first()
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
 
-    alias = _activate_tenant(slug)
+    alias = _activate_tenant(product)
     datasets = []
     aggregates = {}
-    with use_tenant(slug, alias):
+    with use_tenant(str(product.id), alias):
         try:
             for key in _DATASET_ORDER:
                 cfg = _DATASETS[key]
@@ -752,7 +747,7 @@ def product_data_summary(request, slug):
             return _error(f'Could not read tenant database: {e}', 502)
 
     return JsonResponse({
-        'slug': slug,
+        'id': product.id,
         'name': product.name,
         'status': product.status,
         'datasets': datasets,
@@ -762,12 +757,12 @@ def product_data_summary(request, slug):
 
 @require_auth(['super_admin'])
 @require_http_methods(['GET'])
-def product_dataset(request, slug, dataset):
+def product_dataset(request, product_id, dataset):
     """Paginated rows for a single tenant dataset.
 
     Query params: ``page`` (1-based), ``page_size`` (<= 200), ``q`` (substring
     match against text columns). Returns whitelisted columns only."""
-    product = Product.objects.filter(slug=slug).first()
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
     cfg = _DATASETS.get(dataset)
@@ -785,8 +780,8 @@ def product_dataset(request, slug, dataset):
     page_size = max(1, min(page_size, _MAX_PAGE_SIZE))
     search = (request.GET.get('q') or '').strip()
 
-    alias = _activate_tenant(slug)
-    with use_tenant(slug, alias):
+    alias = _activate_tenant(product)
+    with use_tenant(str(product.id), alias):
         try:
             model = _import_model(cfg['model'])
             qs = model.objects.all()
@@ -810,7 +805,7 @@ def product_dataset(request, slug, dataset):
             row[col] = _jsonable(val)
 
     return JsonResponse({
-        'slug': slug,
+        'id': product.id,
         'dataset': dataset,
         'label': cfg['label'],
         'columns': cfg['columns'],
@@ -938,27 +933,27 @@ def test_connection(request):
 
 @require_auth(['super_admin'])
 @require_http_methods(['GET'])
-def product_credential(request, slug):
+def product_credential(request, product_id):
     """Return the product's active credential (public material only)."""
-    product = Product.objects.filter(slug=slug).first()
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
     cred = get_active_credential(product)
     if not cred:
-        return JsonResponse({'slug': slug, 'credential': None})
-    return JsonResponse({'slug': slug, 'credential': serialize_credential(cred)})
+        return JsonResponse({'id': product.id, 'credential': None})
+    return JsonResponse({'id': product.id, 'credential': serialize_credential(cred)})
 
 
 @csrf_exempt
 @require_auth(['super_admin'])
 @require_http_methods(['POST'])
-def product_credential_generate(request, slug):
+def product_credential_generate(request, product_id):
     """Issue the first credential for a product (no-op if one already exists).
 
     Returns the private key **once** so the operator can hand it off; afterwards
     only the public key is retrievable. Use rotate to replace an existing key.
     """
-    product = Product.objects.filter(slug=slug).first()
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
     existing = get_active_credential(product)
@@ -966,7 +961,7 @@ def product_credential_generate(request, slug):
     # Only reveal the private key when we actually just created it.
     reveal = existing is None
     return JsonResponse({
-        'slug': slug,
+        'id': product.id,
         'created': reveal,
         'credential': serialize_credential(cred, include_private=reveal),
     }, status=201 if reveal else 200)
@@ -975,15 +970,15 @@ def product_credential_generate(request, slug):
 @csrf_exempt
 @require_auth(['super_admin'])
 @require_http_methods(['POST'])
-def product_credential_rotate(request, slug):
+def product_credential_rotate(request, product_id):
     """Retire the active key pair and issue a new one. Returns the new private key
     once. The product must install the new public key before pulls resume."""
-    product = Product.objects.filter(slug=slug).first()
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
     cred = rotate_credential(product)
     return JsonResponse({
-        'slug': slug,
+        'id': product.id,
         'rotated': True,
         'credential': serialize_credential(cred, include_private=True),
     }, status=201)
@@ -992,16 +987,16 @@ def product_credential_rotate(request, slug):
 @csrf_exempt
 @require_auth(['super_admin'])
 @require_http_methods(['POST'])
-def product_credential_mark_delivered(request, slug):
+def product_credential_mark_delivered(request, product_id):
     """Mark that the product has installed the active public key (handshake)."""
-    product = Product.objects.filter(slug=slug).first()
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
     cred = get_active_credential(product)
     if not cred:
         return _error('No active credential to mark', 404)
     mark_delivered(cred)
-    return JsonResponse({'slug': slug, 'credential': serialize_credential(cred)})
+    return JsonResponse({'id': product.id, 'credential': serialize_credential(cred)})
 
 
 # --- Webhook-based data fetch (PULL) ---
@@ -1012,9 +1007,9 @@ def product_credential_mark_delivered(request, slug):
 
 @require_auth(['super_admin'])
 @require_http_methods(['GET'])
-def product_webhook_summary(request, slug):
+def product_webhook_summary(request, product_id):
     """High-level counts + aggregates pulled from the product over the webhook."""
-    product = Product.objects.filter(slug=slug).first()
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
     try:
@@ -1026,9 +1021,9 @@ def product_webhook_summary(request, slug):
 
 @require_auth(['super_admin'])
 @require_http_methods(['GET'])
-def product_webhook_dataset(request, slug, dataset):
+def product_webhook_dataset(request, product_id, dataset):
     """Paginated rows for one dataset, pulled from the product over the webhook."""
-    product = Product.objects.filter(slug=slug).first()
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
     if dataset not in _DATASETS:
@@ -1048,9 +1043,9 @@ def product_webhook_dataset(request, slug, dataset):
 
 @require_auth(['super_admin'])
 @require_http_methods(['GET'])
-def product_webhook_deliveries(request, slug):
+def product_webhook_deliveries(request, product_id):
     """Recent signed-webhook calls made to this product (audit trail)."""
-    product = Product.objects.filter(slug=slug).first()
+    product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
     try:
@@ -1066,4 +1061,4 @@ def product_webhook_deliveries(request, slug):
     for r in rows:
         if r.get('created_at'):
             r['created_at'] = r['created_at'].isoformat()
-    return JsonResponse({'slug': slug, 'deliveries': rows}, safe=False)
+    return JsonResponse({'id': product.id, 'deliveries': rows}, safe=False)

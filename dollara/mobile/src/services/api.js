@@ -1,11 +1,8 @@
-import { API_URL, PLATFORM_API_URL, TENANT_SLUG } from '../tenant';
+import { API_URL } from '../tenant';
 import { useAuthStore } from '../store/auth';
 
-// Every request carries the X-Tenant header so the backend resolves the right
-// product/database for this white-label build.
-function tenantHeaders(extra = {}) {
-  return { 'X-Tenant': TENANT_SLUG, ...extra };
-}
+// This build serves a single product. The backend identifies that product from
+// its own api_key, so requests carry no tenant header.
 
 export async function api(path, options = {}) {
   const token = useAuthStore.getState().token;
@@ -14,7 +11,6 @@ export async function api(path, options = {}) {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...tenantHeaders(),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
@@ -32,15 +28,7 @@ export async function detectGeo() {
 }
 
 export async function fetchBranding() {
-  try {
-    const res = await fetch(
-      `${PLATFORM_API_URL}/api/v1/public/products/${TENANT_SLUG}/branding`
-    );
-    if (res.ok) return res.json();
-  } catch {
-    // Fall through to product API.
-  }
-  const res = await fetch(`${API_URL}/api/v1/branding`, { headers: tenantHeaders() });
+  const res = await fetch(`${API_URL}/api/v1/branding`);
   if (!res.ok) throw new Error('Failed to load branding');
   return res.json();
 }
@@ -53,7 +41,6 @@ export async function fetchMe() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...tenantHeaders(),
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({

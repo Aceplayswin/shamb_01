@@ -17,19 +17,16 @@ from tenants.models import User
 
 INITIAL_PRODUCTS = [
     {
-        'slug': 'dollara',
         'name': 'Dollara',
         'fe_url': 'https://dollara.com',
         'be_url': 'https://api.dollara.com',
     },
     {
-        'slug': 'productb',
         'name': 'Product B',
         'fe_url': 'https://productb.com',
         'be_url': 'https://api.productb.com',
     },
     {
-        'slug': 'productc',
         'name': 'Product C',
         'fe_url': 'https://productc.com',
         'be_url': 'https://api.productc.com',
@@ -52,14 +49,13 @@ class Command(BaseCommand):
             self.stdout.write('Super admin already exists: superadmin')
 
         for product in INITIAL_PRODUCTS:
-            self.stdout.write(self.style.MIGRATE_HEADING(f"Creating '{product['slug']}' ..."))
-            provision_product(
-                slug=product['slug'],
+            self.stdout.write(self.style.MIGRATE_HEADING(f"Creating '{product['name']}' ..."))
+            row = provision_product(
                 name=product['name'],
                 fe_url=product['fe_url'],
                 be_url=product['be_url'],
             )
-            self.stdout.write(self.style.SUCCESS(f"  done: {product['slug']}"))
+            self.stdout.write(self.style.SUCCESS(f"  done: {product['name']} (id={row.id})"))
 
         self.stdout.write(self.style.SUCCESS('\nMaster seed completed.'))
         self.stdout.write('Super Admin login: superadmin / Admin@123')

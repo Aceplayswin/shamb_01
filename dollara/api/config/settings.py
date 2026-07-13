@@ -144,11 +144,7 @@ MIGRATION_MODULES = {'core': None, 'tenants': None}
 # TODO: lock this down to an explicit allowlist before going to production.
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_HEADERS = (
-    *default_headers,
-    'x-tenant',
-    'x-tenant-id',
-)
+CORS_ALLOW_HEADERS = default_headers
 
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],

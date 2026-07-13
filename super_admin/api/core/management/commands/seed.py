@@ -15,7 +15,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--tenant',
             default=None,
-            help='Product slug to seed. Activates that tenant DB connection before seeding.',
+            help='Product id or name to seed. Activates that tenant DB connection before seeding.',
         )
         parser.add_argument(
             '--brand_name',
@@ -30,11 +30,15 @@ class Command(BaseCommand):
             from services.tenant_resolver import resolve_tenant
             from tenants.models import Product
 
-            product = Product.objects.filter(slug=tenant).first()
+            product = None
+            if str(tenant).isdigit():
+                product = Product.objects.filter(id=int(tenant)).first()
             if not product:
-                raise CommandError(f'No product with slug "{tenant}"')
+                product = Product.objects.filter(name__iexact=str(tenant)).first()
+            if not product:
+                raise CommandError(f'No product with id or name "{tenant}"')
             resolve_tenant(header_key=product.api_key)
-            self.stdout.write(f'Seeding tenant: {tenant}')
+            self.stdout.write(f'Seeding tenant: {product.name} (id={product.id})')
 
         brand_name = options.get('brand_name') or 'DOLLARA'
         password_hash = bcrypt.hashpw(b'Admin@123', bcrypt.gensalt()).decode()

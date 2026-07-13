@@ -12,8 +12,7 @@ from core.game_services import GameError
 from core.geo import detect_geo_from_ip
 from core.middleware import require_auth
 from core.models import AiCallLog, Transaction, User, Wallet
-from services.branding import get_branding_for_slug
-from tenants.state import get_current_tenant_slug
+from services.branding import get_branding
 
 # Game launch error codes -> HTTP status. Mirrors the legacy status_code set so
 # the existing frontend game flow keeps working unchanged.
@@ -30,7 +29,7 @@ _GAME_ERROR_STATUS = {
 
 def _brand_name() -> str:
     """Current tenant's product name for white-labelling user-facing copy."""
-    return get_branding_for_slug(get_current_tenant_slug()).get('product_name', 'our platform')
+    return get_branding().get('product_name', 'our platform')
 
 
 def health(request):

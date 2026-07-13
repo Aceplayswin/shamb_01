@@ -46,22 +46,12 @@ def serialize_branding(product: Product, branding: Branding | None) -> dict:
         data = default_branding_for_product(product)
     else:
         data = {field: getattr(branding, field) for field in BRANDING_FIELDS}
-    data['slug'] = product.slug
     return data
 
 
 def get_branding_for_product(product: Product) -> dict:
     branding = Branding.objects.filter(product=product).first()
     return serialize_branding(product, branding)
-
-
-def get_branding_for_slug(slug: str | None) -> dict:
-    if not slug:
-        return dict(DEFAULT_BRANDING)
-    product = Product.objects.filter(slug=slug).first()
-    if not product:
-        return dict(DEFAULT_BRANDING)
-    return get_branding_for_product(product)
 
 
 def ensure_branding(product: Product, *, product_name: str | None = None) -> Branding:

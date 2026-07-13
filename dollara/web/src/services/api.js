@@ -1,4 +1,4 @@
-import { API_URL, tenantHeaders } from './tenant';
+import { API_URL } from './tenant';
 
 export async function api(path, options = {}) {
   const token =
@@ -8,7 +8,6 @@ export async function api(path, options = {}) {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...tenantHeaders(),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },

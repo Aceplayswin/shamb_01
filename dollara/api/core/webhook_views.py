@@ -153,9 +153,10 @@ def _received_path(request) -> str:
     return request.path + ('?' + qs if qs else '')
 
 
-def _summary_payload(slug: str, name: str, status: str, alias: str) -> dict:
+def _summary_payload(resolved, alias: str) -> dict:
+    tenant_key = str(resolved.product_id) if resolved.product_id is not None else None
     datasets = []
-    with use_tenant(slug, alias):
+    with use_tenant(tenant_key, alias):
         for key, cfg in _DATASETS.items():
             datasets.append({
                 'key': key,
@@ -184,16 +185,17 @@ def _summary_payload(slug: str, name: str, status: str, alias: str) -> dict:
         }
 
     return {
-        'slug': slug,
-        'name': name,
-        'status': status,
+        'id': resolved.product_id,
+        'name': resolved.name,
+        'status': resolved.status,
         'datasets': datasets,
         'aggregates': aggregates,
     }
 
 
-def _dataset_payload(dataset: str, slug: str, alias: str, params) -> dict:
+def _dataset_payload(dataset: str, resolved, alias: str, params) -> dict:
     cfg = _DATASETS[dataset]
+    tenant_key = str(resolved.product_id) if resolved.product_id is not None else None
     try:
         page = max(1, int(params.get('page', 1)))
     except (TypeError, ValueError):
@@ -205,7 +207,7 @@ def _dataset_payload(dataset: str, slug: str, alias: str, params) -> dict:
     page_size = max(1, min(page_size, _MAX_PAGE_SIZE))
     search = (params.get('q') or '').strip()
 
-    with use_tenant(slug, alias):
+    with use_tenant(tenant_key, alias):
         model = cfg['model']
         qs = model.objects.all()
         if search:
@@ -225,7 +227,7 @@ def _dataset_payload(dataset: str, slug: str, alias: str, params) -> dict:
             row[col] = _jsonable(val)
 
     return {
-        'slug': slug,
+        'id': resolved.product_id,
         'dataset': dataset,
         'label': cfg['label'],
         'columns': cfg['columns'],
@@ -268,7 +270,6 @@ def super_admin_data_webhook(request, resource):
     resolved = resolve_tenant()
     if not resolved:
         return _error('Product not resolved; control-plane config unavailable', 503)
-    slug = resolved.slug
     # Feature data lives on the ``default`` connection (this instance serves one
     # product); ``None`` lets the router target it.
     alias = resolved.db_alias or None
@@ -276,9 +277,9 @@ def super_admin_data_webhook(request, resource):
     # 4. Read this product's OWN database and return the console's JSON shapes.
     try:
         if resource == 'summary':
-            payload = _summary_payload(slug, resolved.name, resolved.status, alias)
+            payload = _summary_payload(resolved, alias)
         elif resource in _DATASETS:
-            payload = _dataset_payload(resource, slug, alias, request.GET)
+            payload = _dataset_payload(resource, resolved, alias, request.GET)
         else:
             return _error('Unknown dataset', 404)
     except Exception as e:

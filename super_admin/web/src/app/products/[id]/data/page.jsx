@@ -156,7 +156,7 @@ function RowDetail({ row, label, onClose }) {
 }
 
 function DataExplorer() {
-  const { slug } = useParams();
+  const { id } = useParams();
   const { theme } = useTheme();
   const swal = (opts) => swalThemed(opts, theme);
 
@@ -175,7 +175,7 @@ function DataExplorer() {
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true);
     try {
-      const data = await getProductDataSummary(slug);
+      const data = await getProductDataSummary(id);
       setSummary(data);
       setActive((prev) => prev || data.datasets?.[0]?.key || null);
     } catch (e) {
@@ -184,7 +184,7 @@ function DataExplorer() {
       setSummaryLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug]);
+  }, [id]);
 
   useEffect(() => { loadSummary(); }, [loadSummary]);
 
@@ -202,7 +202,7 @@ function DataExplorer() {
     if (!active) return;
     setTableLoading(true);
     try {
-      const data = await getProductDataset(slug, active, { page, pageSize: PAGE_SIZE, q: debounced });
+      const data = await getProductDataset(id, active, { page, pageSize: PAGE_SIZE, q: debounced });
       setTable(data);
     } catch (e) {
       setTable(null);
@@ -211,7 +211,7 @@ function DataExplorer() {
       setTableLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug, active, page, debounced]);
+  }, [id, active, page, debounced]);
 
   useEffect(() => { loadTable(); }, [loadTable]);
 
@@ -263,7 +263,7 @@ function DataExplorer() {
                 {summary.name} <span className="text-gray-400">· Data</span>
               </h1>
               <p className="mt-0.5 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                <span>/{summary.slug}</span>
+                <span>ID #{summary.id}</span>
                 <span className={`rounded-full px-2 py-0.5 text-[0.6rem] font-bold uppercase ${summary.status === 'active' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}`}>
                   {summary.status}
                 </span>

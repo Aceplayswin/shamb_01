@@ -62,33 +62,37 @@ export const createProduct = (payload) =>
     method: 'POST',
     body: JSON.stringify(payload),
   });
-export const getProduct = (slug) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}`);
-export const updateProduct = (slug, payload) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/update`, {
+// Products are addressed by numeric id; the api_key is a secret and never in a URL.
+export const getProduct = (id) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}`);
+export const updateProduct = (id, payload) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/update`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
-export const disableProduct = (slug) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/disable`, { method: 'POST' });
-export const deleteProduct = (slug) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/delete`, { method: 'DELETE' });
-export const getUrls = (slug) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/urls`);
-export const updateDatabase = (slug, payload) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/database`, {
+export const disableProduct = (id) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/disable`, { method: 'POST' });
+export const deleteProduct = (id) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/delete`, { method: 'DELETE' });
+// Generate (or regenerate) the product's api_key — its PRODUCT_CONFIG_TOKEN.
+export const generateApiKey = (id) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/api-key/generate`, { method: 'POST' });
+export const getUrls = (id) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/urls`);
+export const updateDatabase = (id, payload) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/database`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
-export const updateUrls = (slug, payload) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/urls`, {
+export const updateUrls = (id, payload) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/urls`, {
     method: 'PUT',
     body: JSON.stringify(payload),
   });
-export const getBranding = (slug) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/branding`);
-export const updateBranding = (slug, payload) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/branding`, {
+export const getBranding = (id) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/branding`);
+export const updateBranding = (id, payload) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/branding`, {
     method: 'PUT',
     body: JSON.stringify(payload),
   });
@@ -99,54 +103,54 @@ export const testConnection = (payload) =>
   });
 
 // Product data explorer — read-only inspection of a product's tenant DB.
-export const getProductDataSummary = (slug) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/data/summary`);
-export const getProductDataset = (slug, dataset, { page = 1, pageSize = 50, q = '' } = {}) => {
+export const getProductDataSummary = (id) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/data/summary`);
+export const getProductDataset = (id, dataset, { page = 1, pageSize = 50, q = '' } = {}) => {
   const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   if (q) params.set('q', q);
-  return superAdminApi(`/api/v1/super-admin/products/${slug}/data/${dataset}?${params.toString()}`);
+  return superAdminApi(`/api/v1/super-admin/products/${id}/data/${dataset}?${params.toString()}`);
 };
 
 // Product webhook credentials (RSA key pair securing the data channel).
-export const getProductCredential = (slug) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/credential`);
-export const generateProductCredential = (slug) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/credential/generate`, {
+export const getProductCredential = (id) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/credential`);
+export const generateProductCredential = (id) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/credential/generate`, {
     method: 'POST',
   });
-export const rotateProductCredential = (slug) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/credential/rotate`, {
+export const rotateProductCredential = (id) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/credential/rotate`, {
     method: 'POST',
   });
-export const markCredentialDelivered = (slug) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/credential/mark-delivered`, {
+export const markCredentialDelivered = (id) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/credential/mark-delivered`, {
     method: 'POST',
   });
 
 // Webhook-based data fetch (PULL) — fetches a product's data over the signed
 // webhook instead of connecting to its tenant database directly.
-export const getProductWebhookSummary = (slug) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/data-webhook/summary`);
-export const getProductWebhookDataset = (slug, dataset, { page = 1, pageSize = 50, q = '' } = {}) => {
+export const getProductWebhookSummary = (id) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/data-webhook/summary`);
+export const getProductWebhookDataset = (id, dataset, { page = 1, pageSize = 50, q = '' } = {}) => {
   const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   if (q) params.set('q', q);
-  return superAdminApi(`/api/v1/super-admin/products/${slug}/data-webhook/${dataset}?${params.toString()}`);
+  return superAdminApi(`/api/v1/super-admin/products/${id}/data-webhook/${dataset}?${params.toString()}`);
 };
-export const getProductWebhookDeliveries = (slug, { limit = 50 } = {}) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/data-webhook/deliveries?limit=${limit}`);
+export const getProductWebhookDeliveries = (id, { limit = 50 } = {}) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/data-webhook/deliveries?limit=${limit}`);
 
 export const listThemes = () => superAdminApi('/api/v1/super-admin/themes');
 
 // Per-product theme table.
-export const getProductThemes = (slug) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/themes`);
-export const activateProductTheme = (slug, themeKey) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/themes/activate`, {
+export const getProductThemes = (id) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/themes`);
+export const activateProductTheme = (id, themeKey) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/themes/activate`, {
     method: 'POST',
     body: JSON.stringify({ theme_key: themeKey }),
   });
-export const setProductThemeEnabled = (slug, themeKey, isEnabled) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/themes/${themeKey}/enabled`, {
+export const setProductThemeEnabled = (id, themeKey, isEnabled) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/themes/${themeKey}/enabled`, {
     method: 'PATCH',
     body: JSON.stringify({ is_enabled: isEnabled }),
   });

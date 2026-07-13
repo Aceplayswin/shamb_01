@@ -6,7 +6,9 @@ SET NAMES utf8mb4;
 
 CREATE TABLE IF NOT EXISTS products (
   id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  slug VARCHAR(63) NOT NULL UNIQUE,
+  -- Deprecated: products are identified by id (console) and api_key (products).
+  -- Kept nullable for backward compatibility; no longer written by the app.
+  slug VARCHAR(63) NULL UNIQUE,
   name VARCHAR(150) NOT NULL,
   api_key VARCHAR(64) UNIQUE,
   status ENUM('active', 'disabled') NOT NULL DEFAULT 'active',
