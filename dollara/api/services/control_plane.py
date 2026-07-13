@@ -94,6 +94,16 @@ def _http_fetch(slug: str) -> dict | None:
     except (json.JSONDecodeError, ValueError) as e:
         logger.warning('control_plane: invalid JSON from %s: %s', url, e)
         return None
+    except TimeoutError as e:
+        # A read timeout raises a bare TimeoutError (not wrapped in URLError),
+        # so it must be caught explicitly or it would 500 the whole request.
+        logger.warning('control_plane: timed out reading %s: %s', url, e)
+        return None
+    except OSError as e:
+        # Any other socket/connection-layer error (reset, DNS, TLS) — treat as
+        # unreachable so tenant resolution degrades to last-known-good.
+        logger.warning('control_plane: transport error for %s: %s', url, e)
+        return None
 
 
 def get_product_config(slug: str) -> dict | None:
