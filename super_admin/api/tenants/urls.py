@@ -47,8 +47,11 @@ urlpatterns = [
     path('public/products/<slug:slug>/branding', views.public_product_branding),
     path('public/products/<slug:slug>/theme', views.public_product_theme),
 
-    # Product config delivery (X-Product-Token auth) — a product's own API pulls
-    # its identity/branding/theme/webhook public keys instead of connecting to
-    # this master database. See views.product_config.
+    # Product config delivery — a product's own API pulls its identity/branding/
+    # theme/webhook public keys instead of connecting to this master database.
+    # Key-oriented: the product is identified from its api_key (X-Product-Token),
+    # no slug required. See views.product_config_self.
+    path('product/config', views.product_config_self),
+    # Legacy slug-addressed variant, kept for back-compat.
     path('products/<slug:slug>/config', views.product_config),
 ]

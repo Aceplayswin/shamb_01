@@ -21,8 +21,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from django.conf import settings
-
 from services.control_plane import get_product_config
 
 
@@ -61,12 +59,12 @@ def resolve_signing_key(key_id: str) -> SuperAdminKey | None:
     if pinned:
         return pinned
 
-    # This instance serves a single product; its config carries every public key.
-    slug = getattr(settings, 'DEFAULT_TENANT', None)
-    config = get_product_config(slug) if slug else None
+    # This instance serves a single product (identified by api_key); its config
+    # carries the public half of every issued key.
+    config = get_product_config()
     if not config:
         return None
-    product_slug = (config.get('product') or {}).get('slug') or slug
+    product_slug = (config.get('product') or {}).get('slug')
     for cred in config.get('credentials', []):
         if cred.get('key_id') == key_id and cred.get('public_pem'):
             return SuperAdminKey(public_pem=cred['public_pem'], product_slug=product_slug)

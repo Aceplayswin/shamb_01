@@ -31,7 +31,7 @@ from django.views.decorators.http import require_http_methods
 from core.models import (AiCallLog, Bet, Bonus, Game, GameProvider,
                          PlatformSetting, Transaction, User, UserSetting, Wallet)
 from services.super_admin_keys import resolve_signing_key
-from services.webhook_verify import (HEADER_KEY_ID, HEADER_PRODUCT, SignatureError,
+from services.webhook_verify import (HEADER_KEY_ID, SignatureError,
                                      verify_incoming)
 from services.tenant_resolver import resolve_tenant
 from tenants.state import use_tenant
@@ -261,19 +261,14 @@ def super_admin_data_webhook(request, resource):
     except SignatureError as e:
         return _error(str(e), 401)
 
-    # 3. Pick the tenant. The key binds the product; the X-SA-Product header must
-    #    agree when both are known (defence against using one product's key to
-    #    pull another's data).
-    header_product = request.headers.get(HEADER_PRODUCT, '') or None
-    if key.product_slug and header_product and key.product_slug != header_product:
-        return _error('Signing key does not match X-SA-Product', 401)
-    slug = key.product_slug or header_product
-    if not slug:
-        return _error('Could not determine product for request', 400)
-
-    resolved = resolve_tenant(header_slug=slug)
+    # 3. Resolve THIS product from its control-plane config (key-oriented). The
+    #    verified signature already proves the request targets this product — the
+    #    key_id was matched against this product's own credential set — so no slug
+    #    needs to be exchanged or cross-checked.
+    resolved = resolve_tenant()
     if not resolved:
-        return _error('Product not found', 404)
+        return _error('Product not resolved; control-plane config unavailable', 503)
+    slug = resolved.slug
     # Feature data lives on the ``default`` connection (this instance serves one
     # product); ``None`` lets the router target it.
     alias = resolved.db_alias or None

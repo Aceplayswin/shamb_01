@@ -4,13 +4,16 @@ dollara used to read its control-plane data (product identity, branding, live
 theme, webhook public keys) straight out of Super Admin's master database. It no
 longer connects to that database at all — instead it pulls the same data from::
 
-    GET {SUPER_ADMIN_URL}/api/v1/products/<slug>/config
-        X-Product-Token: <shared secret>
+    GET {SUPER_ADMIN_URL}/api/v1/product/config
+        X-Product-Token: <api_key>
 
-authenticated with a shared secret (``PRODUCT_CONFIG_TOKEN``). The response is
-cached in-process so tenant resolution (which runs on every request) doesn't make
-an HTTP call each time, and a *last-known-good* copy is kept so a brief Super
-Admin outage doesn't take dollara down.
+Key-oriented: dollara serves a single product and identifies it purely by its
+``PRODUCT_CONFIG_TOKEN`` (the product's api_key). Super Admin resolves *which*
+product the key belongs to and returns its config — no slug is exchanged, so the
+two sides communicate iff dollara holds a valid key. The response is cached
+in-process so tenant resolution (which runs on every request) doesn't make an HTTP
+call each time, and a *last-known-good* copy is kept so a brief Super Admin outage
+doesn't take dollara down.
 
 Response shape (see ``super_admin/api/tenants/views.py::product_config``)::
 
@@ -37,12 +40,14 @@ from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
 
-# Cache keys. ``fresh`` expires quickly so config changes propagate; ``lkg`` (last
-# known good) lives long and is served if a fetch fails; ``cooldown`` throttles
-# retries while Super Admin is unreachable so we don't hammer it every request.
-_FRESH_KEY = 'control_plane:config:{slug}'
-_LKG_KEY = 'control_plane:config_lkg:{slug}'
-_COOLDOWN_KEY = 'control_plane:config_cooldown:{slug}'
+# Cache keys. This instance serves a single product (identified by its api_key),
+# so one cache slot suffices. ``fresh`` expires quickly so config changes
+# propagate; ``lkg`` (last known good) lives long and is served if a fetch fails;
+# ``cooldown`` throttles retries while Super Admin is unreachable so we don't
+# hammer it every request.
+_FRESH_KEY = 'control_plane:config'
+_LKG_KEY = 'control_plane:config_lkg'
+_COOLDOWN_KEY = 'control_plane:config_cooldown'
 
 _LKG_TTL = 24 * 60 * 60  # keep the last good config for a day
 _COOLDOWN_TTL = 10       # seconds to wait before retrying after a failure
@@ -68,19 +73,25 @@ def _fresh_ttl() -> int:
     return int(getattr(settings, 'CONTROL_PLANE_CACHE_TTL', 60))
 
 
-def _http_fetch(slug: str) -> dict | None:
-    """Fetch a product's config from Super Admin. Returns ``None`` on any error."""
+def _http_fetch() -> dict | None:
+    """Fetch this product's config from Super Admin, identifying it by api_key.
+
+    Returns ``None`` on any error — including a missing key, so the two sides only
+    communicate when dollara actually holds a token.
+    """
     base = _base_url()
     if not base:
         logger.warning('control_plane: SUPER_ADMIN_URL not configured')
         return None
-    url = f'{base}/api/v1/products/{slug}/config'
+    token = _token()
+    if not token:
+        logger.warning('control_plane: PRODUCT_CONFIG_TOKEN not set — cannot pull config')
+        return None
+    url = f'{base}/api/v1/product/config'
     req = urllib.request.Request(url, method='GET')
     req.add_header('User-Agent', 'dollara-control-plane/1.0')
     req.add_header('Accept', 'application/json')
-    token = _token()
-    if token:
-        req.add_header('X-Product-Token', token)
+    req.add_header('X-Product-Token', token)
     try:
         with urllib.request.urlopen(req, timeout=_timeout(), context=_SSL_CTX) as resp:
             payload = resp.read()
@@ -106,51 +117,42 @@ def _http_fetch(slug: str) -> dict | None:
         return None
 
 
-def get_product_config(slug: str) -> dict | None:
-    """Return the cached control-plane config for ``slug`` (fetching if stale).
+def get_product_config() -> dict | None:
+    """Return this product's cached control-plane config (fetching if stale).
 
-    Serves the last-known-good copy when Super Admin is unreachable so the product
-    keeps running through a brief control-plane outage.
+    Identified by api_key, not slug. Serves the last-known-good copy when Super
+    Admin is unreachable so the product keeps running through a brief outage.
     """
-    if not slug:
-        return None
-
-    fresh_key = _FRESH_KEY.format(slug=slug)
-    cached = cache.get(fresh_key)
+    cached = cache.get(_FRESH_KEY)
     if cached is not None:
         return cached
 
-    lkg_key = _LKG_KEY.format(slug=slug)
-    cooldown_key = _COOLDOWN_KEY.format(slug=slug)
-
     # Recently failed — don't retry yet; serve last-known-good if we have it.
-    if cache.get(cooldown_key):
-        return cache.get(lkg_key)
+    if cache.get(_COOLDOWN_KEY):
+        return cache.get(_LKG_KEY)
 
-    config = _http_fetch(slug)
+    config = _http_fetch()
     if config is not None:
-        cache.set(fresh_key, config, _fresh_ttl())
-        cache.set(lkg_key, config, _LKG_TTL)
+        cache.set(_FRESH_KEY, config, _fresh_ttl())
+        cache.set(_LKG_KEY, config, _LKG_TTL)
         return config
 
     # Fetch failed: back off briefly and fall back to the last good config.
-    cache.set(cooldown_key, True, _COOLDOWN_TTL)
-    return cache.get(lkg_key)
+    cache.set(_COOLDOWN_KEY, True, _COOLDOWN_TTL)
+    return cache.get(_LKG_KEY)
 
 
-def invalidate(slug: str) -> None:
-    """Drop cached config for ``slug`` (forces a fresh fetch next call)."""
-    if not slug:
-        return
-    cache.delete(_FRESH_KEY.format(slug=slug))
-    cache.delete(_COOLDOWN_KEY.format(slug=slug))
+def invalidate() -> None:
+    """Drop the cached config (forces a fresh fetch next call)."""
+    cache.delete(_FRESH_KEY)
+    cache.delete(_COOLDOWN_KEY)
 
 
-def find_credential(key_id: str, slug: str) -> dict | None:
-    """Find the credential dict matching ``key_id`` in ``slug``'s config, or None."""
-    if not (key_id and slug):
+def find_credential(key_id: str) -> dict | None:
+    """Find the credential dict matching ``key_id`` in this product's config."""
+    if not key_id:
         return None
-    config = get_product_config(slug)
+    config = get_product_config()
     if not config:
         return None
     for cred in config.get('credentials', []):

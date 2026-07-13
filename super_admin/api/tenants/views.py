@@ -5,6 +5,7 @@ All super-admin endpoints operate on the master database and are guarded by the
 tenant's database context explicitly.
 """
 
+import hmac
 import json
 import ssl
 import urllib.error
@@ -477,20 +478,14 @@ def public_product_theme(request, slug):
 # longer open a MySQL connection to the control plane. Authenticated with the
 # shared X-Product-Token secret (see auth_middleware.require_product_token).
 
-@require_product_token
-@require_http_methods(['GET'])
-def product_config(request, slug):
-    """Deliver a product's control-plane config over HTTP.
+def _product_config_payload(product: Product) -> dict:
+    """Build the control-plane config body Super Admin delivers to a product.
 
     Returns the product identity + status, white-label branding, the live theme,
     and the product's webhook credentials — **public keys only** (``private_pem``
     never leaves Super Admin). All active/rotated credentials are returned so the
     product can verify any ``X-SA-Key-Id`` it sees across a key rotation.
     """
-    product = Product.objects.filter(slug=slug).first()
-    if not product:
-        return _error('Product not found', 404)
-
     branding = Branding.objects.filter(product=product).first()
     credentials = [
         {
@@ -505,7 +500,7 @@ def product_config(request, slug):
         }
         for c in ProductCredential.objects.filter(product=product).order_by('-created_at')
     ]
-    return JsonResponse({
+    return {
         'slug': product.slug,
         'product': {
             'id': product.id,
@@ -519,7 +514,50 @@ def product_config(request, slug):
             'known_themes': THEME_KEYS,
         },
         'credentials': credentials,
-    })
+    }
+
+
+def _product_for_api_key(token: str) -> Product | None:
+    """Resolve the product a bare ``X-Product-Token`` (api_key) belongs to.
+
+    The api_key is a high-entropy per-product secret, so it doubles as the
+    product identifier — no slug is needed. Comparison is constant-time over the
+    (tiny) set of products that have a key so a wrong token can't be probed by
+    timing.
+    """
+    if not token:
+        return None
+    for product in Product.objects.exclude(api_key__isnull=True).exclude(api_key=''):
+        if hmac.compare_digest(token, product.api_key):
+            return product
+    return None
+
+
+@require_http_methods(['GET'])
+def product_config_self(request):
+    """Deliver the calling product's config, identified purely by its api_key.
+
+    Key-oriented: the product sends ``X-Product-Token: <api_key>`` and Super Admin
+    resolves *which* product that is from the key itself. No slug is exchanged, so
+    a product only needs to hold its key to pull its own config — and one product's
+    key can never read another's.
+    """
+    token = request.META.get('HTTP_X_PRODUCT_TOKEN', '')
+    product = _product_for_api_key(token)
+    if not product:
+        return JsonResponse({'error': 'Invalid product token'}, status=401)
+    return JsonResponse(_product_config_payload(product))
+
+
+@require_product_token
+@require_http_methods(['GET'])
+def product_config(request, slug):
+    """Slug-addressed config delivery (legacy). Prefer ``product_config_self``,
+    which identifies the product from its api_key with no slug in the URL."""
+    product = Product.objects.filter(slug=slug).first()
+    if not product:
+        return _error('Product not found', 404)
+    return JsonResponse(_product_config_payload(product))
 
 
 # --- Cross-tenant inspection ---

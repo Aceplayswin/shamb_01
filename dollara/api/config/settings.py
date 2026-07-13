@@ -56,17 +56,15 @@ DATABASES = {
 DATABASE_ROUTERS = ['middleware.db_router.TenantRouter']
 
 # --- Control plane (Super Admin) ---
-# Where to fetch this product's control-plane config, and the shared secret that
-# authenticates the pull (must match Super Admin's PRODUCT_CONFIG_TOKEN).
+# Where to fetch this product's control-plane config, and the api_key that both
+# authenticates the pull AND identifies which product this instance is. Super
+# Admin resolves the product from this key alone — no slug is exchanged, so the
+# two sides only communicate when a valid key is configured here.
 SUPER_ADMIN_URL = os.getenv('SUPER_ADMIN_URL', 'http://localhost:8000').rstrip('/')
 PRODUCT_CONFIG_TOKEN = os.getenv('PRODUCT_CONFIG_TOKEN', '')
 # How long (seconds) to cache a fetched config before re-checking Super Admin.
 CONTROL_PLANE_CACHE_TTL = int(os.getenv('CONTROL_PLANE_CACHE_TTL', '60'))
 CONTROL_PLANE_HTTP_TIMEOUT = int(os.getenv('CONTROL_PLANE_HTTP_TIMEOUT', '10'))
-
-# Default tenant slug used for local development hosts (localhost/127.0.0.1)
-# where no domain/subdomain is available. This instance's single product.
-DEFAULT_TENANT = os.getenv('DEFAULT_TENANT', 'dollara')
 
 # In-process cache and channel layers (no Redis).
 CACHES = {
