@@ -2,7 +2,9 @@
 
 Determines the active tenant (product) for a request from, in priority order:
 
-1. An explicit ``X-Tenant`` / ``X-Tenant-ID`` header.
+1. An explicit ``X-Tenant-Key`` header — the product's secret ``api_key``,
+   issued once at creation. This is the verification step: the slug alone is
+   public/guessable and is never trusted to identify a product on its own.
 2. The request host matched against the ``urls.host_url`` column.
 3. A ``tenant`` claim embedded in the JWT.
 4. A development fallback (``DEFAULT_TENANT`` setting) for ``localhost``.
@@ -46,10 +48,10 @@ def _slug_from_host(host: str) -> str | None:
     return None
 
 
-def _product_for_request(host: str, header_slug: str | None, jwt_slug: str | None) -> Product | None:
-    # 1. Explicit header slug.
-    if header_slug:
-        product = Product.objects.filter(slug=header_slug).first()
+def _product_for_request(host: str, header_key: str | None, jwt_slug: str | None) -> Product | None:
+    # 1. Explicit product key — the verified identity of the connection.
+    if header_key:
+        product = Product.objects.filter(api_key=header_key).first()
         if product:
             return product
 
@@ -78,10 +80,10 @@ def _product_for_request(host: str, header_slug: str | None, jwt_slug: str | Non
 def resolve_tenant(
     *,
     host: str = '',
-    header_slug: str | None = None,
+    header_key: str | None = None,
     jwt_slug: str | None = None,
 ) -> ResolvedTenant | None:
-    product = _product_for_request(host, header_slug, jwt_slug)
+    product = _product_for_request(host, header_key, jwt_slug)
     if not product:
         set_current_tenant(None, None)
         return None
@@ -107,8 +109,8 @@ def resolve_tenant(
     )
 
 
-def activate_tenant_by_slug(slug: str) -> ResolvedTenant | None:
-    return resolve_tenant(header_slug=slug)
+def activate_tenant_by_key(api_key: str) -> ResolvedTenant | None:
+    return resolve_tenant(header_key=api_key)
 
 
 def invalidate_tenant_cache(slug: str) -> None:
