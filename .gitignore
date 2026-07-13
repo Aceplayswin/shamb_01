@@ -59,4 +59,4 @@ coverage/
 deploy.ps1
 deploy.sh
 winco/
-
+.env
