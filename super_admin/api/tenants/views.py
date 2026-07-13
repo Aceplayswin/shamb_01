@@ -805,20 +805,50 @@ _SSL_CTX.check_hostname = False
 _SSL_CTX.verify_mode = ssl.CERT_NONE
 
 
+# A browser-like User-Agent: some WAFs / bot filters in front of a product's
+# backend hold or challenge unknown agents (surfacing here as a read timeout)
+# while letting real browsers through. Accept a slow first response too — a
+# cold backend (e.g. one that loads ML models on boot) can take well over 10s
+# to answer its first request even though it is perfectly reachable.
+_HEALTHCHECK_UA = (
+    'Mozilla/5.0 (compatible; SuperAdmin-HealthCheck/1.0; '
+    '+https://superadmin) Safari/537.36'
+)
+
+
 def _test_http_url(url: str) -> dict:
-    try:
-        req = urllib.request.Request(url, method='GET')
-        req.add_header('User-Agent', 'SuperAdmin-HealthCheck/1.0')
-        with urllib.request.urlopen(req, timeout=10, context=_SSL_CTX) as resp:
-            return {'status': 'ok', 'message': f'Reachable (HTTP {resp.status})'}
-    except urllib.error.HTTPError as e:
-        if e.code < 500:
-            return {'status': 'ok', 'message': f'Reachable (HTTP {e.code})'}
-        return {'status': 'error', 'message': f'Server error (HTTP {e.code})'}
-    except urllib.error.URLError as e:
-        return {'status': 'error', 'message': str(e.reason)}
-    except Exception as e:
-        return {'status': 'error', 'message': str(e)}
+    timeout = int(getattr(settings, 'HEALTHCHECK_HTTP_TIMEOUT', 30))
+    last_err: Exception | None = None
+    # Retry once: absorbs a cold-start miss where the worker warms up on the
+    # first hit and answers the second quickly.
+    for attempt in range(2):
+        try:
+            req = urllib.request.Request(url, method='GET')
+            req.add_header('User-Agent', _HEALTHCHECK_UA)
+            req.add_header('Accept', '*/*')
+            with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CTX) as resp:
+                return {'status': 'ok', 'message': f'Reachable (HTTP {resp.status})'}
+        except urllib.error.HTTPError as e:
+            # Any HTTP response (even 4xx/5xx) proves the host is reachable.
+            if e.code < 500:
+                return {'status': 'ok', 'message': f'Reachable (HTTP {e.code})'}
+            return {'status': 'error', 'message': f'Server error (HTTP {e.code})'}
+        except urllib.error.URLError as e:
+            last_err = e
+            reason = getattr(e, 'reason', e)
+            # DNS / connection-refused won't fix on retry — fail fast.
+            if not isinstance(reason, TimeoutError) and 'timed out' not in str(reason):
+                return {'status': 'error', 'message': str(reason)}
+        except TimeoutError as e:
+            last_err = e
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+    reason = getattr(last_err, 'reason', last_err)
+    return {
+        'status': 'error',
+        'message': f'No response within {timeout}s ({reason}). The host may be '
+                   f'slow to start or behind a firewall.',
+    }
 
 
 def _test_db(*, host: str, port: int, user: str, password: str, db_name: str) -> dict:
