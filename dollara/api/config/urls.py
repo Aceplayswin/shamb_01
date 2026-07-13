@@ -9,6 +9,9 @@ from core.webhook_views import super_admin_data_webhook
 from tenants.views import public_branding
 
 urlpatterns = [
+    # Root GET so external reachability checks (e.g. Super Admin's backend-URL
+    # test, which hits the bare URL as entered) get a response instead of 404.
+    path('', health),
     path('health', health),
     # Winco/Huidu legacy callback path (https://api.host/game/) — same handler as
     # /api/v1/games/callback. Set GAME_CALLBACK_PATH=/game/ for shared agency accounts.
