@@ -4,14 +4,16 @@ from django.views.static import serve as serve_media
 from strawberry.django.views import GraphQLView
 
 from core.graphql_schema import schema
-from core.views import games_callback, health
+from core.views import games_callback, health, landing
 from core.webhook_views import super_admin_data_webhook
 from tenants.views import public_branding
 
 urlpatterns = [
-    # Root GET so external reachability checks (e.g. Super Admin's backend-URL
-    # test, which hits the bare URL as entered) get a response instead of 404.
-    path('', health),
+    # Root GET: interactive status page for a direct browser hit. Also answers
+    # external reachability checks (e.g. Super Admin's backend-URL test, which
+    # hits the bare URL as entered) with a 200 instead of a 404.
+    path('', landing),
+    # Machine-readable status for programmatic health checks.
     path('health', health),
     # Winco/Huidu legacy callback path (https://api.host/game/) — same handler as
     # /api/v1/games/callback. Set GAME_CALLBACK_PATH=/game/ for shared agency accounts.

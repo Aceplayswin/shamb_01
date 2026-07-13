@@ -184,17 +184,3 @@ our normalized categories:
 | Fish Game, CasinoTable | `ai_games` |
 | Sport | `sports` |
 | SportsGame | `virtual_sports` |
-
----
-
-## 7. Tests
-
-```bash
-python manage.py test core.tests --settings=config.test_settings
-```
-
-`config/test_settings.py` uses in-memory SQLite and ORM-built tables (production
-applies schema via SQL and disables migrations). Coverage: AES round-trip and
-launch envelope (`test_game_provider`), request/callback validation
-(`test_game_schemas`), launch + settlement + idempotency + heartbeat + wagering
-(`test_game_services`), and route/ack behavior (`test_game_views`).

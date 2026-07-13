@@ -42,6 +42,186 @@ def health(request):
     })
 
 
+def landing(request):
+    """Interactive status page served on a direct browser GET to the API root.
+
+    Kept dependency-free (no DB / tenant lookups) so the bare URL always answers
+    — this is also what Super Admin's backend-URL reachability check hits. The
+    live status + latency are fetched client-side from ``/health``.
+    """
+    return HttpResponse(_LANDING_HTML, content_type='text/html; charset=utf-8')
+
+
+_LANDING_HTML = """<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Platform API</title>
+<style>
+  :root{
+    --bg:#0b1020; --bg2:#0e1630; --card:rgba(255,255,255,.04); --border:rgba(255,255,255,.09);
+    --fg:#e8ecf6; --muted:#93a0bd; --brand:#6d8bff; --brand2:#8f6dff;
+    --ok:#31d0a0; --okbg:rgba(49,208,160,.12); --err:#ff6b6b; --errbg:rgba(255,107,107,.12);
+    --code:#0a0f22;
+  }
+  :root[data-theme="light"]{
+    --bg:#f4f6fc; --bg2:#eaeefb; --card:#ffffff; --border:rgba(20,30,60,.10);
+    --fg:#141a2e; --muted:#5a6683; --code:#0f1836;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--fg);
+    background:
+      radial-gradient(1100px 600px at 12% -10%, rgba(109,139,255,.20), transparent 60%),
+      radial-gradient(1000px 700px at 100% 0%, rgba(143,109,255,.16), transparent 55%),
+      linear-gradient(160deg,var(--bg),var(--bg2));
+    min-height:100%; display:flex; align-items:center; justify-content:center; padding:28px;
+  }
+  .card{
+    width:100%; max-width:560px; background:var(--card); border:1px solid var(--border);
+    border-radius:20px; padding:30px 30px 26px;
+    backdrop-filter:blur(10px); box-shadow:0 24px 60px -24px rgba(0,0,0,.55);
+  }
+  .top{display:flex; align-items:center; gap:14px; margin-bottom:22px}
+  .logo{
+    width:46px; height:46px; border-radius:13px; flex:0 0 auto;
+    background:linear-gradient(135deg,var(--brand),var(--brand2));
+    display:flex; align-items:center; justify-content:center; color:#fff; font-weight:800; font-size:20px;
+    box-shadow:0 8px 22px -6px rgba(109,139,255,.6);
+  }
+  h1{font-size:19px; margin:0; letter-spacing:.2px}
+  .sub{color:var(--muted); font-size:13px; margin-top:2px}
+  .status{
+    display:flex; align-items:center; gap:10px; padding:13px 15px; border-radius:13px;
+    background:var(--okbg); border:1px solid rgba(49,208,160,.25); font-weight:600; margin-bottom:8px;
+    transition:background .25s,border-color .25s;
+  }
+  .status.down{background:var(--errbg); border-color:rgba(255,107,107,.3)}
+  .status.wait{background:var(--card); border-color:var(--border); color:var(--muted); font-weight:500}
+  .dot{width:11px; height:11px; border-radius:50%; background:var(--ok); flex:0 0 auto;
+       box-shadow:0 0 0 0 rgba(49,208,160,.55); animation:pulse 1.8s infinite}
+  .status.down .dot{background:var(--err); animation:none}
+  .status.wait .dot{background:var(--muted); animation:none}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(49,208,160,.5)}70%{box-shadow:0 0 0 12px rgba(49,208,160,0)}100%{box-shadow:0 0 0 0 rgba(49,208,160,0)}}
+  .meta{margin-left:auto; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums}
+  .row{display:flex; gap:10px; margin:16px 0 4px}
+  button{
+    appearance:none; cursor:pointer; border:0; border-radius:11px; padding:11px 18px; font-size:14px; font-weight:600;
+    color:#fff; background:linear-gradient(135deg,var(--brand),var(--brand2));
+    box-shadow:0 8px 20px -8px rgba(109,139,255,.7); transition:transform .12s,filter .2s;
+  }
+  button:hover{filter:brightness(1.08)} button:active{transform:translateY(1px)}
+  button[disabled]{opacity:.6; cursor:progress}
+  pre{
+    margin:14px 0 0; background:var(--code); color:#cfe0ff; border:1px solid var(--border);
+    border-radius:12px; padding:14px 15px; font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    overflow:auto; max-height:200px;
+  }
+  .ep{margin-top:22px; border-top:1px solid var(--border); padding-top:16px}
+  .ep h2{font-size:11px; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); margin:0 0 10px}
+  .ep ul{list-style:none; margin:0; padding:0; display:grid; gap:7px}
+  .ep li{display:flex; align-items:center; gap:10px; font-size:13px}
+  .verb{font:11px/1 ui-monospace,monospace; font-weight:700; color:#fff; background:rgba(109,139,255,.28);
+        border:1px solid rgba(109,139,255,.4); padding:4px 7px; border-radius:6px; min-width:44px; text-align:center}
+  .path{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--fg)}
+  .desc{color:var(--muted); margin-left:auto; font-size:12px}
+  .foot{margin-top:20px; color:var(--muted); font-size:12px; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap}
+  a{color:var(--brand); text-decoration:none} a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="top">
+      <div class="logo">API</div>
+      <div>
+        <h1>Platform API</h1>
+        <div class="sub">White-label gaming platform &middot; service gateway</div>
+      </div>
+    </div>
+
+    <div id="status" class="status wait">
+      <span class="dot"></span>
+      <span id="statusText">Checking service&hellip;</span>
+      <span class="meta" id="latency"></span>
+    </div>
+
+    <div class="row">
+      <button id="pingBtn" type="button">Check health</button>
+    </div>
+    <pre id="out" hidden></pre>
+
+    <section class="ep">
+      <h2>Public endpoints</h2>
+      <ul>
+        <li><span class="verb">GET</span><span class="path">/health</span><span class="desc">service status (JSON)</span></li>
+        <li><span class="verb">GET</span><span class="path">/api/v1/branding</span><span class="desc">tenant branding</span></li>
+        <li><span class="verb">POST</span><span class="path">/graphql</span><span class="desc">feature API</span></li>
+      </ul>
+    </section>
+
+    <div class="foot">
+      <span id="host"></span>
+      <span id="clock"></span>
+    </div>
+  </main>
+
+<script>
+(function(){
+  var statusEl=document.getElementById('status'),
+      textEl=document.getElementById('statusText'),
+      latEl=document.getElementById('latency'),
+      out=document.getElementById('out'),
+      btn=document.getElementById('pingBtn');
+
+  document.getElementById('host').textContent=location.host;
+
+  function tick(){
+    var d=new Date();
+    document.getElementById('clock').textContent=d.toISOString().replace('T',' ').replace(/\\..+/,' UTC');
+  }
+  tick(); setInterval(tick,1000);
+
+  function setState(cls,label){
+    statusEl.className='status '+cls;
+    textEl.textContent=label;
+  }
+
+  function ping(show){
+    btn.disabled=true;
+    setState('wait','Checking service\\u2026'); latEl.textContent='';
+    var t0=performance.now();
+    fetch('/health',{headers:{'Accept':'application/json'}})
+      .then(function(r){ return r.json().then(function(j){ return {ok:r.ok,body:j}; }); })
+      .then(function(res){
+        var ms=Math.round(performance.now()-t0);
+        latEl.textContent=ms+' ms';
+        if(res.ok && res.body && res.body.status==='ok'){
+          setState('up','Operational \\u2014 all systems normal');
+        }else{
+          setState('down','Degraded \\u2014 unexpected response');
+        }
+        if(show){ out.hidden=false; out.textContent=JSON.stringify(res.body,null,2); }
+      })
+      .catch(function(e){
+        latEl.textContent='';
+        setState('down','Unreachable \\u2014 '+e.message);
+        if(show){ out.hidden=false; out.textContent=String(e); }
+      })
+      .finally(function(){ btn.disabled=false; });
+  }
+
+  btn.addEventListener('click',function(){ ping(true); });
+  ping(false);
+})();
+</script>
+</body>
+</html>"""
+
+
 def _json_body(request) -> dict:
     if not request.body:
         return {}
