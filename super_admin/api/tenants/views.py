@@ -82,6 +82,7 @@ def _serialize_product(product: Product) -> dict:
         'id': product.id,
         'slug': product.slug,
         'name': product.name,
+        'api_key': product.api_key,
         'status': product.status,
         'created_at': product.created_at.isoformat(),
         'themes': theme_rows,
@@ -562,7 +563,7 @@ def product_users(request, slug):
         return _error('Product not found', 404)
     alias = tenant_db_alias_for(slug)
     from services.tenant_resolver import resolve_tenant
-    resolve_tenant(header_slug=slug)
+    resolve_tenant(header_key=product.api_key)
     with use_tenant(slug, alias):
         users = list(
             TenantUser.objects.order_by('-created_at')[:100].values(
@@ -681,9 +682,14 @@ def _jsonable(value):
 
 
 def _activate_tenant(slug):
-    """Resolve + activate the tenant DB connection for a product slug."""
+    """Resolve + activate the tenant DB connection for a product slug.
+
+    Looks the product up by slug (its public URL identifier) but verifies the
+    connection using its secret ``api_key``, not the slug itself.
+    """
     from services.tenant_resolver import resolve_tenant
-    resolve_tenant(header_slug=slug)
+    product = Product.objects.filter(slug=slug).first()
+    resolve_tenant(header_key=product.api_key if product else None)
     return tenant_db_alias_for(slug)
 
 

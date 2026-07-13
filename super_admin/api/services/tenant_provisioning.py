@@ -12,6 +12,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import secrets
+
 from django.conf import settings
 from django.db import connections
 
@@ -19,6 +21,12 @@ from services.branding import default_branding_for_product
 from services.product_credentials import issue_credential
 from tenants.models import Branding, Database, Product, Url
 from tenants.state import register_tenant_connection, tenant_db_alias_for
+
+
+def new_api_key() -> str:
+    """Secret issued once per product, used to verify which product a
+    connection belongs to (in place of the public, guessable slug)."""
+    return 'pk_' + secrets.token_hex(24)
 
 INIT_SQL = Path(getattr(settings, 'TENANT_SCHEMA_PATH', settings.BASE_DIR / 'database' / 'init.sql'))
 
@@ -92,9 +100,12 @@ def provision_product(
     db_user = db_user or default_db.get('USER', 'root')
     db_password = default_db.get('PASSWORD', '') if db_password is None else db_password
 
-    product, _ = Product.objects.update_or_create(
+    product, created = Product.objects.update_or_create(
         slug=slug, defaults={'name': name, 'status': Product.Status.ACTIVE}
     )
+    if created or not product.api_key:
+        product.api_key = new_api_key()
+        product.save(update_fields=['api_key', 'updated_at'])
 
     # Seed one theme row per catalog theme (theme1 active by default). Idempotent.
     from tenants.themes import ensure_product_themes

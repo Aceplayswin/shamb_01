@@ -2,7 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 import bcrypt
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from core.models import Bonus, Game, GameProvider, PlatformSetting, User
@@ -28,8 +28,12 @@ class Command(BaseCommand):
         if tenant:
             # Activate the tenant DB so ORM writes are routed to it.
             from services.tenant_resolver import resolve_tenant
+            from tenants.models import Product
 
-            resolve_tenant(header_slug=tenant)
+            product = Product.objects.filter(slug=tenant).first()
+            if not product:
+                raise CommandError(f'No product with slug "{tenant}"')
+            resolve_tenant(header_key=product.api_key)
             self.stdout.write(f'Seeding tenant: {tenant}')
 
         brand_name = options.get('brand_name') or 'DOLLARA'
