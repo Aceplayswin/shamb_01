@@ -111,7 +111,6 @@ class Database(models.Model):
     db_port = models.CharField(max_length=10, default='3306')
     db_user = models.CharField(max_length=120)
     db_password = models.CharField(max_length=255, blank=True, default='')
-    is_provisioned = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

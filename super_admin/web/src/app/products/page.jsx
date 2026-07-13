@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import {
   listProducts, disableProduct, updateProduct, deleteProduct,
-  provisionProduct, updateUrls, updateDatabase, testConnection,
+  updateUrls, updateDatabase, testConnection,
   getProductThemes, activateProductTheme, setProductThemeEnabled,
   getBranding, updateBranding,
 } from '@/services/api';
@@ -788,18 +788,6 @@ function ProductsContent() {
                       <button onClick={() => setThemeTarget(p)} className={actionBtn}>
                         <Palette className="h-3.5 w-3.5" /> Themes
                       </button>
-                      <button
-                        onClick={() => {
-                          setBusy(`${p.slug}:provision`);
-                          provisionProduct(p.slug).then(load)
-                            .catch((e) => swal({ icon: 'error', title: 'Provision failed', text: e.message }))
-                            .finally(() => setBusy(null));
-                        }}
-                        disabled={busy === `${p.slug}:provision`}
-                        className={actionBtn}
-                      >
-                        {busy === `${p.slug}:provision` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Database className="h-3.5 w-3.5" />} Provision
-                      </button>
                       <button onClick={() => toggleStatus(p)} disabled={busy === `${p.slug}:status`} className={actionBtn}>
                         <Power className="h-3.5 w-3.5" /> {p.status === 'active' ? 'Disable' : 'Enable'}
                       </button>
@@ -833,9 +821,7 @@ function ProductsContent() {
                         <Database className="h-3.5 w-3.5" /> Database
                       </p>
                       <p className="mt-1 font-semibold text-gray-900 dark:text-white">{p.database?.db_name ?? '—'}</p>
-                      <p className={p.database?.is_provisioned ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>
-                        {p.database?.is_provisioned ? 'provisioned' : 'not provisioned'}
-                      </p>
+                      <p className="text-gray-400">{p.database?.db_host ?? '—'}</p>
                     </div>
                     <div className="rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-900/60">
                       <p className="flex items-center gap-1.5 font-medium text-gray-500 dark:text-gray-400">

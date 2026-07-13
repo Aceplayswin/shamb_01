@@ -24,7 +24,7 @@ from services.product_credentials import (
     get_active_credential, issue_credential, mark_delivered, rotate_credential,
     serialize_credential,
 )
-from services.tenant_provisioning import ProvisioningError, provision_product
+from services.tenant_provisioning import provision_product
 from services.tenant_resolver import invalidate_tenant_cache
 from services.webhook_client import WebhookError, call_product
 from tenants.models import (
@@ -95,7 +95,6 @@ def _serialize_product(product: Product) -> dict:
         'database': {
             'db_name': db.db_name if db else None,
             'db_host': db.db_host if db else None,
-            'is_provisioned': db.is_provisioned if db else False,
         },
         'credential': {
             'key_id': cred.key_id if cred else None,
@@ -184,22 +183,18 @@ def products_create(request):
         return _error('A product with this slug already exists', 409)
     db = body.get('database') or {}
     urls = body.get('urls') or {}
-    try:
-        product = provision_product(
-            slug=slug,
-            name=name,
-            db_name=db.get('db_name'),
-            db_host=db.get('db_host'),
-            db_port=db.get('db_port'),
-            db_user=db.get('db_user'),
-            db_password=db.get('db_password'),
-            fe_url=urls.get('fe_url', ''),
-            be_url=urls.get('be_url', ''),
-            branding=body.get('branding'),
-            seed=body.get('seed', True),
-        )
-    except ProvisioningError as e:
-        return _error(f'Provisioning failed: {e}', 500)
+    product = provision_product(
+        slug=slug,
+        name=name,
+        db_name=db.get('db_name'),
+        db_host=db.get('db_host'),
+        db_port=db.get('db_port'),
+        db_user=db.get('db_user'),
+        db_password=db.get('db_password'),
+        fe_url=urls.get('fe_url', ''),
+        be_url=urls.get('be_url', ''),
+        branding=body.get('branding'),
+    )
     invalidate_tenant_cache(slug)
     return JsonResponse(_serialize_product(product), status=201)
 
@@ -264,31 +259,6 @@ def product_delete(request, slug):
     return JsonResponse({'deleted': True, 'slug': slug})
 
 
-@csrf_exempt
-@require_auth(['super_admin'])
-@require_http_methods(['POST'])
-def product_provision(request, slug):
-    """(Re)create + seed the tenant database for an existing product."""
-    product = Product.objects.filter(slug=slug).first()
-    if not product:
-        return _error('Product not found', 404)
-    db = Database.objects.filter(product=product).first()
-    try:
-        provision_product(
-            slug=product.slug,
-            name=product.name,
-            db_name=db.db_name if db else None,
-            db_host=db.db_host if db else None,
-            db_port=db.db_port if db else None,
-            db_user=db.db_user if db else None,
-            db_password=db.db_password if db else None,
-            seed=request.GET.get('seed', '1') != '0',
-        )
-    except ProvisioningError as e:
-        return _error(f'Provisioning failed: {e}', 500)
-    return JsonResponse(_serialize_product(product))
-
-
 # --- Database ---
 @csrf_exempt
 @require_auth(['super_admin'])
@@ -316,7 +286,6 @@ def product_database_update(request, slug):
         'db_host': db.db_host,
         'db_port': db.db_port,
         'db_user': db.db_user,
-        'is_provisioned': db.is_provisioned,
     })
 
 

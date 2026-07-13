@@ -12,7 +12,6 @@ urlpatterns = [
     path('super-admin/products/<slug:slug>/update', views.product_update),
     path('super-admin/products/<slug:slug>/disable', views.product_disable),
     path('super-admin/products/<slug:slug>/delete', views.product_delete),
-    path('super-admin/products/<slug:slug>/provision', views.product_provision),
     # Database update
     path('super-admin/products/<slug:slug>/database', views.product_database_update),
     # URLs

@@ -73,8 +73,6 @@ export const disableProduct = (slug) =>
   superAdminApi(`/api/v1/super-admin/products/${slug}/disable`, { method: 'POST' });
 export const deleteProduct = (slug) =>
   superAdminApi(`/api/v1/super-admin/products/${slug}/delete`, { method: 'DELETE' });
-export const provisionProduct = (slug) =>
-  superAdminApi(`/api/v1/super-admin/products/${slug}/provision`, { method: 'POST' });
 export const getUrls = (slug) =>
   superAdminApi(`/api/v1/super-admin/products/${slug}/urls`);
 export const updateDatabase = (slug, payload) =>
