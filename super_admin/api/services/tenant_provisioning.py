@@ -11,9 +11,10 @@ from __future__ import annotations
 import re
 import secrets
 
-from services.branding import default_branding_for_product
+from services.branding import IDENTITY_FIELDS, ensure_branding
 from services.product_credentials import issue_credential
-from tenants.models import Branding, Database, Product, Url
+from tenants.models import Database, Product, Url
+from tenants.themes import THEME_KEYS
 
 
 def new_api_key() -> str:
@@ -70,10 +71,19 @@ def provision_product(
     # the product verifies). Idempotent: keeps any existing active key pair.
     issue_credential(product)
 
-    branding_data = default_branding_for_product(product)
-    branding_data.update(branding or {})
-    branding_data['product_name'] = (branding_data.get('product_name') or name).strip()
-    Branding.objects.update_or_create(product=product, defaults=branding_data)
+    # Seed per-theme branding: every catalog theme starts from its own defaults.
+    # Any identity overrides passed in (e.g. product_name) apply to all themes.
+    overrides = branding or {}
+    product_name = (overrides.get('product_name') or name).strip()
+    for theme_key in THEME_KEYS:
+        row = ensure_branding(product, theme_key, product_name=product_name)
+        identity_overrides = {
+            f: overrides[f] for f in IDENTITY_FIELDS if f in overrides
+        }
+        if identity_overrides:
+            for field, value in identity_overrides.items():
+                setattr(row, field, value)
+            row.save()
 
     Url.objects.update_or_create(
         product=product,

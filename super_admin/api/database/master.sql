@@ -51,14 +51,21 @@ CREATE TABLE IF NOT EXISTS urls (
     REFERENCES products (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- White-label branding, one row per (product, theme_key). Each theme a product
+-- can render has its own name/assets and full color palette (colors JSON). Token
+-- keys inside colors come from tenants/theme_palettes.py; any color a theme
+-- doesn't set falls back to that theme's code default. theme_color/secondary_color
+-- mirror colors.primary/colors.accent for backward-compatible readers.
 CREATE TABLE IF NOT EXISTS branding (
   id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  product_id INT(11) NOT NULL UNIQUE,
+  product_id INT(11) NOT NULL,
+  theme_key VARCHAR(63) NOT NULL DEFAULT 'theme1',
   product_name VARCHAR(150) NOT NULL,
   logo_url VARCHAR(500) NOT NULL DEFAULT '',
   favicon_url VARCHAR(500) NOT NULL DEFAULT '',
   theme_color VARCHAR(20) NOT NULL DEFAULT '#ff9800',
   secondary_color VARCHAR(20) NOT NULL DEFAULT '#a78bfa',
+  colors JSON,
   splash_url VARCHAR(500) NOT NULL DEFAULT '',
   app_icon_url VARCHAR(500) NOT NULL DEFAULT '',
   support_email VARCHAR(150) NOT NULL DEFAULT '',
@@ -67,6 +74,7 @@ CREATE TABLE IF NOT EXISTS branding (
   privacy_url VARCHAR(500) NOT NULL DEFAULT '',
   extra JSON,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_branding_product_theme (product_id, theme_key),
   CONSTRAINT fk_branding_product FOREIGN KEY (product_id)
     REFERENCES products (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

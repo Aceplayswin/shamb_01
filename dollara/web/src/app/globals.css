@@ -9,17 +9,21 @@ html {
 
 :root {
   /* ---- Theme tokens (RGB triplets so Tailwind can apply alpha modifiers) ----
-     Dark is the default palette; .light overrides below swap every token. */
-  --color-app-bg: 11 15 20; /* page background, #0B0F14 */
-  --color-app-fg: 255 255 255; /* primary text, #FFFFFF */
-  --color-rail: 11 15 20; /* side rail / top bar / bottom nav, #0B0F14 */
-  --color-panel: 21 26 33; /* cards, glass, #151A21 */
-  --color-panel-strong: 11 15 20; /* stronger glass, #0B0F14 */
-  --color-muted: 156 163 175; /* secondary text, #9CA3AF */
-  --color-hairline: 255 255 255; /* border / overlay base — used with low alpha */
-  --ambient-1: rgba(245, 197, 66, 0.12);
-  --ambient-2: rgba(255, 184, 0, 0.1);
-  --ambient-3: rgba(245, 197, 66, 0.05);
+     Dark is the default palette; .light overrides below swap every token.
+     Each token reads a Super Admin-injected override (--sa-*) if present, else the
+     theme's own default baked in here — so the app renders correctly with no
+     Super Admin at all, and per-color when only some are overridden. Injection
+     happens at runtime in hooks/useBranding.jsx via themes/palettes.js. */
+  --color-app-bg: var(--sa-app-bg, 11 15 20); /* page background, #0B0F14 */
+  --color-app-fg: var(--sa-app-fg, 255 255 255); /* primary text, #FFFFFF */
+  --color-rail: var(--sa-rail, 11 15 20); /* side rail / top bar / bottom nav */
+  --color-panel: var(--sa-panel, 21 26 33); /* cards, glass, #151A21 */
+  --color-panel-strong: var(--sa-panel-strong, 11 15 20); /* stronger glass */
+  --color-muted: var(--sa-muted, 156 163 175); /* secondary text, #9CA3AF */
+  --color-hairline: var(--sa-hairline, 255 255 255); /* border / overlay base */
+  --ambient-1: rgb(var(--brand-500, 245 197 66) / 0.12);
+  --ambient-2: rgb(var(--brand-600, 255 184 0) / 0.1);
+  --ambient-3: rgb(var(--brand-500, 245 197 66) / 0.05);
 
   --background: rgb(var(--color-app-bg));
   --foreground: rgb(var(--color-app-fg));
@@ -35,9 +39,9 @@ html {
   --color-panel-strong: 255 255 255;
   --color-muted: 100 99 125;
   --color-hairline: 20 16 36;
-  --ambient-1: rgba(245, 197, 66, 0.08);
-  --ambient-2: rgba(255, 184, 0, 0.06);
-  --ambient-3: rgba(245, 197, 66, 0.04);
+  --ambient-1: rgb(var(--brand-500, 245 197 66) / 0.08);
+  --ambient-2: rgb(var(--brand-600, 255 184 0) / 0.06);
+  --ambient-3: rgb(var(--brand-500, 245 197 66) / 0.04);
 
   color-scheme: light;
 }
@@ -111,13 +115,14 @@ body {
    what the app-wide light/dark toggle is set to (mirrors how theme2 pins its dark
    palette). Everything inside the theme3 shell inherits this cream surface. */
 .theme3-root {
-  --t3-bg-a: #f4f2f9;
-  --t3-bg-b: #e9e6f2;
-  --t3-bg-c: #efeaf3;
-  --t3-ink: #1b1726;
-  --t3-muted: #6b6579;
-  --t3-gold: #c79a3b;
-  --t3-footer: #241b3a;
+  /* Super Admin overrides (--sa-t3-*) fall back to theme3's own defaults. */
+  --t3-bg-a: var(--sa-t3-bg-a, #f4f2f9);
+  --t3-bg-b: var(--sa-t3-bg-b, #e9e6f2);
+  --t3-bg-c: var(--sa-t3-bg-c, #efeaf3);
+  --t3-ink: var(--sa-t3-ink, #1b1726);
+  --t3-muted: var(--sa-t3-muted, #6b6579);
+  --t3-gold: var(--sa-t3-gold, #c79a3b);
+  --t3-footer: var(--sa-t3-footer, #241b3a);
 
   color: var(--t3-ink);
   background:
@@ -149,14 +154,15 @@ body {
    Scoped to `.theme4-root` so the palette holds regardless of the app-wide
    light/dark toggle (mirrors theme2/theme3 scoping). */
 .theme4-root {
-  --t4-teal: #0e7480;        /* header gradient base */
-  --t4-teal-bright: #17a2b0; /* header gradient top */
-  --t4-nav: #0a5560;         /* nav strip / section bars */
-  --t4-ink: #13272b;
-  --t4-muted: #5d7378;
-  --t4-back: #72bbef;        /* back odds (blue) */
-  --t4-lay: #faa9ba;         /* lay odds (pink) */
-  --t4-live: #e5342c;
+  /* Super Admin overrides (--sa-t4-*) fall back to theme4's own defaults. */
+  --t4-teal: var(--sa-t4-teal, #0e7480);        /* header gradient base */
+  --t4-teal-bright: var(--sa-t4-teal-bright, #17a2b0); /* header gradient top */
+  --t4-nav: var(--sa-t4-nav, #0a5560);         /* nav strip / section bars */
+  --t4-ink: var(--sa-t4-ink, #13272b);
+  --t4-muted: var(--sa-t4-muted, #5d7378);
+  --t4-back: var(--sa-t4-back, #72bbef);        /* back odds (blue) */
+  --t4-lay: var(--sa-t4-lay, #faa9ba);        /* lay odds (pink) */
+  --t4-live: var(--sa-t4-live, #e5342c);
 
   color: var(--t4-ink);
   background: #e7edee;

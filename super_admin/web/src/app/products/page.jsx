@@ -12,7 +12,7 @@ import {
   listProducts, disableProduct, updateProduct, deleteProduct,
   updateUrls, updateDatabase, testConnection,
   getProductThemes, activateProductTheme, setProductThemeEnabled,
-  getBranding, updateBranding, generateApiKey,
+  getBranding, updateBranding, generateApiKey, listThemes,
 } from '@/services/api';
 import { useTheme } from '../providers';
 import DashboardLayout, { useDashboard } from '../components/DashboardLayout';
@@ -277,12 +277,12 @@ function EditProductModal({ product, onClose, onSaved, theme }) {
   );
 }
 
+// Identity (non-color) branding fields — colors are rendered dynamically from the
+// selected theme's palette schema.
 const EMPTY_BRANDING = {
   product_name: '',
   logo_url: '',
   favicon_url: '',
-  theme_color: '#ff9800',
-  secondary_color: '#a78bfa',
   splash_url: '',
   app_icon_url: '',
   support_email: '',
@@ -295,23 +295,49 @@ const EMPTY_BRANDING = {
 function BrandingModal({ product, onClose, onSaved, theme }) {
   const swal = (opts) => swalThemed(opts, theme);
 
+  // Branding is authored per theme. Start on the product's live theme.
+  const themeList = product.themes && product.themes.length
+    ? product.themes
+    : [{ theme_key: 'theme1', name: 'Theme 1', is_active: true }];
+  const [themeKey, setThemeKey] = useState(
+    product.active_theme || themeList[0].theme_key,
+  );
+  const [catalog, setCatalog] = useState([]); // theme catalog incl. color schema
   const [form, setForm] = useState(EMPTY_BRANDING);
+  const [colors, setColors] = useState({}); // { token: hex } for the selected theme
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // The color-token schema (key/label/group/default) for the selected theme.
+  const colorSchema =
+    catalog.find((t) => t.key === themeKey)?.colors || [];
+
+  // Load the theme catalog (with per-theme color schemas) once.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await listThemes();
+        if (!cancelled) setCatalog(res.themes || []);
+      } catch {
+        /* editor still works with defaults from the branding payload */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Load branding for the selected theme whenever it changes.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        const data = await getBranding(product.id);
+        const data = await getBranding(product.id, themeKey);
         if (!cancelled) {
           setForm({
             product_name: data.product_name || product.name,
             logo_url: data.logo_url || '',
             favicon_url: data.favicon_url || '',
-            theme_color: data.theme_color || '#ff9800',
-            secondary_color: data.secondary_color || '#a78bfa',
             splash_url: data.splash_url || '',
             app_icon_url: data.app_icon_url || '',
             support_email: data.support_email || '',
@@ -319,6 +345,7 @@ function BrandingModal({ product, onClose, onSaved, theme }) {
             terms_url: data.terms_url || '',
             privacy_url: data.privacy_url || '',
           });
+          setColors(data.colors || {});
         }
       } catch (e) {
         if (!cancelled) swal({ icon: 'error', title: 'Failed to load branding', text: e.message });
@@ -328,9 +355,15 @@ function BrandingModal({ product, onClose, onSaved, theme }) {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product.id]);
+  }, [product.id, themeKey]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const setColor = (token) => (e) =>
+    setColors((c) => ({ ...c, [token]: e.target.value }));
+
+  // Convenience: primary/accent for the header preview (glass themes use these).
+  const previewPrimary = colors.primary || colors.t3_gold || colors.t4_teal || '#ff9800';
+  const previewAccent = colors.accent || colors.t4_teal_bright || previewPrimary;
 
   const handleSave = async () => {
     if (!form.product_name.trim()) {
@@ -342,6 +375,8 @@ function BrandingModal({ product, onClose, onSaved, theme }) {
       await updateBranding(product.id, {
         ...form,
         product_name: form.product_name.trim(),
+        theme_key: themeKey,
+        colors,
       });
       onSaved?.();
       onClose();
@@ -362,8 +397,6 @@ function BrandingModal({ product, onClose, onSaved, theme }) {
     { key: 'product_name', label: 'Display Name', placeholder: 'Dollara', type: 'text', span: true },
     { key: 'logo_url', label: 'Logo URL', placeholder: 'https://cdn.example.com/logo.png', type: 'url', span: true },
     { key: 'favicon_url', label: 'Favicon URL', placeholder: 'https://cdn.example.com/favicon.ico', type: 'url', span: true },
-    { key: 'theme_color', label: 'Primary Color', placeholder: '#ff9800', type: 'color', span: false },
-    { key: 'secondary_color', label: 'Secondary Color', placeholder: '#a78bfa', type: 'color', span: false },
     { key: 'splash_url', label: 'Splash Image URL', placeholder: 'https://cdn.example.com/splash.png', type: 'url', span: true },
     { key: 'app_icon_url', label: 'App Icon URL', placeholder: 'https://cdn.example.com/icon.png', type: 'url', span: true },
     { key: 'support_email', label: 'Support Email', placeholder: 'support@example.com', type: 'email', span: false },
@@ -371,6 +404,12 @@ function BrandingModal({ product, onClose, onSaved, theme }) {
     { key: 'terms_url', label: 'Terms URL', placeholder: 'https://example.com/terms', type: 'url', span: true },
     { key: 'privacy_url', label: 'Privacy URL', placeholder: 'https://example.com/privacy', type: 'url', span: true },
   ];
+
+  // Color tokens grouped by their `group` for tidy sections in the editor.
+  const colorGroups = colorSchema.reduce((acc, tok) => {
+    (acc[tok.group] = acc[tok.group] || []).push(tok);
+    return acc;
+  }, {});
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -398,13 +437,41 @@ function BrandingModal({ product, onClose, onSaved, theme }) {
             <div className="flex items-center gap-2 p-6 text-gray-400"><Loader2 className="h-5 w-5 animate-spin" /> Loading branding…</div>
           ) : (
             <>
+              {/* Theme selector — branding is authored per theme. */}
+              <div className="mb-5">
+                <label className={labelCls}>Theme</label>
+                <div className="flex flex-wrap gap-2">
+                  {themeList.map((t) => {
+                    const active = t.theme_key === themeKey;
+                    return (
+                      <button
+                        key={t.theme_key}
+                        type="button"
+                        onClick={() => setThemeKey(t.theme_key)}
+                        className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                          active
+                            ? 'border-indigo-500 bg-indigo-600 text-white'
+                            : 'border-gray-300 text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        {t.name || t.theme_key}
+                        {t.is_active ? ' · Live' : ''}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1.5 text-xs text-gray-400">
+                  Each theme has its own name, logo, and colors. Editing “{themeKey}”.
+                </p>
+              </div>
+
               <div className="mb-5 flex items-center gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/60">
                 {form.logo_url ? (
                   <img src={form.logo_url} alt="" className="h-12 w-12 rounded-xl object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 ) : (
                   <span
                     className="flex h-12 w-12 items-center justify-center rounded-xl text-lg font-black text-white"
-                    style={{ background: `linear-gradient(135deg, ${form.theme_color}, ${form.secondary_color})` }}
+                    style={{ background: `linear-gradient(135deg, ${previewPrimary}, ${previewAccent})` }}
                   >
                     {(form.product_name || product.name).charAt(0).toUpperCase()}
                   </span>
@@ -419,36 +486,61 @@ function BrandingModal({ product, onClose, onSaved, theme }) {
                 {fields.map(({ key, label, placeholder, type, span }) => (
                   <div key={key} className={`${span ? 'sm:col-span-2' : ''} text-sm`}>
                     <label htmlFor={`b-${key}`} className={labelCls}>{label}</label>
-                    {type === 'color' ? (
-                      <div className="flex items-center gap-3">
-                        <input
-                          id={`b-${key}`}
-                          type="color"
-                          value={form[key]}
-                          onChange={set(key)}
-                          className="h-10 w-14 cursor-pointer rounded-lg border border-gray-300 bg-transparent p-1 dark:border-gray-600"
-                        />
-                        <input
-                          type="text"
-                          value={form[key]}
-                          onChange={set(key)}
-                          placeholder={placeholder}
-                          className={inputCls}
-                        />
-                      </div>
-                    ) : (
-                      <input
-                        id={`b-${key}`}
-                        type={type === 'url' ? 'url' : type}
-                        value={form[key]}
-                        onChange={set(key)}
-                        placeholder={placeholder}
-                        className={inputCls}
-                      />
-                    )}
+                    <input
+                      id={`b-${key}`}
+                      type={type === 'url' ? 'url' : type}
+                      value={form[key]}
+                      onChange={set(key)}
+                      placeholder={placeholder}
+                      className={inputCls}
+                    />
                   </div>
                 ))}
               </div>
+
+              {/* Per-theme color palette — one picker per token, grouped. Any color
+                  left at its default is served as that theme's built-in default. */}
+              {colorSchema.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="mb-1 font-display text-sm font-bold text-gray-900 dark:text-white">
+                    Colors — {themeKey}
+                  </h3>
+                  <p className="mb-3 text-xs text-gray-400">
+                    Controls every color of this theme. Cleared/unset colors fall back to the theme default.
+                  </p>
+                  {Object.entries(colorGroups).map(([group, tokens]) => (
+                    <div key={group} className="mb-4">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">{group}</p>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        {tokens.map((tok) => {
+                          const value = colors[tok.key] ?? tok.default;
+                          return (
+                            <div key={tok.key} className="text-sm">
+                              <label htmlFor={`c-${tok.key}`} className={labelCls}>{tok.label}</label>
+                              <div className="flex items-center gap-3">
+                                <input
+                                  id={`c-${tok.key}`}
+                                  type="color"
+                                  value={value}
+                                  onChange={setColor(tok.key)}
+                                  className="h-10 w-14 cursor-pointer rounded-lg border border-gray-300 bg-transparent p-1 dark:border-gray-600"
+                                />
+                                <input
+                                  type="text"
+                                  value={value}
+                                  onChange={setColor(tok.key)}
+                                  placeholder={tok.default}
+                                  className={inputCls}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
         </div>

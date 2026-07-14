@@ -21,7 +21,11 @@ from django.views.decorators.http import require_http_methods
 
 from tenants.auth_jwt import sign_token
 from tenants.auth_middleware import require_auth
-from services.branding import BRANDING_FIELDS, get_branding_for_product, serialize_branding
+from services.branding import (
+    IDENTITY_FIELDS, ensure_branding, get_all_theme_branding,
+    get_branding_for_product,
+)
+from tenants.theme_palettes import color_tokens, resolve_colors
 from services.product_credentials import (
     get_active_credential, issue_credential, mark_delivered, rotate_credential,
     serialize_credential,
@@ -30,7 +34,7 @@ from services.tenant_provisioning import new_api_key, provision_product
 from services.tenant_resolver import invalidate_tenant_cache
 from services.webhook_client import WebhookError, call_product
 from tenants.models import (
-    Branding, Database, Product, ProductCredential, ProductTheme, Url, User,
+    Database, Product, ProductCredential, ProductTheme, Url, User,
     UserSession, WebhookDelivery,
 )
 from tenants.state import tenant_db_alias_for, use_tenant
@@ -75,10 +79,9 @@ def _product_theme_rows(product: Product) -> list[dict]:
 def _serialize_product(product: Product) -> dict:
     db = Database.objects.filter(product=product).first()
     url_obj = Url.objects.filter(product=product).first()
-    branding = Branding.objects.filter(product=product).first()
     theme_rows = _product_theme_rows(product)
     active = next((r['theme_key'] for r in theme_rows if r['is_active']), DEFAULT_THEME)
-    branding_data = serialize_branding(product, branding)
+    branding_by_theme = get_all_theme_branding(product)
     cred = get_active_credential(product)
     return {
         'id': product.id,
@@ -88,7 +91,9 @@ def _serialize_product(product: Product) -> dict:
         'created_at': product.created_at.isoformat(),
         'themes': theme_rows,
         'active_theme': active,
-        'branding': branding_data,
+        # Active theme's branding (back-compat) + every theme's branding.
+        'branding': branding_by_theme.get(active),
+        'branding_by_theme': branding_by_theme,
         'urls': {
             'fe_url': url_obj.fe_url if url_obj else '',
             'be_url': url_obj.be_url if url_obj else '',
@@ -333,35 +338,76 @@ def product_urls(request, product_id):
 @require_auth(['super_admin'])
 @require_http_methods(['GET', 'PUT'])
 def product_branding(request, product_id):
+    """Get/set white-label branding for one theme of a product.
+
+    Theme is chosen via ``?theme=<key>`` (GET) or ``theme_key`` in the body (PUT),
+    defaulting to the product's live theme. Colors are sent as a ``colors`` map of
+    ``{token_key: hex}``; any token omitted keeps that theme's default.
+    """
     product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
+
     if request.method == 'GET':
-        return JsonResponse(get_branding_for_product(product))
+        theme_key = (request.GET.get('theme') or get_active_theme(product)).strip()
+        if theme_key not in THEME_KEYS:
+            return _error(f'Unknown theme: {theme_key}', 404)
+        payload = get_branding_for_product(product, theme_key)
+        return JsonResponse(payload)
+
     body = _json_body(request)
-    existing = Branding.objects.filter(product=product).first()
-    data = {field: getattr(existing, field) if existing else serialize_branding(product, None)[field]
-            for field in BRANDING_FIELDS}
-    for field in BRANDING_FIELDS:
+    theme_key = (body.get('theme_key') or get_active_theme(product)).strip()
+    if theme_key not in THEME_KEYS:
+        return _error(f'Unknown theme: {theme_key}', 404)
+
+    row = ensure_branding(product, theme_key, product_name=product.name)
+
+    # Identity fields.
+    for field in IDENTITY_FIELDS:
         if field not in body:
             continue
         value = body[field]
         if field == 'extra' and value is not None and not isinstance(value, (dict, list)):
             return _error('extra must be a JSON object or array')
-        data[field] = value
-    if not str(data.get('product_name', '')).strip():
+        setattr(row, field, value)
+
+    if not str(row.product_name or '').strip():
         return _error('product_name cannot be empty')
-    Branding.objects.update_or_create(product=product, defaults=data)
+
+    # Colors: merge submitted overrides over the theme's defaults. Accept either a
+    # `colors` map or the legacy flat theme_color/secondary_color fields.
+    valid_keys = {t['key'] for t in color_tokens(theme_key)}
+    incoming = {}
+    if isinstance(body.get('colors'), dict):
+        incoming.update({k: v for k, v in body['colors'].items() if k in valid_keys})
+    if 'theme_color' in body and 'primary' in valid_keys:
+        incoming['primary'] = body['theme_color']
+    if 'secondary_color' in body and 'accent' in valid_keys:
+        incoming['accent'] = body['secondary_color']
+    resolved = resolve_colors(theme_key, incoming)
+    row.colors = resolved
+    row.theme_color = resolved.get('primary', row.theme_color)
+    row.secondary_color = resolved.get('accent', row.secondary_color)
+    row.save()
+
     invalidate_tenant_cache(product.id)
-    return JsonResponse(get_branding_for_product(product))
+    return JsonResponse(get_branding_for_product(product, theme_key))
 
 
 # --- Themes ---
 @require_auth(['super_admin'])
 @require_http_methods(['GET'])
 def themes_catalog(request):
-    """The full catalog of themes a product may render. Drives the super-admin UI."""
-    return JsonResponse({'themes': THEME_CATALOG, 'default': DEFAULT_THEME}, safe=False)
+    """The full catalog of themes a product may render. Drives the super-admin UI.
+
+    Each theme carries its ``colors`` token schema (key/label/group/default) so the
+    branding editor can render a color picker per token with the right defaults.
+    """
+    themes = [
+        {**t, 'colors': color_tokens(t['key'])}
+        for t in THEME_CATALOG
+    ]
+    return JsonResponse({'themes': themes, 'default': DEFAULT_THEME}, safe=False)
 
 
 @require_auth(['super_admin'])
@@ -450,11 +496,17 @@ def product_theme_set_enabled(request, product_id, theme_key):
 # --- Public (unauthenticated) branding + theme for product frontends ---
 @require_http_methods(['GET'])
 def public_product_branding(request, product_id):
-    """Public endpoint product frontends call for white-label branding."""
+    """Public endpoint product frontends call for white-label branding.
+
+    Returns the branding for ``?theme=<key>`` (defaults to the live theme).
+    """
     product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
-    payload = get_branding_for_product(product)
+    theme_key = (request.GET.get('theme') or get_active_theme(product)).strip()
+    if theme_key not in THEME_KEYS:
+        theme_key = get_active_theme(product)
+    payload = get_branding_for_product(product, theme_key)
     payload['status'] = product.status
     return JsonResponse(payload)
 
@@ -495,7 +547,6 @@ def _product_config_payload(product: Product) -> dict:
     never leaves Super Admin). All active/rotated credentials are returned so the
     product can verify any ``X-SA-Key-Id`` it sees across a key rotation.
     """
-    branding = Branding.objects.filter(product=product).first()
     credentials = [
         {
             'key_id': c.key_id,
@@ -509,15 +560,20 @@ def _product_config_payload(product: Product) -> dict:
         }
         for c in ProductCredential.objects.filter(product=product).order_by('-created_at')
     ]
+    active_theme = get_active_theme(product)
+    branding_by_theme = get_all_theme_branding(product)
     return {
         'product': {
             'id': product.id,
             'name': product.name,
             'status': product.status,
         },
-        'branding': serialize_branding(product, branding),
+        # Active theme's branding (back-compat) + per-theme branding so the product
+        # can apply the right palette immediately when its live theme changes.
+        'branding': branding_by_theme.get(active_theme),
+        'branding_by_theme': branding_by_theme,
         'theme': {
-            'active_theme': get_active_theme(product),
+            'active_theme': active_theme,
             'known_themes': THEME_KEYS,
         },
         'credentials': credentials,

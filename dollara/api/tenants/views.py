@@ -16,8 +16,11 @@ from services.control_plane import get_product_config
 @require_http_methods(['GET'])
 def public_branding(request):
     # Single-product instance: branding comes from this product's control-plane
-    # config (resolved by api_key), so no tenant/slug argument is needed.
-    return JsonResponse(get_branding())
+    # config (resolved by api_key), so no tenant/slug argument is needed. A theme
+    # may be requested via ?theme=<key>; otherwise the product's live theme is used
+    # so each theme serves its own name/logo/colors (with per-color defaults).
+    theme_key = request.GET.get('theme') or None
+    return JsonResponse(get_branding(theme_key))
 
 
 @require_http_methods(['GET'])

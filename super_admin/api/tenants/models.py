@@ -57,17 +57,29 @@ class ProductTheme(models.Model):
 
 
 class Branding(models.Model):
-    """White-label branding configuration for a product."""
+    """White-label branding configuration for a product, per theme.
+
+    One row per ``(product, theme_key)``: each theme a product can render has its
+    own branding (name, assets, and a full color palette), so themes may share a
+    look or differ entirely. ``theme_key`` values come from the catalog in
+    ``tenants/themes.py``; the token keys inside ``colors`` come from
+    ``tenants/theme_palettes.py``. Any color a theme doesn't override falls back
+    to that theme's built-in default.
+    """
 
     id = models.BigAutoField(primary_key=True)
-    product = models.OneToOneField(
+    product = models.ForeignKey(
         Product, on_delete=models.CASCADE, db_column='product_id', related_name='branding'
     )
+    theme_key = models.CharField(max_length=63)
     product_name = models.CharField(max_length=150)
     logo_url = models.CharField(max_length=500, blank=True, default='')
     favicon_url = models.CharField(max_length=500, blank=True, default='')
+    # theme_color / secondary_color mirror colors['primary'] / colors['accent']
+    # for backward-compatible readers; the full per-theme palette lives in colors.
     theme_color = models.CharField(max_length=20, default='#ff9800')
     secondary_color = models.CharField(max_length=20, default='#a78bfa')
+    colors = models.JSONField(null=True, blank=True)
     splash_url = models.CharField(max_length=500, blank=True, default='')
     app_icon_url = models.CharField(max_length=500, blank=True, default='')
     support_email = models.CharField(max_length=150, blank=True, default='')
@@ -80,6 +92,7 @@ class Branding(models.Model):
     class Meta:
         app_label = 'tenants'
         db_table = 'branding'
+        unique_together = (('product', 'theme_key'),)
 
 
 class Url(models.Model):

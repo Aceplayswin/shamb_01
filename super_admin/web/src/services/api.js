@@ -89,8 +89,12 @@ export const updateUrls = (id, payload) =>
     method: 'PUT',
     body: JSON.stringify(payload),
   });
-export const getBranding = (id) =>
-  superAdminApi(`/api/v1/super-admin/products/${id}/branding`);
+// Branding is per theme: pass the theme key so each theme gets its own
+// name/logo/colors. Omit to target the product's live theme.
+export const getBranding = (id, themeKey) =>
+  superAdminApi(
+    `/api/v1/super-admin/products/${id}/branding${themeKey ? `?theme=${encodeURIComponent(themeKey)}` : ''}`,
+  );
 export const updateBranding = (id, payload) =>
   superAdminApi(`/api/v1/super-admin/products/${id}/branding`, {
     method: 'PUT',

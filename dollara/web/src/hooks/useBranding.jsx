@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { fetchBranding } from '@/services/tenant';
+import { applyThemeColors } from '@/themes/palettes';
 
 // Neutral defaults so the UI never hardcodes a brand and never flashes empty.
 const DEFAULT_BRANDING = {
@@ -10,6 +11,8 @@ const DEFAULT_BRANDING = {
   favicon_url: '',
   theme_color: '#F5C542',
   secondary_color: '#FFB800',
+  colors: null,
+  theme_key: null,
   support_email: '',
   support_phone: '',
   terms_url: '',
@@ -25,8 +28,15 @@ export function useBranding() {
 function applyBranding(branding) {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
-  if (branding.theme_color) root.style.setProperty('--brand', branding.theme_color);
-  if (branding.secondary_color) root.style.setProperty('--accent', branding.secondary_color);
+  // Apply the full per-theme color palette (Super Admin overrides over the theme's
+  // own defaults). The theme the colors belong to is resolved server-side.
+  if (branding.colors) {
+    applyThemeColors(branding.theme_key, branding.colors);
+  } else {
+    // Older payloads without a colors map: still honor the two brand anchors.
+    if (branding.theme_color) root.style.setProperty('--brand', branding.theme_color);
+    if (branding.secondary_color) root.style.setProperty('--accent', branding.secondary_color);
+  }
   if (branding.product_name) {
     document.title = `${branding.product_name} - Online Gaming Platform`;
   }
