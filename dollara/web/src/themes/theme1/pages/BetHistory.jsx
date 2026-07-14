@@ -41,12 +41,12 @@ export default function Theme1BetHistory() {
   if (!token) return null;
 
   return (
-    <main className="mx-auto max-w-2xl flex-1 px-4 py-8">
+    <main className="mx-auto max-w-6xl flex-1 px-4 py-8">
       <h1 className="text-2xl font-bold">Bet History</h1>
       <p className="mt-1 text-sm text-slate-400">Your recent play sessions and results.</p>
 
       {/* ---- P&L summary ---- */}
-      <section className="mt-6 grid grid-cols-3 gap-3">
+      <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Summary label="Total staked" value={pnl?.total_bet} />
         <Summary label="Total won" value={pnl?.total_win} />
         <Summary
@@ -60,13 +60,13 @@ export default function Theme1BetHistory() {
       <section className="mt-8">
         <h2 className="mb-4 text-lg font-semibold">Sessions</h2>
         {loading ? (
-          <div className="space-y-2">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="card-glass h-16 animate-pulse opacity-60" />
+          <div className="grid gap-3 md:grid-cols-2">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="card-glass h-20 animate-pulse opacity-60" />
             ))}
           </div>
         ) : (
-          <ul className="space-y-2">
+          <ul className="grid gap-3 md:grid-cols-2">
             {records.map((r) => (
               <li key={r.session_uid} className="card-glass px-4 py-3">
                 <div className="flex items-center justify-between">
@@ -92,7 +92,7 @@ export default function Theme1BetHistory() {
               </li>
             ))}
             {records.length === 0 && (
-              <li className="card-glass px-4 py-10 text-center text-sm text-slate-500">
+              <li className="card-glass px-4 py-10 text-center text-sm text-slate-500 md:col-span-2">
                 No bets yet.{' '}
                 <Link href="/" className="text-brand-400 hover:underline">
                   Explore games

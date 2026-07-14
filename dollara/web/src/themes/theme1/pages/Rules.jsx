@@ -40,13 +40,13 @@ const SECTIONS = [
 
 export default function Theme1Rules() {
   return (
-    <main className="mx-auto max-w-2xl flex-1 px-4 py-8">
+    <main className="mx-auto max-w-6xl flex-1 px-4 py-8">
       <h1 className="text-2xl font-bold">Rules</h1>
       <p className="mt-1 text-sm text-slate-400">
         Please read our platform rules and responsible-gaming guidelines.
       </p>
 
-      <div className="mt-6 space-y-4">
+      <div className="mt-6 grid items-start gap-4 md:grid-cols-2">
         {SECTIONS.map((s) => (
           <section key={s.title} className="card-glass p-6">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">

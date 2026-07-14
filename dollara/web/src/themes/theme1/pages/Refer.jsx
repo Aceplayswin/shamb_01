@@ -46,47 +46,57 @@ export default function Theme1Refer() {
   if (!token) return null;
 
   return (
-    <main className="mx-auto max-w-2xl flex-1 px-4 py-8">
+    <main className="mx-auto max-w-6xl flex-1 px-4 py-8">
       <h1 className="text-2xl font-bold">Refer &amp; Earn</h1>
       <p className="mt-1 text-sm text-slate-400">
         Earn ₹500 for every friend who joins and plays.
       </p>
 
-      {/* ---- Referral link ---- */}
-      <section className="mt-6 card-glass relative overflow-hidden p-6">
-        <div className="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-brand-500/10 blur-2xl" />
-        <p className="text-sm text-slate-400">Your referral code</p>
-        <p className="mt-1 text-3xl font-extrabold tracking-widest text-gradient-gold">{code}</p>
+      <div className="mt-6 grid gap-5 lg:grid-cols-2">
+        {/* ---- Referral link ---- */}
+        <section className="card-glass relative overflow-hidden p-8">
+          <div className="pointer-events-none absolute -right-8 -top-10 h-40 w-40 rounded-full bg-brand-500/10 blur-2xl" />
+          <p className="text-sm text-slate-400">Your referral code</p>
+          <p className="mt-1 text-4xl font-extrabold tracking-widest text-gradient-gold">{code}</p>
 
-        <div className="mt-5 flex items-center gap-2 rounded-xl border border-white/10 bg-surface-700 px-3 py-2">
-          <span className="min-w-0 flex-1 truncate text-sm text-slate-300">{link}</span>
-          <button
-            type="button"
-            onClick={copy}
-            className="flex-shrink-0 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-surface-900 transition hover:bg-brand-400"
-          >
-            {copied ? 'Copied!' : 'Copy'}
-          </button>
-        </div>
-      </section>
+          <div className="mt-6 flex items-center gap-2 rounded-xl border border-white/10 bg-surface-700 px-3 py-2">
+            <span className="min-w-0 flex-1 truncate text-sm text-slate-300">{link}</span>
+            <button
+              type="button"
+              onClick={copy}
+              className="flex-shrink-0 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-surface-900 transition hover:bg-brand-400"
+            >
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
 
-      {/* ---- How it works ---- */}
-      <section className="mt-6">
-        <h2 className="text-lg font-semibold">How it works</h2>
-        <div className="mt-4 space-y-3">
-          {STEPS.map((s) => (
-            <div key={s.title} className="card-glass flex items-center gap-4 p-4">
-              <span className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-full bg-brand-500/15 text-xl">
-                {s.icon}
-              </span>
-              <div>
-                <p className="font-medium text-white">{s.title}</p>
-                <p className="text-sm text-slate-400">{s.desc}</p>
+          <div className="mt-6 rounded-xl border border-white/5 bg-white/[0.02] p-4">
+            <p className="text-sm text-slate-400">Reward per referral</p>
+            <p className="mt-1 text-2xl font-bold text-green-400">₹500</p>
+          </div>
+        </section>
+
+        {/* ---- How it works ---- */}
+        <section className="card-glass p-8">
+          <h2 className="text-lg font-semibold">How it works</h2>
+          <div className="mt-4 space-y-3">
+            {STEPS.map((s) => (
+              <div
+                key={s.title}
+                className="flex items-center gap-4 rounded-xl border border-white/5 bg-white/[0.02] p-4"
+              >
+                <span className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-full bg-brand-500/15 text-xl">
+                  {s.icon}
+                </span>
+                <div>
+                  <p className="font-medium text-white">{s.title}</p>
+                  <p className="text-sm text-slate-400">{s.desc}</p>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
+      </div>
     </main>
   );
 }

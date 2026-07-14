@@ -38,15 +38,15 @@ const PROMOS = [
 
 export default function Theme1Promotions() {
   return (
-    <main className="mx-auto max-w-2xl flex-1 px-4 py-8">
+    <main className="mx-auto max-w-6xl flex-1 px-4 py-8">
       <h1 className="text-2xl font-bold">Promotions</h1>
       <p className="mt-1 text-sm text-slate-400">
         Live offers and bonuses. Terms &amp; wagering requirements apply.
       </p>
 
-      <div className="mt-6 space-y-4">
+      <div className="mt-6 grid gap-4 md:grid-cols-2">
         {PROMOS.map((p) => (
-          <section key={p.title} className="card-glass relative overflow-hidden p-6">
+          <section key={p.title} className="card-glass relative flex flex-col overflow-hidden p-6">
             <div className="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-brand-500/10 blur-2xl" />
             <span className="inline-flex items-center rounded-full bg-brand-500/15 px-2.5 py-0.5 text-xs font-semibold text-brand-300">
               {p.tag}
@@ -55,7 +55,7 @@ export default function Theme1Promotions() {
             <p className="mt-1 text-sm text-slate-400">{p.desc}</p>
             <Link
               href={p.href}
-              className="mt-4 inline-flex rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-surface-900 transition hover:bg-brand-400"
+              className="mt-auto inline-flex self-start rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-surface-900 transition hover:bg-brand-400"
             >
               {p.cta}
             </Link>
