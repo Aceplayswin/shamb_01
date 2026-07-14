@@ -23,6 +23,10 @@ import Theme1Withdraw from './theme1/pages/Withdraw';
 import Theme1Wallet from './theme1/pages/Wallet';
 import Theme1Profile from './theme1/pages/Profile';
 import Theme1Settings from './theme1/pages/settings';
+import Theme1BetHistory from './theme1/pages/BetHistory';
+import Theme1Promotions from './theme1/pages/Promotions';
+import Theme1Refer from './theme1/pages/Refer';
+import Theme1Rules from './theme1/pages/Rules';
 import Theme1Onboarding from './theme1/pages/Onboarding';
 import Theme1Support from './theme1/pages/Support';
 import Theme1Games from './theme1/pages/Games';
@@ -81,6 +85,10 @@ const THEMES = {
       wallet: Theme1Wallet,
       profile: Theme1Profile,
       settings: Theme1Settings,
+      betHistory: Theme1BetHistory,
+      promotions: Theme1Promotions,
+      refer: Theme1Refer,
+      rules: Theme1Rules,
       onboarding: Theme1Onboarding,
       support: Theme1Support,
       games: Theme1Games,
