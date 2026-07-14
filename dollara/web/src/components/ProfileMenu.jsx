@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LogOut, User } from 'lucide-react';
+import { LogOut, User, Wallet } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 
 function profileInitials(user) {
@@ -103,6 +103,15 @@ export function ProfileMenu({ variant = 'theme1', buttonClassName }) {
           >
             <User className="h-4 w-4" />
             Profile
+          </Link>
+          <Link
+            href="/wallet"
+            role="menuitem"
+            className={styles.item}
+            onClick={() => setOpen(false)}
+          >
+            <Wallet className="h-4 w-4" />
+            Wallet
           </Link>
           <button type="button" role="menuitem" className={styles.logout} onClick={handleLogout}>
             <LogOut className="h-4 w-4" />

@@ -20,6 +20,7 @@ import Theme1Login from './theme1/pages/Login';
 import Theme1Register from './theme1/pages/Register';
 import Theme1Deposit from './theme1/pages/Deposit';
 import Theme1Withdraw from './theme1/pages/Withdraw';
+import Theme1Wallet from './theme1/pages/Wallet';
 import Theme1Profile from './theme1/pages/Profile';
 import Theme1Settings from './theme1/pages/settings';
 import Theme1Onboarding from './theme1/pages/Onboarding';
@@ -33,6 +34,7 @@ import Theme2Login from './theme2/pages/Login';
 import Theme2Register from './theme2/pages/Register';
 import Theme2Deposit from './theme2/pages/Deposit';
 import Theme2Withdraw from './theme2/pages/Withdraw';
+import Theme2Wallet from './theme2/pages/Wallet';
 import Theme2Profile from './theme2/pages/Profile';
 import Theme2Onboarding from './theme2/pages/Onboarding';
 import Theme2Support from './theme2/pages/Support';
@@ -45,6 +47,7 @@ import Theme3Login from './theme3/pages/Login';
 import Theme3Register from './theme3/pages/Register';
 import Theme3Deposit from './theme3/pages/Deposit';
 import Theme3Withdraw from './theme3/pages/Withdraw';
+import Theme3Wallet from './theme3/pages/Wallet';
 import Theme3Profile from './theme3/pages/Profile';
 import Theme3Onboarding from './theme3/pages/Onboarding';
 import Theme3Support from './theme3/pages/Support';
@@ -57,6 +60,7 @@ import Theme4Login from './theme4/pages/Login';
 import Theme4Register from './theme4/pages/Register';
 import Theme4Deposit from './theme4/pages/Deposit';
 import Theme4Withdraw from './theme4/pages/Withdraw';
+import Theme4Wallet from './theme4/pages/Wallet';
 import Theme4Profile from './theme4/pages/Profile';
 import Theme4Onboarding from './theme4/pages/Onboarding';
 import Theme4Support from './theme4/pages/Support';
@@ -74,6 +78,7 @@ const THEMES = {
       register: Theme1Register,
       deposit: Theme1Deposit,
       withdraw: Theme1Withdraw,
+      wallet: Theme1Wallet,
       profile: Theme1Profile,
       settings: Theme1Settings,
       onboarding: Theme1Onboarding,
@@ -90,6 +95,7 @@ const THEMES = {
       register: Theme2Register,
       deposit: Theme2Deposit,
       withdraw: Theme2Withdraw,
+      wallet: Theme2Wallet,
       profile: Theme2Profile,
       onboarding: Theme2Onboarding,
       support: Theme2Support,
@@ -105,6 +111,7 @@ const THEMES = {
       register: Theme3Register,
       deposit: Theme3Deposit,
       withdraw: Theme3Withdraw,
+      wallet: Theme3Wallet,
       profile: Theme3Profile,
       onboarding: Theme3Onboarding,
       support: Theme3Support,
@@ -120,6 +127,7 @@ const THEMES = {
       register: Theme4Register,
       deposit: Theme4Deposit,
       withdraw: Theme4Withdraw,
+      wallet: Theme4Wallet,
       profile: Theme4Profile,
       onboarding: Theme4Onboarding,
       support: Theme4Support,

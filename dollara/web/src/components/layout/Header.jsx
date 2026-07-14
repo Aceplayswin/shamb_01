@@ -222,19 +222,27 @@ export function Header() {
             </button>
           )}
 
-          {/* Wallet / balance pill */}
-          <Link
-            href={token ? '/deposit' : '/login'}
-            className="hidden items-center gap-2 rounded-full border border-hairline/10 bg-panel/60 py-1 pl-3 pr-1 md:flex"
-          >
-            <Wallet className="h-4 w-4 text-brand-400" />
-            <span className="text-sm font-bold text-app-fg">
-              ₹{Number(balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-            <span className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-surface-950">
+          {/* Wallet / balance pill — body opens the wallet page, the + opens deposit */}
+          <div className="hidden items-center gap-2 rounded-full border border-hairline/10 bg-panel/60 py-1 pl-3 pr-1 md:flex">
+            <Link
+              href={token ? '/wallet' : '/login'}
+              className="flex items-center gap-2"
+              title={token ? 'View wallet' : 'Sign in'}
+            >
+              <Wallet className="h-4 w-4 text-brand-400" />
+              <span className="text-sm font-bold text-app-fg">
+                ₹{Number(balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </Link>
+            <Link
+              href={token ? '/deposit' : '/login'}
+              className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-surface-950 transition hover:brightness-110"
+              title="Deposit"
+              aria-label="Deposit"
+            >
               <Plus className="h-4 w-4" strokeWidth={3} />
-            </span>
-          </Link>
+            </Link>
+          </div>
 
           <UserAuthActions />
         </div>
