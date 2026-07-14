@@ -24,52 +24,10 @@ export default function Theme1Profile() {
 
   if (!token) return null;
 
-  const displayName = user?.full_name || user?.username || 'Player';
-  const initials = displayName
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase())
-    .join('') || 'P';
-
   return (
     <main className="mx-auto max-w-6xl flex-1 px-4 py-8">
-      {/* ---- Identity header (full width) ---- */}
-      <section className="ring-grad card-glass overflow-hidden p-6">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-300 to-brand-600 text-2xl font-bold text-surface-900 shadow-lg shadow-brand-500/20">
-              {initials}
-            </div>
-            <div className="min-w-0">
-              <h1 className="truncate text-2xl font-bold">{displayName}</h1>
-              <p className="truncate text-sm text-slate-400">@{user?.username ?? '—'}</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <StatusBadge label="KYC" value={user?.kyc_status} />
-                <StatusBadge label="Account" value={user?.account_status} />
-              </div>
-            </div>
-          </div>
-          {/* Balance snapshot on the right for wide screens */}
-          <div className="flex items-center gap-3 sm:flex-shrink-0">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-3 text-right">
-              <p className="text-[0.65rem] uppercase tracking-wide text-slate-500">Balance</p>
-              <p className="text-xl font-extrabold text-gradient-gold">
-                ₹{(wallet?.available ?? 0).toLocaleString('en-IN')}
-              </p>
-            </div>
-            <Link
-              href="/deposit"
-              className="rounded-2xl bg-brand-500 px-5 py-3.5 text-sm font-semibold text-surface-900 transition hover:bg-brand-400"
-            >
-              + Deposit
-            </Link>
-          </div>
-        </div>
-      </section>
-
       {/* ---- Dashboard grid ---- */}
-      <div className="mt-5 grid gap-5 lg:grid-cols-3">
+      <div className="grid gap-5 lg:grid-cols-3">
         {/* ===== Main column ===== */}
         <div className="space-y-5 lg:col-span-2">
           {/* Wallet balance */}
@@ -196,23 +154,6 @@ function Row({ label, value, last }) {
       <span className="text-slate-400">{label}</span>
       <span className="text-right text-white">{value ?? '—'}</span>
     </div>
-  );
-}
-
-function StatusBadge({ label, value }) {
-  const v = String(value ?? '').toLowerCase();
-  const ok = ['verified', 'active', 'approved'].includes(v);
-  const pending = ['pending', 'in_review', 'review'].includes(v);
-  const tone = ok
-    ? 'bg-green-500/15 text-green-400'
-    : pending
-      ? 'bg-amber-500/15 text-amber-400'
-      : 'bg-white/10 text-slate-300';
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${tone}`}>
-      <span className="opacity-70">{label}:</span>
-      <span className="capitalize">{value ?? '—'}</span>
-    </span>
   );
 }
 
