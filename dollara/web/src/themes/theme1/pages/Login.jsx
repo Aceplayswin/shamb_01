@@ -16,9 +16,7 @@ export default function Theme1Login() {
     password,
     setPassword,
     loading,
-    demoLoading,
     submit,
-    tryDemo,
   } = useUnifiedLogin();
 
   const IdIcon = isStaff ? UserIcon : Phone;
@@ -88,7 +86,7 @@ export default function Theme1Login() {
             </div>
             <button
               type="submit"
-              disabled={loading || demoLoading}
+              disabled={loading}
               className="w-full rounded-xl bg-gradient-to-r from-brand-400 to-brand-600 py-3 font-bold text-surface-950 shadow-glow transition hover:from-brand-300 hover:to-brand-500 disabled:opacity-60"
             >
               {loading ? 'Signing in…' : isStaff ? 'Sign in to console' : 'Log in'}
@@ -100,32 +98,12 @@ export default function Theme1Login() {
               <ShieldCheck className="h-3.5 w-3.5" /> Authorized personnel only
             </p>
           ) : (
-            <>
-              <div className="relative my-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-hairline/10" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-panel-strong px-2 text-muted">or</span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={tryDemo}
-                disabled={loading || demoLoading}
-                className="w-full rounded-xl border border-hairline/20 bg-panel/40 py-3 font-semibold text-app-fg transition hover:border-brand-400/40 disabled:opacity-60"
-              >
-                {demoLoading ? 'Starting demo…' : 'Try demo — ₹50,000 balance'}
-              </button>
-
-              <p className="mt-6 text-center text-sm text-muted">
-                New user?{' '}
-                <Link href="/register" className="font-bold text-brand-400 transition-colors hover:text-brand-300">
-                  Register
-                </Link>
-              </p>
-            </>
+            <p className="mt-6 text-center text-sm text-muted">
+              New user?{' '}
+              <Link href="/register" className="font-bold text-brand-400 transition-colors hover:text-brand-300">
+                Register
+              </Link>
+            </p>
           )}
         </div>
       </div>

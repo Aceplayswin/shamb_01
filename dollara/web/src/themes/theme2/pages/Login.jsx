@@ -17,9 +17,7 @@ export default function Theme2Login() {
     password,
     setPassword,
     loading,
-    demoLoading,
     submit,
-    tryDemo,
   } = useUnifiedLogin();
 
   const IdIcon = isStaff ? UserIcon : Phone;
@@ -86,7 +84,7 @@ export default function Theme2Login() {
             autoComplete="current-password"
           />
         </div>
-        <button type="submit" disabled={loading || demoLoading} className={`${t2BtnPrimary} w-full`}>
+        <button type="submit" disabled={loading} className={`${t2BtnPrimary} w-full`}>
           {loading ? 'Signing in…' : isStaff ? 'Sign in to console' : 'Log in'}
         </button>
       </form>
@@ -96,32 +94,12 @@ export default function Theme2Login() {
           <ShieldCheck className="h-3.5 w-3.5" /> Authorized personnel only
         </p>
       ) : (
-        <>
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-700" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-[#0d1420] px-2 text-slate-500">or</span>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={tryDemo}
-            disabled={loading || demoLoading}
-            className="w-full rounded-xl border border-slate-600 py-3 font-semibold text-slate-200 transition hover:border-amber-500/50 disabled:opacity-60"
-          >
-            {demoLoading ? 'Starting demo…' : 'Try demo — ₹50,000 balance'}
-          </button>
-
-          <p className="mt-6 text-center text-sm text-slate-400">
-            New user?{' '}
-            <Link href="/register" className="font-bold text-amber-400 hover:text-amber-300">
-              Register
-            </Link>
-          </p>
-        </>
+        <p className="mt-6 text-center text-sm text-slate-400">
+          New user?{' '}
+          <Link href="/register" className="font-bold text-amber-400 hover:text-amber-300">
+            Register
+          </Link>
+        </p>
       )}
     </T2FormPage>
   );
