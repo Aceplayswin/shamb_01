@@ -29,6 +29,7 @@ import {
   User,
 } from 'lucide-react';
 import { useBranding } from '@/hooks/useBranding';
+import { useDemoLogin } from '@/hooks/useDemoLogin';
 import { NAV_GAME_LINKS } from '@/lib/gameRoutes';
 import { ThemeToggleButton } from '@/components/ThemeToggle';
 import { UserAuthActions } from '@/components/UserAuthActions';
@@ -87,6 +88,7 @@ export function Header() {
   const brandName = branding.product_name;
   const token = useAuthStore((s) => s.token);
   const wallet = useAuthStore((s) => s.wallet);
+  const { tryDemo, demoLoading } = useDemoLogin({ redirectTo: '/' });
   const router = useRouter();
   const [search, setSearch] = useState('');
   // Whether the user has typed in the box. Lets us seed the input from the URL
@@ -209,12 +211,16 @@ export function Header() {
         <div className="ml-auto flex items-center gap-2.5">
           <ThemeToggleButton className="border-hairline/10 bg-panel/60" />
 
-          <button
-            type="button"
-            className="hidden rounded-xl border border-hairline/10 px-4 py-2 text-xs font-bold text-app-fg transition hover:border-brand-400/50 hover:bg-panel xl:inline-flex"
-          >
-            Play Demo
-          </button>
+          {!token && (
+            <button
+              type="button"
+              onClick={tryDemo}
+              disabled={demoLoading}
+              className="hidden rounded-xl border border-hairline/10 px-4 py-2 text-xs font-bold text-app-fg transition hover:border-brand-400/50 hover:bg-panel disabled:opacity-60 xl:inline-flex"
+            >
+              {demoLoading ? 'Starting…' : 'Play Demo'}
+            </button>
+          )}
 
           {/* Wallet / balance pill */}
           <Link
