@@ -56,50 +56,75 @@ export default function Theme1BetHistory() {
         />
       </section>
 
-      {/* ---- Records ---- */}
+      {/* ---- Records table ---- */}
       <section className="mt-8">
-        <h2 className="mb-4 text-lg font-semibold">Sessions</h2>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Sessions</h2>
+          {!loading && records.length > 0 && (
+            <span className="text-xs text-slate-500">{records.length} sessions</span>
+          )}
+        </div>
+
         {loading ? (
-          <div className="grid gap-3 md:grid-cols-2">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="card-glass h-20 animate-pulse opacity-60" />
+          <div className="card-glass space-y-2 p-4">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-10 animate-pulse rounded-lg bg-white/[0.03]" />
             ))}
           </div>
+        ) : records.length === 0 ? (
+          <div className="card-glass px-4 py-12 text-center text-sm text-slate-500">
+            No bets yet.{' '}
+            <Link href="/" className="text-brand-400 hover:underline">
+              Explore games
+            </Link>
+          </div>
         ) : (
-          <ul className="grid gap-3 md:grid-cols-2">
-            {records.map((r) => (
-              <li key={r.session_uid} className="card-glass px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-white">{r.game_name}</p>
-                    <p className="text-xs text-slate-500">
-                      {r.rounds} {r.rounds === 1 ? 'round' : 'rounds'} · {formatDate(r.last_played_at || r.created_at)}
-                    </p>
-                  </div>
-                  <span
-                    className={`text-sm font-semibold ${
-                      Number(r.profit_loss) >= 0 ? 'text-green-400' : 'text-red-400'
-                    }`}
-                  >
-                    {Number(r.profit_loss) >= 0 ? '+' : '−'}₹
-                    {Math.abs(Number(r.profit_loss)).toLocaleString('en-IN')}
-                  </span>
-                </div>
-                <div className="mt-2 flex gap-4 text-xs text-slate-500">
-                  <span>Staked ₹{Number(r.total_bet).toLocaleString('en-IN')}</span>
-                  <span>Won ₹{Number(r.total_win).toLocaleString('en-IN')}</span>
-                </div>
-              </li>
-            ))}
-            {records.length === 0 && (
-              <li className="card-glass px-4 py-10 text-center text-sm text-slate-500 md:col-span-2">
-                No bets yet.{' '}
-                <Link href="/" className="text-brand-400 hover:underline">
-                  Explore games
-                </Link>
-              </li>
-            )}
-          </ul>
+          <div className="card-glass overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead>
+                  <tr className="border-b border-white/10 text-left text-[0.7rem] uppercase tracking-wide text-slate-500">
+                    <th className="px-5 py-3 font-medium">Game</th>
+                    <th className="px-5 py-3 font-medium">Date</th>
+                    <th className="px-5 py-3 text-center font-medium">Rounds</th>
+                    <th className="px-5 py-3 text-right font-medium">Staked</th>
+                    <th className="px-5 py-3 text-right font-medium">Won</th>
+                    <th className="px-5 py-3 text-right font-medium">P&amp;L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((r) => {
+                    const up = Number(r.profit_loss) >= 0;
+                    return (
+                      <tr
+                        key={r.session_uid}
+                        className="border-b border-white/5 transition last:border-0 hover:bg-white/[0.03]"
+                      >
+                        <td className="px-5 py-3 font-medium text-white">{r.game_name}</td>
+                        <td className="px-5 py-3 text-slate-400">
+                          {formatDate(r.last_played_at || r.created_at)}
+                        </td>
+                        <td className="px-5 py-3 text-center text-slate-400">{r.rounds}</td>
+                        <td className="px-5 py-3 text-right text-slate-300">
+                          ₹{Number(r.total_bet).toLocaleString('en-IN')}
+                        </td>
+                        <td className="px-5 py-3 text-right text-slate-300">
+                          ₹{Number(r.total_win).toLocaleString('en-IN')}
+                        </td>
+                        <td
+                          className={`px-5 py-3 text-right font-semibold ${
+                            up ? 'text-green-400' : 'text-red-400'
+                          }`}
+                        >
+                          {up ? '+' : '−'}₹{Math.abs(Number(r.profit_loss)).toLocaleString('en-IN')}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
       </section>
     </main>
