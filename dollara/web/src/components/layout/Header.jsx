@@ -209,16 +209,12 @@ export function Header() {
         <div className="ml-auto flex items-center gap-2.5">
           <ThemeToggleButton className="border-hairline/10 bg-panel/60" />
 
-          {/* Live online */}
-          <span className="hidden items-center gap-2 rounded-full border border-hairline/10 bg-panel/60 px-3 py-1.5 xl:flex">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-            </span>
-            <span className="text-xs font-semibold text-app-fg/80">
-              <span className="text-app-fg">12,480</span> online
-            </span>
-          </span>
+          <button
+            type="button"
+            className="hidden rounded-xl border border-hairline/10 px-4 py-2 text-xs font-bold text-app-fg transition hover:border-brand-400/50 hover:bg-panel xl:inline-flex"
+          >
+            Play Demo
+          </button>
 
           {/* Wallet / balance pill */}
           <Link
