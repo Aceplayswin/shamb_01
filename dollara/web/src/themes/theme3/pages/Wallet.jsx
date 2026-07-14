@@ -1,12 +1,11 @@
 'use client';
 
-// Theme3 Wallet — light cream / gold. Balance breakdown + transaction history
-// off the shared wallet API.
+// Theme3 Wallet — light cream / gold. Balance breakdown off the shared wallet
+// API (hydrated into the auth store).
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { api } from '@/services/api';
 import { useAuthStore } from '@/store/auth';
 import { T3Card, t3BtnPrimary, t3BtnOutline, T3FormPage } from '../components/ui';
 
@@ -24,12 +23,10 @@ function Stat({ label, value }) {
 export default function Theme3Wallet() {
   const router = useRouter();
   const { token, wallet, refreshSession } = useAuthStore();
-  const [txs, setTxs] = useState([]);
 
   useEffect(() => {
     if (!token) { router.push('/login'); return; }
     refreshSession();
-    api('/api/v1/wallet/transactions').then(setTxs).catch(() => setTxs([]));
   }, [token, router, refreshSession]);
 
   if (!token) return null;
@@ -51,38 +48,6 @@ export default function Theme3Wallet() {
           <Link href="/withdraw" className={`${t3BtnOutline} text-sm`}>Withdraw</Link>
         </div>
       </T3Card>
-
-      <h2 className="mb-4 mt-10 text-lg font-black text-[#1b1726]">Transaction history</h2>
-      <ul className="space-y-2">
-        {txs.map((t) => (
-          <li key={t.id} className="flex items-center justify-between rounded-xl border border-black/[0.06] bg-white px-4 py-3 text-sm shadow-sm">
-            <div>
-              <span className="capitalize text-[#4a4458]">{t.type}</span>
-              <span className="ml-2 text-xs text-[#9a94a8]">{formatDate(t.created_at)}</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className={isCredit(t.type) ? 'font-bold text-emerald-600' : 'font-bold text-[#1b1726]'}>
-                {isCredit(t.type) ? '+' : '−'}₹{parseFloat(t.amount).toLocaleString('en-IN')}
-              </span>
-              <span className="text-xs capitalize text-[#9a94a8]">{t.status}</span>
-            </div>
-          </li>
-        ))}
-        {txs.length === 0 ? <p className="text-[#9a94a8]">No transactions yet</p> : null}
-      </ul>
     </T3FormPage>
   );
-}
-
-function isCredit(type) {
-  return ['deposit', 'bonus', 'win', 'refund', 'credit'].includes(String(type).toLowerCase());
-}
-
-function formatDate(iso) {
-  if (!iso) return '';
-  try {
-    return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-  } catch {
-    return '';
-  }
 }
