@@ -16,9 +16,11 @@ from core.models import (
     Banner,
     Bet,
     Game,
+    GameSession,
     OtpVerification,
     Transaction,
     User,
+    UserBonus,
     UserSetting,
     Wallet,
     WithdrawalStage,
@@ -278,6 +280,82 @@ def get_wallet(user_id: int) -> dict:
         'locked': locked,
         'currency': wallet.currency,
         'available': main - locked,
+    }
+
+
+# Human-readable labels for the bonus sources surfaced in the wallet breakdown.
+_BONUS_SOURCE_LABELS = {
+    UserBonus.Source.JOINING: 'Joining / Welcome bonus',
+    UserBonus.Source.DEPOSIT: 'Deposit bonus',
+    UserBonus.Source.REFERRAL: 'Referral bonus',
+    UserBonus.Source.GAME: 'Game / Play bonus',
+    UserBonus.Source.CASHBACK: 'Cashback bonus',
+    UserBonus.Source.PROMO: 'Promo code bonus',
+    UserBonus.Source.MANUAL: 'Manual bonus',
+}
+
+
+def get_wallet_breakdown(user_id: int) -> dict:
+    """Itemised, source-by-source view of the player's wallet for the Wallet page.
+
+    On top of the raw balances (:func:`get_wallet`) this returns:
+
+    * ``bonuses`` — active bonus amounts grouped by source (joining, deposit,
+      referral, game, cashback, promo, manual) off the ``user_bonuses`` ledger.
+    * ``deposits`` / ``withdrawals`` — lifetime completed totals from the
+      transaction ledger.
+    * ``gamePlay`` — total staked / won / net P&L across all game sessions.
+    """
+    _require_player(user_id)
+    base = get_wallet(user_id)
+
+    # --- Active bonuses grouped by source (only money still in play) ---
+    bonus_rows = (
+        UserBonus.objects.filter(user_id=user_id, status=UserBonus.Status.ACTIVE)
+        .values('source')
+        .annotate(amount=Sum('amount'))
+    )
+    by_source = {r['source']: float(r['amount'] or 0) for r in bonus_rows}
+    bonuses = [
+        {
+            'source': source,
+            'label': label,
+            'amount': by_source.get(source, 0.0),
+        }
+        for source, label in _BONUS_SOURCE_LABELS.items()
+    ]
+
+    # --- Lifetime deposit / withdrawal totals (completed only) ---
+    def _tx_total(tx_type: str) -> float:
+        row = Transaction.objects.filter(
+            user_id=user_id,
+            type=tx_type,
+            status=Transaction.Status.COMPLETED,
+        ).aggregate(total=Sum('amount'))
+        return float(row['total'] or 0)
+
+    deposits_total = _tx_total(Transaction.TxType.DEPOSIT)
+    withdrawals_total = _tx_total(Transaction.TxType.WITHDRAWAL)
+
+    # --- Game play totals (staked / won / net) across all sessions ---
+    play = GameSession.objects.filter(user_id=user_id).aggregate(
+        bet=Sum('total_bet'),
+        win=Sum('total_win'),
+        net=Sum('profit_loss'),
+    )
+    game_play = {
+        'staked': float(play['bet'] or 0),
+        'won': float(play['win'] or 0),
+        'net': float(play['net'] or 0),
+    }
+
+    return {
+        **base,
+        'bonuses': bonuses,
+        'bonusTotal': sum(b['amount'] for b in bonuses),
+        'deposits': deposits_total,
+        'withdrawals': withdrawals_total,
+        'gamePlay': game_play,
     }
 
 

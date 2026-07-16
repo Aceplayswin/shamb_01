@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Image as ImageIcon, Plus, Pencil, Trash2, ExternalLink } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Image as ImageIcon, Plus, Pencil, Trash2, ExternalLink, ArrowUp, ArrowDown } from 'lucide-react';
 import { adminApi } from '@/services/adminApi';
 import {
   AdminShell,
@@ -30,6 +30,19 @@ export default function AdminBannersPage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyBanner);
   const [busy, setBusy] = useState(false);
+  // id of the banner whose order is currently being changed, so we can disable
+  // its arrows and avoid double-submits while the swap is in flight.
+  const [reordering, setReordering] = useState(null);
+
+  // The API already returns banners in display order (sort_order, id); keep a
+  // stable copy so the up/down arrows operate on exactly what's on screen.
+  const ordered = useMemo(
+    () =>
+      [...(banners ?? [])].sort(
+        (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || (a.id ?? 0) - (b.id ?? 0),
+      ),
+    [banners],
+  );
 
   const save = async (e) => {
     e.preventDefault();
@@ -66,7 +79,78 @@ export default function AdminBannersPage() {
     }
   };
 
+  // Move a banner one place up (-1) or down (+1) in the carousel. Because the
+  // saved sort_order values may be duplicated (everything defaults to 0), we
+  // re-number the whole list sequentially and only persist the two rows whose
+  // position actually changed — deterministic regardless of prior values.
+  const move = async (index, dir) => {
+    const target = index + dir;
+    if (target < 0 || target >= ordered.length) return;
+
+    const next = [...ordered];
+    [next[index], next[target]] = [next[target], next[index]];
+
+    // New sequential order (0..n-1) for the reordered list.
+    const updates = next
+      .map((b, i) => ({ id: b.id, sort_order: i, prev: b.sort_order ?? 0 }))
+      .filter((u) => u.sort_order !== u.prev);
+
+    setReordering(next[target].id);
+    try {
+      await Promise.all(
+        updates.map((u) =>
+          adminApi(`/api/v1/admin/banners/${u.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ sort_order: u.sort_order }),
+          }),
+        ),
+      );
+      reload();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setReordering(null);
+    }
+  };
+
   const columns = [
+    {
+      key: 'sort_order',
+      label: 'Order',
+      render: (r) => {
+        const index = ordered.findIndex((b) => b.id === r.id);
+        const isBusy = reordering !== null;
+        return (
+          <div className="flex items-center gap-2">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-slate-800 text-xs font-bold text-slate-300">
+              {index + 1}
+            </span>
+            <div className="flex flex-col gap-0.5">
+              <button
+                type="button"
+                aria-label="Move up"
+                title="Move up"
+                disabled={isBusy || index === 0}
+                onClick={() => move(index, -1)}
+                className="grid h-4 w-6 place-items-center rounded text-slate-400 transition hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+              >
+                <ArrowUp className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                aria-label="Move down"
+                title="Move down"
+                disabled={isBusy || index === ordered.length - 1}
+                onClick={() => move(index, 1)}
+                className="grid h-4 w-6 place-items-center rounded text-slate-400 transition hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+              >
+                <ArrowDown className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        );
+      },
+    },
     {
       key: 'image_url',
       label: 'Banner',
@@ -102,7 +186,6 @@ export default function AdminBannersPage() {
           <span className="text-xs text-slate-500">Not clickable</span>
         ),
     },
-    { key: 'sort_order', label: 'Order', render: (r) => <span className="text-slate-300">{r.sort_order}</span> },
     { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} /> },
     {
       key: 'actions',
@@ -137,12 +220,12 @@ export default function AdminBannersPage() {
   return (
     <AdminShell
       title="Home Banners"
-      subtitle={`${banners?.length ?? 0} banners · shown in the home hero carousel`}
+      subtitle={`${banners?.length ?? 0} banners · shown in the home hero carousel · use ↑ ↓ to set the order`}
       actions={<Button icon={Plus} onClick={() => { setForm(emptyBanner); setEditing('new'); }}>Add banner</Button>}
     >
       <DataTable
         columns={columns}
-        rows={banners}
+        rows={ordered}
         loading={loading}
         searchable
         searchKeys={['title', 'link_url']}
@@ -177,22 +260,16 @@ export default function AdminBannersPage() {
           <Field label="Link URL (optional — leave blank for a non-clickable banner)">
             <Input value={form.link_url} onChange={(e) => setForm({ ...form, link_url: e.target.value })} placeholder="/register or https://…" />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Sort order (lower shows first)">
-              <Input
-                type="number"
-                value={form.sort_order}
-                onChange={(e) => setForm({ ...form, sort_order: parseInt(e.target.value, 10) || 0 })}
-              />
-            </Field>
-            <Field label="Visibility">
-              <Toggle
-                checked={form.status === 'active'}
-                onChange={(v) => setForm({ ...form, status: v ? 'active' : 'draft' })}
-                label={form.status === 'active' ? 'Active (visible on site)' : 'Draft (hidden)'}
-              />
-            </Field>
-          </div>
+          <Field label="Visibility">
+            <Toggle
+              checked={form.status === 'active'}
+              onChange={(v) => setForm({ ...form, status: v ? 'active' : 'draft' })}
+              label={form.status === 'active' ? 'Active (visible on site)' : 'Draft (hidden)'}
+            />
+          </Field>
+          <p className="text-xs text-slate-500">
+            Order is set from the banners list with the ↑ ↓ arrows once the banner is saved.
+          </p>
         </form>
       </Modal>
     </AdminShell>
