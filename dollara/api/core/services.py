@@ -10,6 +10,7 @@ from django.core.cache import cache
 from django.db.models import Count, F, Q, Sum
 from django.utils import timezone
 
+from core import bonus_services
 from core.auth_jwt import sign_token
 from core.models import (
     Banner,
@@ -150,6 +151,7 @@ def register_with_otp(
     phone: str,
     password: str,
     country_code: str = 'IN',
+    referral_code: str | None = None,
 ) -> dict:
     if User.objects.filter(phone=phone, role=User.Role.USER).exists():
         raise ValueError('Phone number already registered')
@@ -157,6 +159,9 @@ def register_with_otp(
         raise ValueError('Password must be at least 6 characters')
     username = f'user_{phone[-6:]}_{secrets.token_hex(4)}'
     voice_id = f'AI_EXEC_{random.randint(1, 50):03d}'
+    # Resolve who referred this player before the account exists, so the referral
+    # bonus engine can pay the referrer.
+    referred_by = bonus_services.resolve_referrer(referral_code)
     user = User.objects.create(
         username=username,
         phone=phone,
@@ -165,22 +170,28 @@ def register_with_otp(
         role=User.Role.USER,
         password_hash=_hash_password(password),
     )
-    Wallet.objects.create(
-        user=user,
-        bonus_balance=Decimal(str(settings.WELCOME_BONUS)),
-    )
+    # Wallet starts empty — the joining bonus is now awarded by the controllable
+    # bonus engine (see award_joining_bonus), not a hardcoded balance.
+    Wallet.objects.create(user=user)
     _create_user_settings(
         user,
         registration_path=UserSetting.RegistrationPath.OTP,
         phone_verified=True,
         ai_voice_executive_id=voice_id,
+        referred_by=referred_by,
+        referral_code=bonus_services._generate_referral_code(),
     )
+    # Fire the money-based welcome + referral bonuses (each is a no-op if the
+    # admin hasn't configured/activated one).
+    joining = bonus_services.award_joining_bonus(user.id)
+    if referred_by:
+        bonus_services.award_referral_bonus(user.id, event='register')
     token = sign_token({'sub': user.id, 'role': User.Role.USER}, tenant=get_current_tenant_id())
     return {
         'userId': user.id,
         'username': username,
         'token': token,
-        'welcomeBonus': settings.WELCOME_BONUS,
+        'welcomeBonus': float(joining.amount) if joining else 0,
         'voiceId': voice_id,
     }
 
@@ -316,7 +327,20 @@ def confirm_deposit(transaction_id: int, reference_number: str) -> dict:
         Wallet.objects.filter(user_id=tx.user_id).update(
             main_balance=F('main_balance') + amount
         )
-    return {'credited': float(amount)}
+    # Money-based bonuses that fire on a confirmed deposit: the deposit-match
+    # bonus for this player, and any referral bonus that pays on first deposit.
+    # Each is a no-op if the admin hasn't configured one; failures here must not
+    # roll back the credited deposit.
+    bonus = None
+    try:
+        bonus = bonus_services.award_deposit_bonus(tx.user_id, amount, tx.id)
+        bonus_services.award_referral_bonus(tx.user_id, event='deposit', deposit_amount=amount)
+    except Exception:
+        pass
+    return {
+        'credited': float(amount),
+        'bonusCredited': float(bonus.amount) if bonus else 0,
+    }
 
 
 def reject_deposit(transaction_id: int, reason: str) -> dict:

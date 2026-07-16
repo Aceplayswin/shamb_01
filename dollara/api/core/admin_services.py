@@ -5,7 +5,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.core.files.storage import default_storage
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, F, Q, Sum
 from django.utils import timezone
 
 from core.models import (
@@ -18,9 +18,11 @@ from core.models import (
     PlatformSetting,
     Transaction,
     User,
+    UserBonus,
     UserSetting,
     Wallet,
 )
+from core import bonus_services
 from core.services import get_user_settings
 from tenants.state import get_current_tenant_id, tenant_atomic
 
@@ -261,55 +263,207 @@ def list_admin_bets(limit: int = 50, offset: int = 0, user_id: int | None = None
     ]
 
 
+# Every controllable field on a Bonus, split by how its value is coerced.
+_BONUS_DECIMAL_FIELDS = (
+    'value_amount', 'min_deposit', 'max_bonus_cap', 'referrer_reward',
+    'wagering_multiplier', 'total_budget',
+)
+_BONUS_INT_FIELDS = ('per_user_limit', 'total_claims', 'bonus_validity_days')
+_BONUS_DATE_FIELDS = ('start_date', 'end_date')
+_BONUS_TEXT_FIELDS = (
+    'name', 'display_title', 'description', 'bonus_type', 'value_type',
+    'credit_target', 'status', 'claim_method',
+)
+
+
+def _parse_dt(value):
+    if not value:
+        return None
+    from django.utils.dateparse import parse_datetime
+    dt = parse_datetime(value) if isinstance(value, str) else value
+    if dt is not None and timezone.is_naive(dt):
+        dt = timezone.make_aware(dt, timezone.get_current_timezone())
+    return dt
+
+
+def _normalise_promo(value):
+    value = (value or '').strip().upper()
+    return value or None
+
+
+def _serialize_bonus(b: Bonus) -> dict:
+    return {
+        'id': b.id,
+        'name': b.name,
+        'display_title': b.display_title,
+        'description': b.description,
+        'bonus_type': b.bonus_type,
+        'value_type': b.value_type,
+        'value_amount': float(b.value_amount),
+        'min_deposit': float(b.min_deposit),
+        'max_bonus_cap': float(b.max_bonus_cap) if b.max_bonus_cap is not None else None,
+        'referrer_reward': float(b.referrer_reward),
+        'wagering_multiplier': float(b.wagering_multiplier),
+        'credit_target': b.credit_target,
+        'status': b.status,
+        'claim_method': b.claim_method,
+        'promo_code': b.promo_code,
+        'per_user_limit': b.per_user_limit,
+        'total_budget': float(b.total_budget) if b.total_budget is not None else None,
+        'total_awarded': float(b.total_awarded),
+        'total_claims': b.total_claims,
+        'bonus_validity_days': b.bonus_validity_days,
+        'budget_remaining': (
+            float(b.total_budget - b.total_awarded) if b.total_budget is not None else None
+        ),
+        'start_date': b.start_date.isoformat() if b.start_date else None,
+        'end_date': b.end_date.isoformat() if b.end_date else None,
+        'created_at': b.created_at.isoformat(),
+    }
+
+
 def list_admin_bonuses() -> list[dict]:
-    return [
-        {
-            'id': b.id,
-            'name': b.name,
-            'display_title': b.display_title,
-            'bonus_type': b.bonus_type,
-            'value_type': b.value_type,
-            'value_amount': float(b.value_amount),
-            'min_deposit': float(b.min_deposit),
-            'max_bonus_cap': float(b.max_bonus_cap) if b.max_bonus_cap else None,
-            'wagering_multiplier': float(b.wagering_multiplier),
-            'status': b.status,
-            'start_date': b.start_date.isoformat() if b.start_date else None,
-            'end_date': b.end_date.isoformat() if b.end_date else None,
-        }
-        for b in Bonus.objects.order_by('-created_at')
-    ]
+    return [_serialize_bonus(b) for b in Bonus.objects.order_by('-created_at')]
+
+
+def bonus_stats() -> dict:
+    """Top-line numbers for the Bonuses page header."""
+    active = Bonus.objects.filter(status=Bonus.Status.ACTIVE).count()
+    awarded = Bonus.objects.aggregate(t=Sum('total_awarded'))['t'] or 0
+    claims = Bonus.objects.aggregate(t=Sum('total_claims'))['t'] or 0
+    return {
+        'total': Bonus.objects.count(),
+        'active': active,
+        'total_awarded': float(awarded),
+        'total_claims': int(claims),
+    }
+
+
+def _clean_bonus_payload(data: dict) -> dict:
+    """Coerce an incoming bonus payload to typed model kwargs (create + update)."""
+    updates: dict = {}
+    for key in _BONUS_TEXT_FIELDS:
+        if key in data:
+            updates[key] = data[key] or None if key != 'name' else data[key]
+    for key in _BONUS_DECIMAL_FIELDS:
+        if key in data:
+            updates[key] = Decimal(str(data[key])) if data[key] not in (None, '') else None
+    for key in _BONUS_INT_FIELDS:
+        if key in data:
+            updates[key] = int(data[key]) if data[key] not in (None, '') else None
+    for key in _BONUS_DATE_FIELDS:
+        if key in data:
+            updates[key] = _parse_dt(data[key])
+    if 'promo_code' in data:
+        updates['promo_code'] = _normalise_promo(data['promo_code'])
+    return updates
 
 
 def create_bonus(data: dict) -> dict:
-    bonus = Bonus.objects.create(
-        name=data['name'],
-        display_title=data.get('display_title'),
-        bonus_type=data['bonus_type'],
-        value_type=data['value_type'],
-        value_amount=Decimal(str(data['value_amount'])),
-        min_deposit=Decimal(str(data.get('min_deposit', 0))),
-        max_bonus_cap=(
-            Decimal(str(data['max_bonus_cap'])) if data.get('max_bonus_cap') else None
-        ),
-        wagering_multiplier=Decimal(str(data.get('wagering_multiplier', 35))),
-        status=data.get('status', 'draft'),
-    )
+    payload = _clean_bonus_payload(data)
+    # Required fields with sane fallbacks so a half-filled form still succeeds.
+    payload.setdefault('bonus_type', 'manual')
+    payload.setdefault('value_type', 'fixed')
+    payload.setdefault('value_amount', Decimal('0'))
+    payload.setdefault('status', 'draft')
+    if not payload.get('name'):
+        raise ValueError('Internal name is required')
+    bonus = Bonus.objects.create(**payload)
     return {'id': bonus.id}
 
 
 def update_bonus(bonus_id: int, data: dict) -> dict:
-    allowed = {
-        'name', 'display_title', 'bonus_type', 'value_type', 'value_amount',
-        'min_deposit', 'max_bonus_cap', 'wagering_multiplier', 'status',
-    }
-    updates = {k: v for k, v in data.items() if k in allowed}
-    for key in ('value_amount', 'min_deposit', 'max_bonus_cap', 'wagering_multiplier'):
-        if key in updates and updates[key] is not None:
-            updates[key] = Decimal(str(updates[key]))
+    updates = _clean_bonus_payload(data)
+    # Counters are engine-owned; never let the panel overwrite them directly.
+    updates.pop('total_awarded', None)
     if updates:
-        Bonus.objects.filter(id=bonus_id).update(**updates)
+        Bonus.objects.filter(id=bonus_id).update(**updates, updated_at=timezone.now())
     return {'updated': True}
+
+
+def delete_bonus(bonus_id: int) -> dict:
+    """Remove a bonus definition. Awarded user_bonuses keep their history
+    (bonus_id is set NULL by the FK), so player ledgers stay intact."""
+    Bonus.objects.filter(id=bonus_id).delete()
+    return {'deleted': True}
+
+
+def duplicate_bonus(bonus_id: int) -> dict:
+    """Clone a bonus as a fresh draft — the fast way to spin up a variant."""
+    src = Bonus.objects.get(id=bonus_id)
+    src.pk = None
+    src.id = None
+    src.name = f'{src.name}_copy'
+    src.status = Bonus.Status.DRAFT
+    src.promo_code = None
+    src.total_awarded = Decimal('0')
+    src.total_claims = 0
+    src.save()
+    return {'id': src.id}
+
+
+def grant_bonus_to_user(bonus_id: int, user_id: int, admin_id: int, amount=None, notes: str = '') -> dict:
+    """Manual grant: push a bonus straight to a player's wallet from the panel.
+
+    Honors the bonus's credit target + wagering. ``amount`` overrides the
+    configured value (for one-off goodwill credits)."""
+    bonus = Bonus.objects.get(id=bonus_id)
+    if not User.objects.filter(id=user_id, role=User.Role.USER).exists():
+        raise ValueError('Player account not found')
+    credited = Decimal(str(amount)) if amount not in (None, '') else bonus.value_amount
+    awarded = bonus_services._award_bonus(
+        user_id=user_id,
+        bonus=bonus,
+        amount=credited,
+        source=UserBonus.Source.MANUAL,
+        granted_by=admin_id,
+        notes=notes or f'Manual grant: {bonus.display_title or bonus.name}',
+    )
+    if not awarded:
+        raise ValueError('Amount must be greater than zero')
+    return {'granted': True, 'amount': float(awarded.amount)}
+
+
+def list_issued_bonuses(bonus_id: int | None = None, limit: int = 200) -> list[dict]:
+    """Awarded-bonus ledger for the panel — optionally filtered to one campaign."""
+    qs = UserBonus.objects.select_related('user', 'bonus').order_by('-created_at')
+    if bonus_id:
+        qs = qs.filter(bonus_id=bonus_id)
+    return [
+        {
+            'id': ub.id,
+            'user_id': ub.user_id,
+            'username': ub.user.username,
+            'bonus': (ub.bonus.display_title or ub.bonus.name) if ub.bonus else (ub.notes or '—'),
+            'amount': float(ub.amount),
+            'source': ub.source,
+            'status': ub.status,
+            'credit_target': ub.credit_target,
+            'wagering_required': float(ub.wagering_required),
+            'wagering_completed': float(ub.wagering_completed),
+            'created_at': ub.created_at.isoformat(),
+        }
+        for ub in qs[:limit]
+    ]
+
+
+def revoke_user_bonus(user_bonus_id: int) -> dict:
+    """Forfeit an active awarded bonus and claw the locked funds back.
+
+    Only touches still-locked bonus-balance credits; already-withdrawable (main
+    balance) or completed grants are left alone."""
+    with tenant_atomic():
+        ub = UserBonus.objects.select_for_update().get(id=user_bonus_id)
+        if ub.status != UserBonus.Status.ACTIVE:
+            raise ValueError('Only active bonuses can be revoked')
+        if ub.credit_target == Bonus.CreditTarget.BONUS:
+            Wallet.objects.filter(user_id=ub.user_id).update(
+                bonus_balance=F('bonus_balance') - ub.amount,
+                wagering_balance=F('wagering_balance') - ub.wagering_required,
+            )
+        ub.status = UserBonus.Status.FORFEITED
+        ub.save(update_fields=['status', 'updated_at'])
+    return {'revoked': True}
 
 
 def _serialize_banner(b: Banner) -> dict:

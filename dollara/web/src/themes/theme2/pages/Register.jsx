@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { KeyRound, Lock, MessageCircle, Phone, User } from 'lucide-react';
+import { Gift, KeyRound, Lock, MessageCircle, Phone, User } from 'lucide-react';
 import { api } from '@/services/api';
 import { useAuthStore } from '@/store/auth';
 import { useGuestOnly } from '@/hooks/useGuestOnly';
@@ -20,6 +20,7 @@ export default function Theme2Register() {
   const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
   const [channel, setChannel] = useState('sms');
+  const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [devOtp, setDevOtp] = useState('');
@@ -42,7 +43,7 @@ export default function Theme2Register() {
   const register = async () => {
     setLoading(true); setError('');
     try {
-      const result = await api('/api/v1/auth/register/otp', { method: 'POST', body: JSON.stringify({ phone, otp, fullName, password }) });
+      const result = await api('/api/v1/auth/register/otp', { method: 'POST', body: JSON.stringify({ phone, otp, fullName, password, referralCode: referralCode.trim() || undefined }) });
       setAuth({ token: result.token, userId: result.userId, username: result.username });
       router.push('/onboarding');
     } catch (e) {
@@ -86,6 +87,10 @@ export default function Theme2Register() {
               <option value="telegram">Telegram</option>
               <option value="voice">Voice Call</option>
             </select>
+          </div>
+          <div className="relative">
+            <Gift className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input type="text" placeholder="Referral code (optional)" value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} className={`${t2Input} pl-11 uppercase tracking-widest`} maxLength={20} />
           </div>
           <button type="button" onClick={sendOtp} disabled={loading || !phone || !fullName || password.length < 6} className={`${t2BtnPrimary} w-full`}>
             {loading ? 'Sending…' : 'Send OTP'}

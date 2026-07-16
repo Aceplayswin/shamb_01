@@ -72,6 +72,9 @@ class UserSetting(models.Model):
     two_factor_secret = models.CharField(max_length=255, null=True, blank=True)
     affiliate_id = models.BigIntegerField(null=True, blank=True)
     agent_id = models.BigIntegerField(null=True, blank=True)
+    # Referral chain: this player's own shareable code + who referred them.
+    referral_code = models.CharField(max_length=20, null=True, blank=True)
+    referred_by = models.BigIntegerField(null=True, blank=True)
     fraud_score = models.IntegerField(default=0)
     is_demo = models.BooleanField(default=False)
     demo_expires_at = models.DateTimeField(null=True, blank=True)
@@ -357,22 +360,117 @@ class Bet(models.Model):
 
 
 class Bonus(models.Model):
+    """A fully controllable, money-based bonus campaign.
+
+    Each ``bonus_type`` is a distinct engine wired to a money event — joining
+    credits on registration, deposit matches a confirmed deposit, referral pays
+    the referrer, game/cashback rebates net losses, manual is admin-pushed. All
+    of them share the same value/limit/wagering controls below.
+    """
+
+    class Type(models.TextChoices):
+        JOINING = 'joining', 'Joining / Welcome'
+        DEPOSIT = 'deposit', 'Deposit match'
+        REFERRAL = 'referral', 'Referral'
+        GAME = 'game', 'Game / Play'
+        CASHBACK = 'cashback', 'Cashback'
+        NO_DEPOSIT = 'no_deposit', 'No deposit'
+        FREE_SPINS = 'free_spins', 'Free spins'
+        LOYALTY = 'loyalty', 'Loyalty'
+        RELOAD = 'reload', 'Reload'
+        MANUAL = 'manual', 'Manual grant'
+
+    class ValueType(models.TextChoices):
+        PERCENTAGE = 'percentage', 'Percentage'
+        FIXED = 'fixed', 'Fixed'
+
+    class CreditTarget(models.TextChoices):
+        BONUS = 'bonus', 'Bonus balance'
+        MAIN = 'main', 'Main balance'
+
+    class Status(models.TextChoices):
+        DRAFT = 'draft', 'Draft'
+        ACTIVE = 'active', 'Active'
+        PAUSED = 'paused', 'Paused'
+        EXPIRED = 'expired', 'Expired'
+
+    class ClaimMethod(models.TextChoices):
+        AUTO = 'auto', 'Automatic'
+        MANUAL = 'manual', 'Manual'
+        CODE = 'code', 'Promo code'
+        OPT_IN = 'opt_in', 'Opt in'
+
     id = models.BigAutoField(primary_key=True)
     name = models.CharField(max_length=100)
     display_title = models.CharField(max_length=150, null=True, blank=True)
-    bonus_type = models.CharField(max_length=20)
-    value_type = models.CharField(max_length=20)
-    value_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    description = models.TextField(null=True, blank=True)
+    bonus_type = models.CharField(max_length=20, choices=Type.choices)
+    value_type = models.CharField(max_length=20, choices=ValueType.choices)
+    value_amount = models.DecimalField(max_digits=18, decimal_places=2)
     min_deposit = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     max_bonus_cap = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
+    referrer_reward = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     wagering_multiplier = models.DecimalField(max_digits=5, decimal_places=2, default=35)
-    status = models.CharField(max_length=20, default='draft')
+    credit_target = models.CharField(
+        max_length=10, choices=CreditTarget.choices, default=CreditTarget.BONUS
+    )
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     start_date = models.DateTimeField(null=True, blank=True)
     end_date = models.DateTimeField(null=True, blank=True)
+    claim_method = models.CharField(
+        max_length=10, choices=ClaimMethod.choices, default=ClaimMethod.AUTO
+    )
+    promo_code = models.CharField(max_length=40, null=True, blank=True)
+    per_user_limit = models.IntegerField(null=True, blank=True)
+    total_budget = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
+    total_awarded = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    total_claims = models.IntegerField(default=0)
+    bonus_validity_days = models.IntegerField(default=30)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'bonuses'
+
+
+class UserBonus(models.Model):
+    """A bonus instance actually awarded to a player — the money-side ledger."""
+
+    class Source(models.TextChoices):
+        JOINING = 'joining', 'Joining'
+        DEPOSIT = 'deposit', 'Deposit'
+        REFERRAL = 'referral', 'Referral'
+        GAME = 'game', 'Game'
+        CASHBACK = 'cashback', 'Cashback'
+        PROMO = 'promo', 'Promo code'
+        MANUAL = 'manual', 'Manual'
+
+    class Status(models.TextChoices):
+        ACTIVE = 'active', 'Active'
+        COMPLETED = 'completed', 'Completed'
+        EXPIRED = 'expired', 'Expired'
+        FORFEITED = 'forfeited', 'Forfeited'
+
+    id = models.BigAutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, db_column='user_id')
+    bonus = models.ForeignKey(
+        Bonus, on_delete=models.SET_NULL, db_column='bonus_id', null=True, blank=True
+    )
+    amount = models.DecimalField(max_digits=18, decimal_places=2)
+    wagering_required = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    wagering_completed = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    credit_target = models.CharField(max_length=10, default='bonus')
+    source = models.CharField(max_length=20, choices=Source.choices, default=Source.MANUAL)
+    transaction_id = models.BigIntegerField(null=True, blank=True)
+    granted_by = models.BigIntegerField(null=True, blank=True)
+    notes = models.CharField(max_length=255, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'user_bonuses'
 
 
 class PlatformSetting(models.Model):

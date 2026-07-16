@@ -7,7 +7,7 @@
 //   - Register → phone → OTP → full name + password (same flow as theme2 Register).
 
 import { useState } from 'react';
-import { Lock, Phone, User as UserIcon, KeyRound, MessageCircle } from 'lucide-react';
+import { Lock, Phone, User as UserIcon, KeyRound, MessageCircle, Gift } from 'lucide-react';
 import { api } from '@/services/api';
 import { useAuthStore } from '@/store/auth';
 import { useUnifiedLogin } from '@/hooks/useUnifiedLogin';
@@ -107,6 +107,7 @@ function RegisterModal() {
   const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
   const [channel, setChannel] = useState('sms');
+  const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [devOtp, setDevOtp] = useState('');
@@ -138,7 +139,7 @@ function RegisterModal() {
     try {
       const result = await api('/api/v1/auth/register/otp', {
         method: 'POST',
-        body: JSON.stringify({ phone, otp, fullName, password }),
+        body: JSON.stringify({ phone, otp, fullName, password, referralCode: referralCode.trim() || undefined }),
       });
       setAuth({ token: result.token, userId: result.userId, username: result.username });
       close();
@@ -228,6 +229,13 @@ function RegisterModal() {
                 <option value="telegram">Telegram</option>
                 <option value="voice">Voice Call</option>
               </select>
+            </div>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.14em] text-[#6b6579]">Referral code (optional)</label>
+            <div className="relative">
+              <Gift className={iconLeft} />
+              <input type="text" placeholder="Enter code" value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} className={`${t3Input} pl-11 uppercase tracking-widest`} maxLength={20} />
             </div>
           </div>
           <button

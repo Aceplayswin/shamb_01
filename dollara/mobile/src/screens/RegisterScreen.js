@@ -31,6 +31,7 @@ export function RegisterScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
   const [channel, setChannel] = useState('sms');
+  const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
 
   const sendOtp = async () => {
@@ -61,7 +62,7 @@ export function RegisterScreen({ navigation }) {
     try {
       const result = await api('/api/v1/auth/register/otp', {
         method: 'POST',
-        body: JSON.stringify({ phone, otp, fullName, password }),
+        body: JSON.stringify({ phone, otp, fullName, password, referralCode: referralCode.trim() || undefined }),
       });
       await setAuth({
         token: result.token,
@@ -105,6 +106,14 @@ export function RegisterScreen({ navigation }) {
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Min 6 characters"
+              />
+              <Input
+                label="Referral code (optional)"
+                autoCapitalize="characters"
+                value={referralCode}
+                onChangeText={(t) => setReferralCode(t.toUpperCase())}
+                placeholder="Enter a friend's code"
+                maxLength={20}
               />
               <Text style={styles.label}>OTP channel</Text>
               <View style={styles.channels}>

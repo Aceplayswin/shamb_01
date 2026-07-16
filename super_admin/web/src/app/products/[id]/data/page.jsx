@@ -7,9 +7,11 @@ import Swal from 'sweetalert2';
 import {
   ArrowLeft, Box, Loader2, Search, Database, Users, Wallet, ArrowLeftRight,
   Dice5, Gamepad2, Boxes, Gift, PhoneCall, Settings2, ChevronLeft,
-  ChevronRight, Eye, X, RefreshCw, Wallet2, Coins, Lock,
+  ChevronRight, Eye, X, RefreshCw, Wallet2, Coins, Lock, Power, PowerOff,
 } from 'lucide-react';
-import { getProductDataSummary, getProductDataset } from '@/services/api';
+import {
+  getProductDataSummary, getProductDataset, updateProductGameActive,
+} from '@/services/api';
 import { useTheme } from '../../../providers';
 import DashboardLayout from '../../../components/DashboardLayout';
 
@@ -170,6 +172,7 @@ function DataExplorer() {
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
   const [detailRow, setDetailRow] = useState(null);
+  const [togglingId, setTogglingId] = useState(null);
 
   /* Load summary (counts + aggregates) once. */
   const loadSummary = useCallback(async () => {
@@ -214,6 +217,24 @@ function DataExplorer() {
   }, [id, active, page, debounced]);
 
   useEffect(() => { loadTable(); }, [loadTable]);
+
+  /* Activate/deactivate a game (games dataset only). Writes is_active_web back to
+     the product's tenant DB, then patches the row in place. */
+  const toggleGameActive = useCallback(async (game) => {
+    const next = !game.is_active_web;
+    setTogglingId(game.id);
+    try {
+      const { game: updated } = await updateProductGameActive(id, game.id, next);
+      setTable((t) =>
+        t ? { ...t, rows: t.rows.map((r) => (r.id === game.id ? { ...r, ...updated } : r)) } : t,
+      );
+    } catch (e) {
+      swal({ icon: 'error', title: 'Could not update game', text: e.message });
+    } finally {
+      setTogglingId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const activeMeta = useMemo(
     () => summary?.datasets?.find((d) => d.key === active),
@@ -347,7 +368,7 @@ function DataExplorer() {
                     {columns.map((c) => (
                       <th key={c} className="whitespace-nowrap px-4 py-3">{humanize(c)}</th>
                     ))}
-                    <th className="px-4 py-3 text-right">View</th>
+                    <th className="px-4 py-3 text-right">{active === 'games' ? 'Actions' : 'View'}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -358,13 +379,36 @@ function DataExplorer() {
                           {STATUS_COLS.has(c) && row[c] ? <StatusPill value={row[c]} /> : formatCell(c, row[c])}
                         </td>
                       ))}
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => setDetailRow(row)}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </button>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {active === 'games' && (
+                            <button
+                              onClick={() => toggleGameActive(row)}
+                              disabled={togglingId === row.id}
+                              title={row.is_active_web ? 'Deactivate on product web/app' : 'Activate on product web/app'}
+                              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors disabled:opacity-50 ${
+                                row.is_active_web
+                                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400 dark:hover:bg-emerald-950'
+                                  : 'border border-gray-200 text-gray-500 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700'
+                              }`}
+                            >
+                              {togglingId === row.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : row.is_active_web ? (
+                                <Power className="h-3.5 w-3.5" />
+                              ) : (
+                                <PowerOff className="h-3.5 w-3.5" />
+                              )}
+                              {row.is_active_web ? 'Active' : 'Inactive'}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setDetailRow(row)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
