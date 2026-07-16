@@ -33,7 +33,6 @@ const emptyGame = {
   max_bet: 100000,
   sort_order: 0,
   is_featured: false,
-  is_active_web: true,
   is_active: true,
   is_provably_fair: false,
 };
@@ -63,7 +62,6 @@ export default function AdminGamesPage() {
       max_bet: g.max_bet,
       sort_order: g.sort_order ?? 0,
       is_featured: g.is_featured,
-      is_active_web: g.is_active_web,
       is_active: g.is_active,
       is_provably_fair: g.is_provably_fair,
     });
@@ -96,19 +94,6 @@ export default function AdminGamesPage() {
       toast.error(err.message);
     } finally {
       setBusy(false);
-    }
-  };
-
-  const toggleActive = async (g) => {
-    try {
-      await adminApi(`/api/v1/admin/games/${g.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ is_active_web: !g.is_active_web }),
-      });
-      toast.success(g.is_active_web ? 'Game disabled' : 'Game enabled');
-      reload();
-    } catch (e) {
-      toast.error(e.message);
     }
   };
 
@@ -148,9 +133,6 @@ export default function AdminGamesPage() {
         <div className="flex justify-end gap-1.5">
           <Button variant="secondary" size="sm" icon={Pencil} onClick={() => openEdit(r)}>
             Edit
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => toggleActive(r)}>
-            {r.is_active_web ? 'Disable' : 'Enable'}
           </Button>
         </div>
       ),
@@ -247,7 +229,6 @@ export default function AdminGamesPage() {
           />
           <div className="flex flex-wrap gap-6 pt-2">
             <Toggle checked={form.is_featured} onChange={(v) => setForm({ ...form, is_featured: v })} label="Featured" />
-            <Toggle checked={form.is_active_web} onChange={(v) => setForm({ ...form, is_active_web: v })} label="Active on web" />
             <Toggle checked={form.is_active} onChange={(v) => setForm({ ...form, is_active: v })} label="Launch enabled" />
             <Toggle checked={form.is_provably_fair} onChange={(v) => setForm({ ...form, is_provably_fair: v })} label="Provably fair" />
           </div>

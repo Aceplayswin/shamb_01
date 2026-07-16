@@ -873,6 +873,52 @@ def product_dataset(request, product_id, dataset):
     })
 
 
+# --- Cross-tenant game controls (write) ---
+# Unlike the read-only explorer above, this mutates one field on one game row in
+# the product's tenant DB. Game *activation* (visibility on the product web/app)
+# is a Super Admin control; the product admin can only add/edit games. Toggling
+# ``is_active_web`` here is reflected immediately by the product frontend, which
+# reads the same column.
+
+@require_auth(['super_admin'])
+@require_http_methods(['PATCH'])
+def product_game_active(request, product_id, game_id):
+    """Activate/deactivate a single game on the product web/app.
+
+    Body: ``{"is_active_web": bool}``. Flips ``games.is_active_web`` for the given
+    game in the product's tenant DB and returns the updated row (same whitelisted
+    columns as the ``games`` dataset) so the console can update it in place.
+    """
+    product = Product.objects.filter(id=product_id).first()
+    if not product:
+        return _error('Product not found', 404)
+
+    body = _json_body(request)
+    if 'is_active_web' not in body:
+        return _error("Missing 'is_active_web'", 400)
+    is_active_web = bool(body['is_active_web'])
+
+    cfg = _DATASETS['games']
+    alias = _activate_tenant(product)
+    with use_tenant(str(product.id), alias):
+        try:
+            from core.models import Game
+            game = Game.objects.filter(id=game_id).first()
+            if not game:
+                return _error('Game not found', 404)
+            if game.is_active_web != is_active_web:
+                game.is_active_web = is_active_web
+                game.save(update_fields=['is_active_web', 'updated_at'])
+            row = Game.objects.filter(id=game_id).values(*cfg['columns']).first()
+        except Exception as e:
+            return _error(f'Could not update tenant database: {e}', 502)
+
+    for col, val in row.items():
+        row[col] = _jsonable(val)
+
+    return JsonResponse({'id': product.id, 'game': row})
+
+
 def _text_columns(model, columns):
     """Whitelisted columns that are CharField/TextField/EmailField — searchable."""
     from django.db.models import CharField, EmailField, SlugField, TextField

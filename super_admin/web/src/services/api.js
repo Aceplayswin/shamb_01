@@ -115,6 +115,14 @@ export const getProductDataset = (id, dataset, { page = 1, pageSize = 50, q = ''
   return superAdminApi(`/api/v1/super-admin/products/${id}/data/${dataset}?${params.toString()}`);
 };
 
+// Activate/deactivate a single game on a product's web/app. Superadmin-only
+// control; writes games.is_active_web in the product's tenant DB.
+export const updateProductGameActive = (id, gameId, isActiveWeb) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/games/${gameId}/active`, {
+    method: 'PATCH',
+    body: JSON.stringify({ is_active_web: isActiveWeb }),
+  });
+
 // Product webhook credentials (RSA key pair securing the data channel).
 export const getProductCredential = (id) =>
   superAdminApi(`/api/v1/super-admin/products/${id}/credential`);
