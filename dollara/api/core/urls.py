@@ -20,6 +20,8 @@ urlpatterns = [
     # Games
     path('games', views.games_list),
     path('games/trending', views.games_trending),
+    # Public home-page hero banners (managed by this product's own admin).
+    path('banners', views.banners_list),
     path('games/bet', views.games_bet),
     path('games/launch', views.games_launch),
     path('games/history', views.games_history),
@@ -59,6 +61,9 @@ urlpatterns = [
     path('admin/bonuses', views.admin_bonuses),
     path('admin/bonuses/create', views.admin_bonuses_create),
     path('admin/bonuses/<int:bonus_id>', views.admin_bonuses_update),
+    path('admin/banners', views.admin_banners),
+    path('admin/banners/create', views.admin_banners_create),
+    path('admin/banners/<int:banner_id>', views.admin_banners_update),
     path('admin/settings', views.admin_settings),
     path('admin/settings/<str:setting_key>', views.admin_settings_update),
     path('admin/ai-calls', views.admin_ai_calls),

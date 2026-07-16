@@ -21,7 +21,7 @@ export default function Theme2Withdraw() {
     setLoading(true);
     try {
       await api('/api/v1/wallet/withdraw', { method: 'POST', body: JSON.stringify({ amount: numAmount, paymentMethod: method }) });
-      alert('Withdrawal request submitted. Processing 2-24 hours.');
+      alert('Withdrawal request submitted — pending approval. The amount is held until our team approves or rejects it.');
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Withdrawal failed');
     } finally { setLoading(false); }

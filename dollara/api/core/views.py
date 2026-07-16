@@ -1,7 +1,6 @@
 import json
 
 from django.conf import settings
-from django.db.models import F
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -338,6 +337,8 @@ def wallet_deposit(request):
             float(body['amount']),
             body['paymentMethod'],
             body.get('currency', 'INR'),
+            # Optional UTR / reference the user pastes from their payment app.
+            reference_number=(body.get('referenceNumber') or body.get('reference_number')),
         )
         return JsonResponse(result, status=201)
     except (KeyError, json.JSONDecodeError) as e:
@@ -346,15 +347,18 @@ def wallet_deposit(request):
         return _error_response(e)
 
 
+# Admin-only: crediting a deposit is a product-admin action. The public deposit
+# flow leaves the transaction PENDING; only an admin confirm credits the wallet.
 @csrf_exempt
-@require_auth(['user', 'admin'])
+@require_auth(['admin'])
 @require_http_methods(['POST'])
 def wallet_deposit_confirm(request, tx_id):
     try:
         body = _json_body(request)
-        return JsonResponse(services.confirm_deposit(tx_id, body['referenceNumber']))
-    except (KeyError, json.JSONDecodeError) as e:
-        return _error_response(e)
+        ref = body.get('referenceNumber') or body.get('reference_number', f'ADMIN-{tx_id}')
+        return JsonResponse(services.confirm_deposit(tx_id, ref))
+    except Transaction.DoesNotExist:
+        return _error_response(ValueError('Transaction not found'), 404)
     except Exception as e:
         return _error_response(e)
 
@@ -413,6 +417,13 @@ def games_list(request):
 @require_http_methods(['GET'])
 def games_trending(request):
     return JsonResponse(services.list_games(limit=12), safe=False)
+
+
+# --- Banners (public home-page hero carousel) ---
+@require_http_methods(['GET'])
+def banners_list(request):
+    """Active hero banners for this product's frontends. Keyless, like games."""
+    return JsonResponse(services.list_active_banners(), safe=False)
 
 
 @csrf_exempt
@@ -834,6 +845,37 @@ def admin_bonuses_update(request, bonus_id):
         return _error_response(e)
 
 
+# --- Admin: home-page banners ---
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_banners(request):
+    return JsonResponse(admin_services.list_admin_banners(), safe=False)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_banners_create(request):
+    try:
+        return JsonResponse(admin_services.create_banner(_json_body(request)), status=201)
+    except (KeyError, json.JSONDecodeError) as e:
+        return _error_response(e)
+    except Exception as e:
+        return _error_response(e)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['PATCH', 'DELETE'])
+def admin_banners_update(request, banner_id):
+    try:
+        if request.method == 'DELETE':
+            return JsonResponse(admin_services.delete_banner(banner_id))
+        return JsonResponse(admin_services.update_banner(banner_id, _json_body(request)))
+    except Exception as e:
+        return _error_response(e)
+
+
 @require_auth(['admin'])
 @require_http_methods(['GET'])
 def admin_settings(request):
@@ -916,8 +958,12 @@ def admin_withdrawals_pending(request):
 @require_auth(['admin'])
 @require_http_methods(['POST'])
 def admin_withdrawal_approve(request, tx_id):
-    Transaction.objects.filter(id=tx_id).update(status=Transaction.Status.COMPLETED)
-    return JsonResponse({'approved': True})
+    try:
+        return JsonResponse(services.approve_withdrawal(tx_id))
+    except Transaction.DoesNotExist:
+        return _error_response(ValueError('Transaction not found'), 404)
+    except Exception as e:
+        return _error_response(e)
 
 
 @csrf_exempt
@@ -926,18 +972,12 @@ def admin_withdrawal_approve(request, tx_id):
 def admin_withdrawal_reject(request, tx_id):
     try:
         body = _json_body(request)
-        tx = Transaction.objects.get(id=tx_id)
-        tx.status = Transaction.Status.REJECTED
-        tx.notes = body.get('reason', '')
-        tx.save(update_fields=['status', 'notes', 'updated_at'])
-        Wallet.objects.filter(user_id=tx.user_id).update(
-            locked_balance=F('locked_balance') - tx.amount,
-            main_balance=F('main_balance') + tx.amount,
-        )
-        return JsonResponse({'rejected': True})
+        return JsonResponse(services.reject_withdrawal(tx_id, body.get('reason', '')))
     except Transaction.DoesNotExist:
-        return _error_response(ValueError('Not found'), 404)
+        return _error_response(ValueError('Transaction not found'), 404)
     except (KeyError, json.JSONDecodeError) as e:
+        return _error_response(e)
+    except Exception as e:
         return _error_response(e)
 
 

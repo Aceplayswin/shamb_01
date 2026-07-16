@@ -385,6 +385,22 @@ class PlatformSetting(models.Model):
         db_table = 'platform_settings'
 
 
+class Banner(models.Model):
+    """Home-page hero carousel banner, managed by this product's own admin."""
+
+    id = models.BigAutoField(primary_key=True)
+    title = models.CharField(max_length=150, null=True, blank=True)
+    image_url = models.CharField(max_length=500)
+    link_url = models.CharField(max_length=500, null=True, blank=True)
+    sort_order = models.IntegerField(default=0)
+    status = models.CharField(max_length=20, default='draft')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'banners'
+
+
 class AiCallLog(models.Model):
     id = models.BigAutoField(primary_key=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, db_column='user_id')

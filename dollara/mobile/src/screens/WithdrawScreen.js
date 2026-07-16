@@ -40,7 +40,10 @@ export function WithdrawScreen({ navigation }) {
     setLoading(true);
     try {
       await withdraw(num, method);
-      Alert.alert('Submitted', 'Withdrawal request submitted. Processing in ~2 seconds (demo).');
+      Alert.alert(
+        'Submitted',
+        'Withdrawal request submitted — pending approval. The amount is held until our team approves or rejects it.',
+      );
       navigation.goBack();
     } catch (e) {
       Alert.alert('Failed', e.message);

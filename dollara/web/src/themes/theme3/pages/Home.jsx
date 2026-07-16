@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { useGameCatalog } from '@/hooks/useGameCatalog';
 import { useBranding } from '@/hooks/useBranding';
+import { useBanners } from '@/hooks/useBanners';
+import BannerCarousel from '@/components/BannerCarousel';
 import { filterFeatured, filterByCategory, NAV_GAME_LINKS, playPath } from '@/lib/gameRoutes';
 import { useAuthModal } from '../shell/authModalContext';
 
@@ -144,6 +146,7 @@ export default function Theme3Home() {
   const branding = useBranding();
   const { open } = useAuthModal();
   const { games, loading, error } = useGameCatalog();
+  const { banners } = useBanners();
   const [openFaq, setOpenFaq] = useState(0);
 
   const liveSportsRef = useRef(null);
@@ -172,6 +175,10 @@ export default function Theme3Home() {
   return (
     <div className="mx-auto max-w-[1500px] px-3 pb-4 pt-4 sm:px-5">
       {/* ===== Hero + Live Now rail ===== */}
+      {banners.length > 0 ? (
+        /* Admin-controlled banner carousel replaces the default hero+rail. */
+        <BannerCarousel banners={banners} className="border border-black/[0.06] shadow-[0_24px_60px_-40px_rgba(36,27,58,0.6)]" />
+      ) : (
       <section className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <div className="relative overflow-hidden rounded-3xl border border-black/[0.06] bg-white shadow-[0_24px_60px_-40px_rgba(36,27,58,0.6)]">
           <div className="grid min-h-[280px] place-items-center bg-gradient-to-br from-[#faf6ec] via-white to-[#f1ebf6] p-10 sm:min-h-[360px]">
@@ -208,6 +215,7 @@ export default function Theme3Home() {
           </Link>
         </aside>
       </section>
+      )}
 
       {/* ===== Stat strip ===== */}
       <section className="mt-4 grid grid-cols-2 divide-x divide-black/[0.06] overflow-hidden rounded-2xl border border-black/[0.06] bg-gradient-to-r from-[#faf6ec] via-white to-[#f1ebf6] shadow-sm sm:grid-cols-4">

@@ -13,6 +13,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Play, Tv, Dice5, Trophy, Cherry } from 'lucide-react';
 import { useGameCatalog } from '@/hooks/useGameCatalog';
+import { useBanners } from '@/hooks/useBanners';
+import BannerCarousel from '@/components/BannerCarousel';
 import { useAuthStore } from '@/store/auth';
 import { filterFeatured, NAV_GAME_LINKS, playPath } from '@/lib/gameRoutes';
 import { useAuthModal } from '../shell/authModalContext';
@@ -348,6 +350,7 @@ export default function Theme4Home() {
   const router = useRouter();
   const { open } = useAuthModal();
   const { games, loading, error } = useGameCatalog();
+  const { banners } = useBanners();
   const token = useAuthStore((s) => s.token);
 
   const featured = useMemo(() => filterFeatured(games, 14), [games]);
@@ -364,7 +367,13 @@ export default function Theme4Home() {
 
   return (
     <div>
-      <HeroCarousel onCta={onCta} />
+      {banners.length > 0 ? (
+        <div className="mx-auto max-w-[1200px] px-2 pt-2 sm:px-3">
+          <BannerCarousel banners={banners} className="rounded-2xl" />
+        </div>
+      ) : (
+        <HeroCarousel onCta={onCta} />
+      )}
       <div className="mx-auto max-w-[1200px] px-2 pb-6 pt-2 sm:px-3">
         <PromoCards />
         <CasinoBanners />

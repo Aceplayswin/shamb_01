@@ -12,6 +12,8 @@ import {
   Flame, Circle, Gift, ChevronRight, Send, Info, Zap, ShieldCheck, Award, Play,
 } from 'lucide-react';
 import { useGameCatalog } from '@/hooks/useGameCatalog';
+import { useBanners } from '@/hooks/useBanners';
+import BannerCarousel from '@/components/BannerCarousel';
 import {
   filterByCategory,
   filterFeatured,
@@ -146,6 +148,7 @@ function RowHeader({ Icon, title, color = 'text-amber-400', seeAllHref }) {
 export default function Theme2Home() {
   const router = useRouter();
   const { games, loading, error } = useGameCatalog();
+  const { banners } = useBanners();
   const [tab, setTab] = useState('lobby');
   const [betTab, setBetTab] = useState('single');
 
@@ -186,6 +189,9 @@ export default function Theme2Home() {
         </div>
 
         {/* Hero */}
+        {banners.length > 0 ? (
+          <BannerCarousel banners={banners} className="border border-white/5" aspectClassName="aspect-[16/6]" />
+        ) : (
         <section className="relative overflow-hidden rounded-2xl border border-white/5 bg-gradient-to-br from-amber-600/20 via-[#0d1420] to-[#070d16] p-8 sm:p-10">
           <div className="pointer-events-none absolute -right-10 -top-10 h-64 w-64 rounded-full bg-amber-500/20 blur-3xl" />
           <div className="relative max-w-md">
@@ -213,6 +219,7 @@ export default function Theme2Home() {
             </div>
           </div>
         </section>
+        )}
 
         {/* Feature cards */}
         <section className="grid gap-4 sm:grid-cols-2">

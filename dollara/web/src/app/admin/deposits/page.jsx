@@ -1,13 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowDownToLine, Check } from 'lucide-react';
+import { ArrowDownToLine, Check, X } from 'lucide-react';
 import { adminApi } from '@/services/adminApi';
 import {
   AdminShell,
   DataTable,
   StatusBadge,
   Button,
+  Modal,
+  Field,
+  Textarea,
   confirmDialog,
   toast,
   useAdminData,
@@ -18,6 +21,9 @@ import {
 export default function AdminDepositsPage() {
   const { data: items, loading, reload, setData } = useAdminData('/api/v1/admin/deposits/pending');
   const [busyId, setBusyId] = useState(null);
+  const [rejectRow, setRejectRow] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejecting, setRejecting] = useState(false);
 
   const confirm = async (row) => {
     const ok = await confirmDialog({
@@ -43,6 +49,25 @@ export default function AdminDepositsPage() {
     }
   };
 
+  const reject = async (e) => {
+    e.preventDefault();
+    setRejecting(true);
+    try {
+      await adminApi(`/api/v1/admin/deposits/${rejectRow.id}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: rejectReason }),
+      });
+      toast.success('Deposit rejected — no funds credited');
+      setData((prev) => prev?.filter((d) => d.id !== rejectRow.id) ?? []);
+      setRejectRow(null);
+      setRejectReason('');
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setRejecting(false);
+    }
+  };
+
   const columns = [
     { key: 'created_at', label: 'Date', render: (r) => fmtDate(r.created_at) },
     {
@@ -62,9 +87,12 @@ export default function AdminDepositsPage() {
       key: 'actions',
       label: '',
       render: (r) => (
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-1.5">
           <Button variant="success" size="sm" icon={Check} disabled={busyId === r.id} onClick={() => confirm(r)}>
             {busyId === r.id ? 'Crediting…' : 'Confirm'}
+          </Button>
+          <Button variant="danger" size="sm" icon={X} disabled={busyId === r.id} onClick={() => setRejectRow(r)}>
+            Reject
           </Button>
         </div>
       ),
@@ -85,6 +113,36 @@ export default function AdminDepositsPage() {
         emptyMessage="No pending deposits"
         emptyHint="Confirmed deposits move to Transactions."
       />
+
+      <Modal
+        open={!!rejectRow}
+        onClose={() => setRejectRow(null)}
+        title="Reject deposit"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRejectRow(null)}>
+              Cancel
+            </Button>
+            <Button variant="danger" form="reject-deposit-form" type="submit" disabled={rejecting}>
+              {rejecting ? 'Rejecting…' : 'Reject deposit'}
+            </Button>
+          </>
+        }
+      >
+        <form id="reject-deposit-form" onSubmit={reject} className="space-y-4">
+          <p className="text-sm text-slate-400">
+            Rejecting marks this {inr(rejectRow?.amount)} deposit as rejected. No funds are credited.
+          </p>
+          <Field label="Reason (optional)">
+            <Textarea
+              rows={3}
+              placeholder="e.g. Payment not received"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+            />
+          </Field>
+        </form>
+      </Modal>
     </AdminShell>
   );
 }

@@ -102,15 +102,6 @@ export const useWalletStore = create((set, get) => ({
     return { transactionId: res.transactionId, status: res.status };
   },
 
-  confirmDeposit: async (txId) => {
-    const res = await api(`/api/v1/wallet/deposit/${txId}/confirm`, {
-      method: 'POST',
-      body: JSON.stringify({ referenceNumber: `DEV-${Date.now()}` }),
-    });
-    await get().loadFromApi();
-    return { credited: res.credited };
-  },
-
   withdraw: async (amount, method) => {
     const num = Number(amount);
     if (num < 500) throw new Error('Minimum withdrawal is ₹500');
@@ -120,7 +111,7 @@ export const useWalletStore = create((set, get) => ({
       body: JSON.stringify({ amount: num, paymentMethod: method }),
     });
     await get().loadFromApi();
-    return { status: 'processing' };
+    return { status: 'pending' };
   },
 
   placeBet: async (amount, game) => {

@@ -56,6 +56,12 @@ const NAV_GROUPS = [
     ],
   },
   {
+    label: 'Content',
+    items: [
+      { href: '/admin/banners', label: 'Banners', icon: ImageIcon },
+    ],
+  },
+  {
     label: 'Catalog',
     items: [
       { href: '/admin/games', label: 'Games', icon: Gamepad2 },
