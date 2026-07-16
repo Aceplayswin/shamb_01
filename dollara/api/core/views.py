@@ -334,6 +334,17 @@ def wallet_get(request):
         return _error_response(e, 404)
 
 
+@require_auth(['user'])
+@require_http_methods(['GET'])
+def wallet_breakdown(request):
+    """Itemised wallet view for the Wallet page — balances plus a per-source
+    breakdown of bonuses, deposits/withdrawals, and game-play totals."""
+    try:
+        return JsonResponse(services.get_wallet_breakdown(request.auth.sub))
+    except Exception as e:
+        return _error_response(e, 404)
+
+
 @csrf_exempt
 @require_auth(['user'])
 @require_http_methods(['POST'])

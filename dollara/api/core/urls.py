@@ -13,6 +13,7 @@ urlpatterns = [
     path('settings', views.user_settings),
     # Wallet
     path('wallet', views.wallet_get),
+    path('wallet/breakdown', views.wallet_breakdown),
     path('wallet/deposit', views.wallet_deposit),
     path('wallet/deposit/<int:tx_id>/confirm', views.wallet_deposit_confirm),
     path('wallet/withdraw', views.wallet_withdraw),

@@ -5,10 +5,13 @@ import { api } from '@/services/api';
 
 const STORAGE_KEY = 'banners:v1';
 
-// Shared caches so the carousel never re-hits the server as the user navigates
-// around the app during a session.
+// Shared caches so the carousel renders instantly and every mounted carousel on
+// the page stays in sync. The cache is only ever a *seed*: we always revalidate
+// against the server in the background (stale-while-revalidate) so banners the
+// product admin adds, edits, reorders, or hides show up without a hard refresh.
 let memoryCache = null;
 let inflight = null;
+const subscribers = new Set();
 
 function readSession() {
   if (typeof window === 'undefined') return null;
@@ -41,13 +44,23 @@ function getCached() {
   return null;
 }
 
+// Only notify subscribers when the banner set actually changed, so a background
+// revalidation that returns the same data doesn't cause needless re-renders (or
+// reset a carousel the user is mid-way through).
+function publish(banners) {
+  const changed = JSON.stringify(memoryCache) !== JSON.stringify(banners);
+  memoryCache = banners;
+  writeSession(banners);
+  if (changed) subscribers.forEach((fn) => fn(banners));
+  return changed;
+}
+
 function fetchBanners() {
   if (inflight) return inflight;
   inflight = api('/api/v1/banners')
     .then((data) => {
       const banners = Array.isArray(data) ? data : [];
-      memoryCache = banners;
-      writeSession(banners);
+      publish(banners);
       return banners;
     })
     .finally(() => {
@@ -58,37 +71,45 @@ function fetchBanners() {
 
 // Active home-page hero banners set by the product admin. Returns [] until
 // loaded and whenever none are configured, so callers fall back to their
-// default hero.
+// default hero. Serves any cached snapshot immediately, then revalidates in the
+// background (and again whenever the tab regains focus) so admin changes to the
+// banner list — including reordering — propagate to the live site.
 export function useBanners() {
-  const [banners, setBanners] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [banners, setBanners] = useState(() => getCached() ?? []);
+  const [loading, setLoading] = useState(() => getCached() === null);
 
   useEffect(() => {
     let active = true;
+    const onChange = (next) => {
+      if (active) setBanners(next);
+    };
+    subscribers.add(onChange);
 
-    const hit = getCached();
-    if (hit) {
-      setBanners(hit);
-      setLoading(false);
-      return () => {
-        active = false;
-      };
-    }
+    const revalidate = () =>
+      fetchBanners()
+        .catch(() => {
+          // Keep whatever we last had on a transient failure.
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
 
-    setLoading(true);
-    fetchBanners()
-      .then((data) => {
-        if (active) setBanners(data);
-      })
-      .catch(() => {
-        if (active) setBanners([]);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    // Always revalidate on mount, even with a cache hit, so the carousel can't
+    // get stuck showing a stale snapshot from earlier in the session.
+    revalidate();
+
+    // Pick up admin edits when the operator switches back to the site tab.
+    const onFocus = () => {
+      if (document.visibilityState === 'visible') revalidate();
+    };
+    window.addEventListener('visibilitychange', onFocus);
+    window.addEventListener('focus', onFocus);
 
     return () => {
       active = false;
+      subscribers.delete(onChange);
+      window.removeEventListener('visibilitychange', onFocus);
+      window.removeEventListener('focus', onFocus);
     };
   }, []);
 
