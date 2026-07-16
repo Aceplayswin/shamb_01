@@ -5,12 +5,19 @@ from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from core import admin_services, game_admin_services, game_logging, game_services, services
+from core import (
+    admin_services,
+    bonus_services,
+    game_admin_services,
+    game_logging,
+    game_services,
+    services,
+)
 from core.ai import chat_respond, fraud_score, pytorch_version, welcome_call
 from core.game_services import GameError
 from core.geo import detect_geo_from_ip
 from core.middleware import require_auth
-from core.models import AiCallLog, Transaction, User, Wallet
+from core.models import AiCallLog, Transaction, User, UserSetting, Wallet
 from services.branding import get_branding
 
 # Game launch error codes -> HTTP status. Mirrors the legacy status_code set so
@@ -267,6 +274,7 @@ def register_otp(request):
             body['phone'],
             body['password'],
             body.get('countryCode', 'IN'),
+            referral_code=body.get('referralCode'),
         )
         return JsonResponse(result, status=201)
     except (KeyError, json.JSONDecodeError) as e:
@@ -397,6 +405,43 @@ def wallet_transactions(request):
         for t in txs
     ]
     return JsonResponse(data, safe=False)
+
+
+# --- Bonuses / Promotions (player-facing) ---
+@require_http_methods(['GET'])
+def promotions_list(request):
+    """Active, promotable bonuses for the public promotions page. Keyless."""
+    return JsonResponse(bonus_services.list_public_bonuses(), safe=False)
+
+
+@require_auth(['user'])
+@require_http_methods(['GET'])
+def my_bonuses(request):
+    """The signed-in player's awarded bonuses + wagering progress."""
+    return JsonResponse(bonus_services.list_user_bonuses(request.auth.sub), safe=False)
+
+
+@csrf_exempt
+@require_auth(['user'])
+@require_http_methods(['POST'])
+def claim_promo(request):
+    """Player redeems a promo code for its bonus."""
+    try:
+        body = _json_body(request)
+        return JsonResponse(bonus_services.claim_promo_code(request.auth.sub, body.get('code', '')))
+    except (KeyError, json.JSONDecodeError) as e:
+        return _error_response(e)
+    except ValueError as e:
+        return _error_response(e)
+
+
+@require_auth(['user'])
+@require_http_methods(['GET'])
+def my_referral(request):
+    """The player's shareable referral code + how many people they've referred."""
+    code = bonus_services.ensure_referral_code(request.auth.sub)
+    count = UserSetting.objects.filter(referred_by=request.auth.sub).count()
+    return JsonResponse({'referral_code': code, 'referred_count': count})
 
 
 # --- Games ---
@@ -823,6 +868,12 @@ def admin_bonuses(request):
     return JsonResponse(admin_services.list_admin_bonuses(), safe=False)
 
 
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_bonuses_stats(request):
+    return JsonResponse(admin_services.bonus_stats())
+
+
 @csrf_exempt
 @require_auth(['admin'])
 @require_http_methods(['POST'])
@@ -837,10 +888,61 @@ def admin_bonuses_create(request):
 
 @csrf_exempt
 @require_auth(['admin'])
-@require_http_methods(['PATCH'])
+@require_http_methods(['PATCH', 'DELETE'])
 def admin_bonuses_update(request, bonus_id):
     try:
+        if request.method == 'DELETE':
+            return JsonResponse(admin_services.delete_bonus(bonus_id))
         return JsonResponse(admin_services.update_bonus(bonus_id, _json_body(request)))
+    except Exception as e:
+        return _error_response(e)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_bonuses_duplicate(request, bonus_id):
+    try:
+        return JsonResponse(admin_services.duplicate_bonus(bonus_id), status=201)
+    except Exception as e:
+        return _error_response(e)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_bonuses_grant(request, bonus_id):
+    try:
+        body = _json_body(request)
+        return JsonResponse(admin_services.grant_bonus_to_user(
+            bonus_id,
+            int(body['userId']),
+            request.auth.sub,
+            amount=body.get('amount'),
+            notes=body.get('notes', ''),
+        ))
+    except (KeyError, json.JSONDecodeError) as e:
+        return _error_response(e)
+    except Exception as e:
+        return _error_response(e)
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_bonuses_issued(request):
+    bonus_id = request.GET.get('bonusId')
+    return JsonResponse(
+        admin_services.list_issued_bonuses(int(bonus_id) if bonus_id else None),
+        safe=False,
+    )
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_bonuses_revoke(request, user_bonus_id):
+    try:
+        return JsonResponse(admin_services.revoke_user_bonus(user_bonus_id))
     except Exception as e:
         return _error_response(e)
 

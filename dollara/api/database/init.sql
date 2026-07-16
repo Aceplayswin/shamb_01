@@ -36,6 +36,9 @@ CREATE TABLE IF NOT EXISTS user_settings (
   two_factor_secret VARCHAR(255),
   affiliate_id BIGINT UNSIGNED,
   agent_id BIGINT UNSIGNED,
+  -- Referral chain: this user's own shareable code + who referred them.
+  referral_code VARCHAR(20),
+  referred_by BIGINT UNSIGNED,
   fraud_score INT DEFAULT 0,
   is_demo BOOLEAN DEFAULT FALSE,
   demo_expires_at DATETIME,
@@ -52,6 +55,8 @@ CREATE TABLE IF NOT EXISTS user_settings (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_user_settings_user (user_id),
+  UNIQUE KEY uk_user_settings_referral_code (referral_code),
+  INDEX idx_user_settings_referred_by (referred_by),
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -147,34 +152,65 @@ CREATE TABLE IF NOT EXISTS bonuses (
   name VARCHAR(100) NOT NULL,
   display_title VARCHAR(150),
   description TEXT,
-  bonus_type ENUM('deposit', 'no_deposit', 'cashback', 'free_spins', 'referral', 'loyalty', 'reload') NOT NULL,
+  -- The trigger that awards this bonus. Each type is driven by a different money
+  -- event: joining (registration), deposit (admin confirms a deposit),
+  -- referral (a referred user registers / first-deposits), game/cashback
+  -- (net gameplay loss over a period), manual (admin pushes it to a user).
+  bonus_type ENUM('joining', 'deposit', 'referral', 'game', 'cashback', 'no_deposit', 'free_spins', 'loyalty', 'reload', 'manual') NOT NULL,
   value_type ENUM('percentage', 'fixed') NOT NULL,
-  value_amount DECIMAL(10,2) NOT NULL,
+  value_amount DECIMAL(18,2) NOT NULL,
+  -- Money gates. min_deposit / min_amount = threshold the driving amount must
+  -- meet; max_bonus_cap = ceiling on a single award; referral pays the referrer.
   min_deposit DECIMAL(18,2) DEFAULT 0,
   max_bonus_cap DECIMAL(18,2),
+  referrer_reward DECIMAL(18,2) DEFAULT 0,
   wagering_multiplier DECIMAL(5,2) DEFAULT 35,
+  -- Where a credited bonus lands: locked bonus balance (needs wagering) or the
+  -- withdrawable main balance.
+  credit_target ENUM('bonus', 'main') DEFAULT 'bonus',
   status ENUM('draft', 'active', 'paused', 'expired') DEFAULT 'draft',
   start_date DATETIME,
   end_date DATETIME,
   claim_method ENUM('auto', 'manual', 'code', 'opt_in') DEFAULT 'auto',
+  promo_code VARCHAR(40),
+  -- Per-bonus budget controls. per_user_limit = how many times one user may
+  -- receive it (NULL = unlimited); total_budget = money cap across all users
+  -- (NULL = uncapped); the *_awarded / *_claims counters accrue as it pays out.
+  per_user_limit INT,
+  total_budget DECIMAL(18,2),
+  total_awarded DECIMAL(18,2) DEFAULT 0,
+  total_claims INT DEFAULT 0,
+  bonus_validity_days INT DEFAULT 30,
   allowed_countries JSON,
   excluded_countries JSON,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_bonuses_type_status (bonus_type, status),
+  UNIQUE KEY uk_bonuses_promo_code (promo_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS user_bonuses (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   user_id BIGINT UNSIGNED NOT NULL,
-  bonus_id BIGINT UNSIGNED NOT NULL,
+  bonus_id BIGINT UNSIGNED,
   amount DECIMAL(18,2) NOT NULL,
   wagering_required DECIMAL(18,2) DEFAULT 0,
   wagering_completed DECIMAL(18,2) DEFAULT 0,
+  credit_target ENUM('bonus', 'main') DEFAULT 'bonus',
+  -- What awarded it, for auditing and duplicate-suppression.
+  source ENUM('joining', 'deposit', 'referral', 'game', 'cashback', 'promo', 'manual') NOT NULL DEFAULT 'manual',
+  transaction_id BIGINT UNSIGNED,
+  granted_by BIGINT UNSIGNED,
+  notes VARCHAR(255),
   status ENUM('active', 'completed', 'expired', 'forfeited') DEFAULT 'active',
   expires_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id),
-  FOREIGN KEY (bonus_id) REFERENCES bonuses(id)
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_user_bonuses_user (user_id),
+  INDEX idx_user_bonuses_bonus (bonus_id),
+  INDEX idx_user_bonuses_source (source),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (bonus_id) REFERENCES bonuses(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS game_providers (
@@ -467,11 +503,21 @@ VALUES
 ON DUPLICATE KEY UPDATE
     setting_value = VALUES(setting_value);
 
-INSERT INTO bonuses (name, display_title, bonus_type, value_type, value_amount, min_deposit, max_bonus_cap, wagering_multiplier, status, start_date, end_date, claim_method)
-VALUES (
-  'welcome100', 'Welcome Bonus ₹100', 'no_deposit', 'fixed', 100.00, 0.00, 100.00, 35.00,
-  'active', NOW(), DATE_ADD(NOW(), INTERVAL 365 DAY), 'auto'
-)
+INSERT INTO bonuses
+  (name, display_title, description, bonus_type, value_type, value_amount, min_deposit, max_bonus_cap, referrer_reward, wagering_multiplier, credit_target, status, start_date, end_date, claim_method, bonus_validity_days)
+VALUES
+  ('welcome100', 'Welcome Bonus ₹100', 'Instant bonus credited the moment you create your account.',
+   'joining', 'fixed', 100.00, 0.00, 100.00, 0.00, 35.00, 'bonus',
+   'active', NOW(), DATE_ADD(NOW(), INTERVAL 365 DAY), 'auto', 30),
+  ('deposit100', 'First Deposit 100% Match', 'Double your first deposit up to ₹5,000.',
+   'deposit', 'percentage', 100.00, 100.00, 5000.00, 0.00, 35.00, 'bonus',
+   'active', NOW(), DATE_ADD(NOW(), INTERVAL 365 DAY), 'auto', 30),
+  ('refer500', 'Refer & Earn ₹500', 'Earn ₹500 for every friend who joins and deposits with your code.',
+   'referral', 'fixed', 100.00, 500.00, 500.00, 500.00, 20.00, 'bonus',
+   'active', NOW(), DATE_ADD(NOW(), INTERVAL 365 DAY), 'auto', 30),
+  ('cashback10', 'Weekly 10% Cashback', 'Get 10% of your weekly net losses back as bonus.',
+   'cashback', 'percentage', 10.00, 0.00, 2000.00, 0.00, 10.00, 'bonus',
+   'draft', NOW(), DATE_ADD(NOW(), INTERVAL 365 DAY), 'manual', 30)
 ON DUPLICATE KEY UPDATE name = name;
 
 INSERT INTO game_providers (id, name, slug, is_active) VALUES
@@ -747,5 +793,56 @@ INSERT INTO games (provider_id, name, slug, category, game_uid, game_type, thumb
   (6, 'Go Lai Fu', 'go-lai-fu-a3584394', 'slots', 'a3584394182e8abce362d90c2f048c75', 'Slot Game', 'https://huidu-bucket.s3.ap-southeast-1.amazonaws.com/api/jdb/Go-Lai-Fu.png', FALSE, TRUE, TRUE, TRUE, 260),
   (7, 'SABA Sports', 'saba-sports-08ced9dd', 'sports', '08ced9dd788aed11ff3c7f387ae0f063', 'Sport', 'https://ossimg.tirangaagent.com/Tiranga/vendorlogo/vendorlogo_20240814202959vsy1.png', FALSE, TRUE, TRUE, TRUE, 261),
   (2, 'Esports', 'esports-4ee8e005', 'virtual_sports', '4ee8e0051a035b463b47c3c473ce317d', 'SportsGame', 'https://i.postimg.cc/FHHg66F4/Screenshot-2025-03-21-153241.png', FALSE, TRUE, TRUE, TRUE, 262);
+
+-- ---------------------------------------------------------------------------
+-- Idempotent upgrades for existing databases.
+--
+-- `CREATE TABLE IF NOT EXISTS` above never alters a table that already exists,
+-- so the full-control Bonus columns must be back-filled here. Each ADD COLUMN
+-- is guarded so re-running this file on a live DB is a no-op. Requires MySQL 5.7+
+-- / MariaDB 10.2+ (information_schema + prepared statements).
+-- ---------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS _dollara_add_column;
+DELIMITER $$
+CREATE PROCEDURE _dollara_add_column(
+  IN tbl VARCHAR(64), IN col VARCHAR(64), IN ddl VARCHAR(512)
+)
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = tbl AND COLUMN_NAME = col
+  ) THEN
+    SET @sql = CONCAT('ALTER TABLE `', tbl, '` ADD COLUMN ', ddl);
+    PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+  END IF;
+END$$
+DELIMITER ;
+
+-- bonuses: widen bonus_type enum, then add the control columns.
+ALTER TABLE bonuses
+  MODIFY bonus_type ENUM('joining', 'deposit', 'referral', 'game', 'cashback', 'no_deposit', 'free_spins', 'loyalty', 'reload', 'manual') NOT NULL,
+  MODIFY value_amount DECIMAL(18,2) NOT NULL;
+CALL _dollara_add_column('bonuses', 'referrer_reward',     "referrer_reward DECIMAL(18,2) DEFAULT 0 AFTER max_bonus_cap");
+CALL _dollara_add_column('bonuses', 'credit_target',       "credit_target ENUM('bonus','main') DEFAULT 'bonus' AFTER wagering_multiplier");
+CALL _dollara_add_column('bonuses', 'promo_code',          "promo_code VARCHAR(40) AFTER claim_method");
+CALL _dollara_add_column('bonuses', 'per_user_limit',      "per_user_limit INT AFTER promo_code");
+CALL _dollara_add_column('bonuses', 'total_budget',        "total_budget DECIMAL(18,2) AFTER per_user_limit");
+CALL _dollara_add_column('bonuses', 'total_awarded',       "total_awarded DECIMAL(18,2) DEFAULT 0 AFTER total_budget");
+CALL _dollara_add_column('bonuses', 'total_claims',        "total_claims INT DEFAULT 0 AFTER total_awarded");
+CALL _dollara_add_column('bonuses', 'bonus_validity_days', "bonus_validity_days INT DEFAULT 30 AFTER total_claims");
+
+-- user_bonuses: audit + duplicate-suppression columns.
+CALL _dollara_add_column('user_bonuses', 'credit_target',  "credit_target ENUM('bonus','main') DEFAULT 'bonus' AFTER wagering_completed");
+CALL _dollara_add_column('user_bonuses', 'source',         "source ENUM('joining','deposit','referral','game','cashback','promo','manual') NOT NULL DEFAULT 'manual' AFTER credit_target");
+CALL _dollara_add_column('user_bonuses', 'transaction_id', "transaction_id BIGINT UNSIGNED AFTER source");
+CALL _dollara_add_column('user_bonuses', 'granted_by',     "granted_by BIGINT UNSIGNED AFTER transaction_id");
+CALL _dollara_add_column('user_bonuses', 'notes',          "notes VARCHAR(255) AFTER granted_by");
+CALL _dollara_add_column('user_bonuses', 'updated_at',     "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+
+-- user_settings: referral chain.
+CALL _dollara_add_column('user_settings', 'referral_code', "referral_code VARCHAR(20) AFTER agent_id");
+CALL _dollara_add_column('user_settings', 'referred_by',   "referred_by BIGINT UNSIGNED AFTER referral_code");
+
+DROP PROCEDURE IF EXISTS _dollara_add_column;
 
 SET FOREIGN_KEY_CHECKS = 1;
