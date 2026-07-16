@@ -20,7 +20,6 @@ export default function Theme2Deposit() {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('');
   const [loading, setLoading] = useState(false);
-  const [confirmLoading, setConfirmLoading] = useState(false);
   const [result, setResult] = useState(null);
 
   const numAmount = parseFloat(amount) || 0;
@@ -47,25 +46,6 @@ export default function Theme2Deposit() {
       }
       alert(msg);
     } finally { setLoading(false); }
-  };
-
-  const confirmDeposit = async () => {
-    if (!result?.transactionId) return;
-    setConfirmLoading(true);
-    try {
-      await api(`/api/v1/wallet/deposit/${result.transactionId}/confirm`, {
-        method: 'POST',
-        body: JSON.stringify({ referenceNumber: `DEV-${Date.now()}` }),
-      });
-      alert('Deposit confirmed and credited to your wallet.');
-      setResult(null);
-      setAmount('');
-      setMethod('');
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Confirm failed');
-    } finally {
-      setConfirmLoading(false);
-    }
   };
 
   return (
@@ -115,13 +95,12 @@ export default function Theme2Deposit() {
         {loading ? 'Processing...' : 'Proceed to Payment'}
       </button>
       {result && (
-        <>
-          <p className="mt-4 text-center text-sm text-emerald-400">Deposit initiated. ID: {result.transactionId}</p>
-          <button type="button" onClick={confirmDeposit} disabled={confirmLoading}
-            className="mt-3 w-full rounded-xl border border-amber-400/40 py-3 font-semibold text-amber-400 disabled:opacity-50">
-            {confirmLoading ? 'Confirming…' : 'Confirm deposit (dev)'}
-          </button>
-        </>
+        <div className="mt-4 rounded-xl border border-amber-400/30 bg-amber-500/10 p-4 text-center">
+          <p className="text-sm font-semibold text-amber-300">Deposit submitted — pending approval</p>
+          <p className="mt-1 text-xs text-slate-400">
+            Request ID: {result.transactionId}. Your wallet will be credited once our team confirms the payment.
+          </p>
+        </div>
       )}
     </div>
   );

@@ -22,7 +22,6 @@ export default function Theme4Deposit() {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('');
   const [loading, setLoading] = useState(false);
-  const [confirmLoading, setConfirmLoading] = useState(false);
   const [result, setResult] = useState(null);
 
   const numAmount = parseFloat(amount) || 0;
@@ -53,25 +52,6 @@ export default function Theme4Deposit() {
       alert(msg);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const confirmDeposit = async () => {
-    if (!result?.transactionId) return;
-    setConfirmLoading(true);
-    try {
-      await api(`/api/v1/wallet/deposit/${result.transactionId}/confirm`, {
-        method: 'POST',
-        body: JSON.stringify({ referenceNumber: `DEV-${Date.now()}` }),
-      });
-      alert('Deposit confirmed and credited to your wallet.');
-      setResult(null);
-      setAmount('');
-      setMethod('');
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Confirm failed');
-    } finally {
-      setConfirmLoading(false);
     }
   };
 
@@ -138,17 +118,12 @@ export default function Theme4Deposit() {
         {loading ? 'Processing...' : 'Proceed to Payment'}
       </button>
       {result && (
-        <>
-          <p className="mt-4 text-center text-sm text-[#1c8a52]">Deposit initiated. ID: {result.transactionId}</p>
-          <button
-            type="button"
-            onClick={confirmDeposit}
-            disabled={confirmLoading}
-            className="mt-3 w-full rounded border border-[#0e7480]/40 bg-white py-3 font-black text-[#0e7480] shadow-sm disabled:opacity-50"
-          >
-            {confirmLoading ? 'Confirming…' : 'Confirm deposit (dev)'}
-          </button>
-        </>
+        <div className="mt-4 rounded border border-[#0e7480]/30 bg-[#eefafa] p-4 text-center">
+          <p className="text-sm font-black text-[#0e7480]">Deposit submitted — pending approval</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Request ID: {result.transactionId}. Your wallet will be credited once our team confirms the payment.
+          </p>
+        </div>
       )}
     </T4FormPage>
   );

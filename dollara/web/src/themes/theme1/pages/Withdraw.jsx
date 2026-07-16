@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, Landmark, Smartphone, Bitcoin, Loader2, Clock } from 'lucide-react';
+import { Landmark, Smartphone, Bitcoin, Clock } from 'lucide-react';
 import { api } from '@/services/api';
 import { useAuthStore } from '@/store/auth';
 
@@ -19,14 +19,6 @@ const METHODS = [
   { id: 'bank_transfer', label: 'Bank Transfer', desc: 'NEFT / IMPS to your account', icon: Landmark },
   { id: 'upi', label: 'UPI', desc: 'Instant to your UPI ID', icon: Smartphone },
   { id: 'crypto', label: 'Crypto', desc: 'USDT (TRC20)', icon: Bitcoin },
-];
-
-const PIPELINE = [
-  { key: 'account_verification', label: 'Account verification' },
-  { key: 'duplicate_check', label: 'Duplicate & fraud check' },
-  { key: 'wagering_compliance', label: 'Wagering compliance' },
-  { key: 'final_approval', label: 'Final approval' },
-  { key: 'payment_processing', label: 'Payment processing' },
 ];
 
 const STEPS = ['Amount', 'Details', 'Review'];
@@ -39,7 +31,6 @@ export default function Theme1Withdraw() {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('bank_transfer');
   const [dest, setDest] = useState({ accountName: '', accountNumber: '', ifsc: '', upiId: '', address: '' });
-  const [stageDone, setStageDone] = useState(0);
   const [transactionId, setTransactionId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -60,7 +51,7 @@ export default function Theme1Withdraw() {
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
-  const stepIndex = { amount: 0, details: 1, review: 2, processing: 2, done: 2 }[step];
+  const stepIndex = { amount: 0, details: 1, review: 2, done: 2 }[step];
 
   const destValid = () => {
     if (method === 'bank_transfer') return dest.accountName && dest.accountNumber.length >= 6 && dest.ifsc;
@@ -78,7 +69,9 @@ export default function Theme1Withdraw() {
 
   const setPct = (p) => setAmount(String(Math.floor(available * p)));
 
-  // Submit → API locks the funds and runs the pipeline → animate the stages.
+  // Submit → API locks the funds and creates a PENDING withdrawal that waits for
+  // admin approval. We refresh the wallet (funds now show as locked) and show the
+  // submitted/pending confirmation.
   const submit = async () => {
     setError(null);
     setSubmitting(true);
@@ -88,19 +81,8 @@ export default function Theme1Withdraw() {
         body: JSON.stringify({ amount: numAmount, paymentMethod: method }),
       });
       setTransactionId(res.transactionId);
-      setStep('processing');
-      setStageDone(0);
-      PIPELINE.forEach((_, i) => {
-        timers.current.push(
-          setTimeout(() => {
-            setStageDone(i + 1);
-            if (i === PIPELINE.length - 1) {
-              refreshSession();
-              timers.current.push(setTimeout(() => setStep('done'), 600));
-            }
-          }, (i + 1) * 700)
-        );
-      });
+      await refreshSession();
+      setStep('done');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Withdrawal failed');
     } finally {
@@ -115,7 +97,6 @@ export default function Theme1Withdraw() {
     setAmount('');
     setDest({ accountName: '', accountNumber: '', ifsc: '', upiId: '', address: '' });
     setTransactionId(null);
-    setStageDone(0);
     setError(null);
   };
 
@@ -124,7 +105,7 @@ export default function Theme1Withdraw() {
   return (
     <main className="mx-auto max-w-xl flex-1 px-4 py-8">
       <h1 className="text-2xl font-bold">Withdraw</h1>
-      {step !== 'done' && step !== 'processing' && <Stepper steps={STEPS} current={stepIndex} />}
+      {step !== 'done' && <Stepper steps={STEPS} current={stepIndex} />}
 
       {error && (
         <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
@@ -280,42 +261,16 @@ export default function Theme1Withdraw() {
         </div>
       )}
 
-      {/* ── Processing pipeline ── */}
-      {step === 'processing' && (
-        <section className="card-glass mt-8 p-8">
-          <p className="text-center text-lg font-semibold">Processing your withdrawal</p>
-          <p className="mt-1 text-center text-sm text-slate-400">
-            ₹{numAmount.toLocaleString('en-IN')} · running verification checks
-          </p>
-          <ul className="mt-6 space-y-3">
-            {PIPELINE.map((s, i) => {
-              const done = i < stageDone;
-              const active = i === stageDone;
-              return (
-                <li key={s.key} className="flex items-center gap-3">
-                  {done ? (
-                    <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-green-400" />
-                  ) : active ? (
-                    <Loader2 className="h-5 w-5 flex-shrink-0 animate-spin text-brand-400" />
-                  ) : (
-                    <span className="h-5 w-5 flex-shrink-0 rounded-full border border-white/15" />
-                  )}
-                  <span className={done || active ? 'text-white' : 'text-slate-500'}>{s.label}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
 
-      {/* ── Done ── */}
+      {/* ── Done (submitted, pending admin approval) ── */}
       {step === 'done' && (
         <div className="mt-8 space-y-6">
           <section className="card-glass p-8 text-center">
-            <CheckCircle2 className="mx-auto h-14 w-14 text-green-400" />
+            <Clock className="mx-auto h-14 w-14 text-brand-400" />
             <h2 className="mt-4 text-xl font-bold">Withdrawal requested</h2>
             <p className="mt-1 text-sm text-slate-400">
-              Your request is approved and queued for payout. Expect funds in 2–24 hours.
+              Your request is pending approval. The amount is held from your balance and will be
+              paid out once our team approves it — or returned if it&apos;s rejected.
             </p>
             <div className="mt-6 space-y-2 rounded-xl border border-white/5 bg-white/[0.02] p-4 text-left text-sm">
               <Row label="Amount" value={`₹${numAmount.toLocaleString('en-IN')}`} />

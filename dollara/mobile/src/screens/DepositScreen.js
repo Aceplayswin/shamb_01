@@ -17,7 +17,6 @@ const METHODS = [
 
 export function DepositScreen({ navigation }) {
   const deposit = useWalletStore((s) => s.deposit);
-  const confirmDeposit = useWalletStore((s) => s.confirmDeposit);
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('');
   const [loading, setLoading] = useState(false);
@@ -36,25 +35,11 @@ export function DepositScreen({ navigation }) {
       const res = await deposit(num, method);
       setTxId(res.transactionId);
       Alert.alert(
-        'Deposit initiated',
-        `Transaction ${res.transactionId}\n\nTap confirm below to credit instantly (demo).`,
+        'Deposit submitted',
+        `Request ${res.transactionId} is pending approval.\n\nYour wallet will be credited once our team confirms the payment.`,
       );
     } catch (e) {
       Alert.alert('Failed', e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const confirm = async () => {
-    if (!txId) return;
-    setLoading(true);
-    try {
-      const res = await confirmDeposit(txId);
-      Alert.alert('Credited', `₹${res.credited.toLocaleString('en-IN')} added to wallet`);
-      navigation.goBack();
-    } catch (e) {
-      Alert.alert('Confirm failed', e.message);
     } finally {
       setLoading(false);
     }
@@ -106,7 +91,9 @@ export function DepositScreen({ navigation }) {
 
       <Button title="Proceed" onPress={submit} loading={loading} style={styles.mt} />
       {txId ? (
-        <Button title="Confirm deposit (demo)" variant="secondary" onPress={confirm} loading={loading} />
+        <Text style={styles.pending}>
+          Deposit submitted — pending approval. You&apos;ll be credited once the team confirms it.
+        </Text>
       ) : null}
     </ScrollView>
   );
@@ -144,4 +131,11 @@ const styles = StyleSheet.create({
   methodLabel: { color: colors.text, fontWeight: '600' },
   methodDesc: { color: colors.textDim, fontSize: 12 },
   mt: { marginTop: spacing.lg },
+  pending: {
+    color: colors.textDim,
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: spacing.md,
+    lineHeight: 18,
+  },
 });

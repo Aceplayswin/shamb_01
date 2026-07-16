@@ -405,6 +405,20 @@ CREATE TABLE IF NOT EXISTS platform_settings (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Home-page promo banners shown in the hero carousel. Managed by this product's
+-- own admin panel (/admin -> Banners), not by Super Admin. Only rows with
+-- status='active' are served to the public frontends, ordered by sort_order.
+CREATE TABLE IF NOT EXISTS banners (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(150),
+  image_url VARCHAR(500) NOT NULL,
+  link_url VARCHAR(500),
+  sort_order INT NOT NULL DEFAULT 0,
+  status ENUM('draft', 'active') DEFAULT 'draft',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS login_history (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   user_id BIGINT UNSIGNED,

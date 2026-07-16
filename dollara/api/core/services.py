@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from core.auth_jwt import sign_token
 from core.models import (
+    Banner,
     Bet,
     Game,
     OtpVerification,
@@ -269,8 +270,16 @@ def get_wallet(user_id: int) -> dict:
     }
 
 
-def create_deposit(user_id: int, amount: float, payment_method: str, currency: str = 'INR') -> dict:
+def create_deposit(
+    user_id: int,
+    amount: float,
+    payment_method: str,
+    currency: str = 'INR',
+    reference_number: str | None = None,
+) -> dict:
     _require_player(user_id)
+    if amount <= 0:
+        raise ValueError('Amount must be greater than zero')
     Wallet.objects.get_or_create(user_id=user_id, defaults={'currency': currency})
     with tenant_atomic():
         tx = Transaction.objects.create(
@@ -280,18 +289,29 @@ def create_deposit(user_id: int, amount: float, payment_method: str, currency: s
             currency=currency,
             status=Transaction.Status.PENDING,
             payment_method=payment_method,
+            reference_number=(reference_number or None),
         )
+    # No balance change here — the deposit stays PENDING until the product admin
+    # confirms it (see confirm_deposit). Nothing is credited on the user's action.
     return {'transactionId': tx.id, 'status': 'pending'}
 
 
 def confirm_deposit(transaction_id: int, reference_number: str) -> dict:
+    """Admin action: credit a pending deposit to the user's main balance.
+
+    Idempotent — a deposit that is not PENDING is never credited twice.
+    """
     with tenant_atomic():
         tx = Transaction.objects.select_for_update().get(
             id=transaction_id, type=Transaction.TxType.DEPOSIT
         )
+        if tx.status != Transaction.Status.PENDING:
+            raise ValueError(f'Deposit already {tx.status}')
         amount = tx.amount
         tx.status = Transaction.Status.COMPLETED
-        tx.reference_number = reference_number
+        # Keep any reference the user already supplied; only fill it if missing.
+        if reference_number and not tx.reference_number:
+            tx.reference_number = reference_number
         tx.save(update_fields=['status', 'reference_number', 'updated_at'])
         Wallet.objects.filter(user_id=tx.user_id).update(
             main_balance=F('main_balance') + amount
@@ -300,10 +320,13 @@ def confirm_deposit(transaction_id: int, reference_number: str) -> dict:
 
 
 def reject_deposit(transaction_id: int, reason: str) -> dict:
+    """Admin action: reject a pending deposit. No balance is ever credited."""
     with tenant_atomic():
         tx = Transaction.objects.select_for_update().get(
             id=transaction_id, type=Transaction.TxType.DEPOSIT
         )
+        if tx.status != Transaction.Status.PENDING:
+            raise ValueError(f'Deposit already {tx.status}')
         tx.status = Transaction.Status.REJECTED
         tx.notes = reason or tx.notes
         tx.save(update_fields=['status', 'notes', 'updated_at'])
@@ -338,19 +361,49 @@ def create_withdrawal(user_id: int, amount: float, payment_method: str) -> dict:
         ):
             WithdrawalStage.objects.create(transaction=tx, stage=stage, status='pending')
 
-    process_withdrawal_stages(tx.id)
+    # The withdrawal now waits for the product admin to approve or reject it
+    # (see admin_withdrawal_approve / admin_withdrawal_reject). The amount is
+    # already moved to locked_balance above so the user can't spend it meanwhile.
     return {'transactionId': tx.id, 'status': 'pending'}
 
 
-def process_withdrawal_stages(transaction_id: int) -> dict:
-    auto_approve = True
-    status = 'passed' if auto_approve else 'review'
-    WithdrawalStage.objects.filter(transaction_id=transaction_id).update(status=status)
-    if auto_approve:
-        Transaction.objects.filter(id=transaction_id).update(
-            status=Transaction.Status.PROCESSING
+def approve_withdrawal(transaction_id: int) -> dict:
+    """Admin action: pay out a pending withdrawal by removing the held funds.
+
+    The amount was locked at request time; approving debits it from
+    locked_balance (the money leaves the wallet). Idempotent.
+    """
+    with tenant_atomic():
+        tx = Transaction.objects.select_for_update().get(
+            id=transaction_id, type=Transaction.TxType.WITHDRAWAL
         )
-    return {'autoApproved': auto_approve}
+        if tx.status in (Transaction.Status.COMPLETED, Transaction.Status.REJECTED):
+            raise ValueError(f'Withdrawal already {tx.status}')
+        tx.status = Transaction.Status.COMPLETED
+        tx.save(update_fields=['status', 'updated_at'])
+        Wallet.objects.filter(user_id=tx.user_id).update(
+            locked_balance=F('locked_balance') - tx.amount
+        )
+    return {'approved': True}
+
+
+def reject_withdrawal(transaction_id: int, reason: str) -> dict:
+    """Admin action: reject a pending withdrawal and return the held funds to
+    the user's spendable (main) balance. Idempotent."""
+    with tenant_atomic():
+        tx = Transaction.objects.select_for_update().get(
+            id=transaction_id, type=Transaction.TxType.WITHDRAWAL
+        )
+        if tx.status in (Transaction.Status.COMPLETED, Transaction.Status.REJECTED):
+            raise ValueError(f'Withdrawal already {tx.status}')
+        tx.status = Transaction.Status.REJECTED
+        tx.notes = reason or tx.notes
+        tx.save(update_fields=['status', 'notes', 'updated_at'])
+        Wallet.objects.filter(user_id=tx.user_id).update(
+            locked_balance=F('locked_balance') - tx.amount,
+            main_balance=F('main_balance') + tx.amount,
+        )
+    return {'rejected': True}
 
 
 def list_games(
@@ -396,6 +449,20 @@ def list_games(
             'provider_slug': g.provider.slug if g.provider else None,
         }
         for g in qs
+    ]
+
+
+def list_active_banners():
+    """Public home-page hero banners the product admin has set to active,
+    in display order. Returns [] when none are configured."""
+    return [
+        {
+            'id': b.id,
+            'title': b.title,
+            'image_url': b.image_url,
+            'link_url': b.link_url,
+        }
+        for b in Banner.objects.filter(status='active').order_by('sort_order', 'id')
     ]
 
 

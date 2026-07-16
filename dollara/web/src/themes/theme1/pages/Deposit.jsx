@@ -1,14 +1,15 @@
 'use client';
 
-// Deposit — a proper cashier flow: choose amount → choose method → pay through
-// the gateway sheet → credited confirmation. The payment step is handled by the
-// shared <PaymentGateway/> (sandbox today; real provider plugs in there). The
-// wallet is only credited after the confirm endpoint succeeds.
+// Deposit — a cashier flow: choose amount → choose method → pay through the
+// gateway sheet → the request is submitted for review. The payment step is
+// handled by the shared <PaymentGateway/> (sandbox today; real provider plugs in
+// there). The wallet is NOT credited on the user's action — the deposit stays
+// pending until the product admin confirms it from the admin panel.
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, Smartphone, Landmark, CreditCard, Bitcoin } from 'lucide-react';
+import { Clock, Smartphone, Landmark, CreditCard, Bitcoin } from 'lucide-react';
 import { api } from '@/services/api';
 import { useAuthStore } from '@/store/auth';
 import { PaymentGateway } from '@/components/payments/PaymentGateway';
@@ -26,7 +27,7 @@ const STEPS = ['Amount', 'Method', 'Payment'];
 
 export default function Theme1Deposit() {
   const router = useRouter();
-  const { token, isHydrated, hydrate, wallet, refreshSession } = useAuthStore();
+  const { token, isHydrated, hydrate } = useAuthStore();
 
   const [step, setStep] = useState('amount'); // amount | method | pay | done
   const [amount, setAmount] = useState('');
@@ -72,14 +73,12 @@ export default function Theme1Deposit() {
     }
   };
 
-  // Called by the gateway once "payment" succeeds — confirm credits the wallet.
+  // Called by the gateway once the user completes "payment". This does NOT
+  // credit the wallet — it just records the reference the user supplied so the
+  // admin can match it. The deposit created in startPayment stays pending until
+  // an admin confirms it.
   const confirmPayment = async (reference) => {
-    const res = await api(`/api/v1/wallet/deposit/${transactionId}/confirm`, {
-      method: 'POST',
-      body: JSON.stringify({ referenceNumber: reference }),
-    });
-    await refreshSession();
-    setReceipt({ credited: res.credited ?? numAmount, reference });
+    setReceipt({ amount: numAmount, reference });
     setStep('done');
   };
 
@@ -221,20 +220,21 @@ export default function Theme1Deposit() {
         </div>
       )}
 
-      {/* ── Done ── */}
+      {/* ── Done (submitted, pending admin approval) ── */}
       {step === 'done' && receipt && (
         <div className="mt-8 space-y-6">
           <section className="card-glass p-8 text-center">
-            <CheckCircle2 className="mx-auto h-14 w-14 text-green-400" />
-            <h2 className="mt-4 text-xl font-bold">Deposit successful</h2>
+            <Clock className="mx-auto h-14 w-14 text-brand-400" />
+            <h2 className="mt-4 text-xl font-bold">Deposit submitted</h2>
             <p className="mt-1 text-sm text-slate-400">
-              ₹{Number(receipt.credited).toLocaleString('en-IN')} has been credited to your wallet.
+              ₹{Number(receipt.amount).toLocaleString('en-IN')} is awaiting confirmation. Your wallet
+              will be credited once our team approves the payment.
             </p>
             <div className="mt-6 space-y-2 rounded-xl border border-white/5 bg-white/[0.02] p-4 text-left text-sm">
-              <Row label="Amount credited" value={`₹${Number(receipt.credited).toLocaleString('en-IN')}`} />
+              <Row label="Amount" value={`₹${Number(receipt.amount).toLocaleString('en-IN')}`} />
               <Row label="Reference" value={receipt.reference} />
               <Row label="Transaction ID" value={`#${transactionId}`} />
-              <Row label="New balance" value={`₹${(wallet?.available ?? 0).toLocaleString('en-IN')}`} last />
+              <Row label="Status" value="Pending approval" last />
             </div>
           </section>
           <div className="flex gap-3">

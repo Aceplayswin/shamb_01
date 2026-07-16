@@ -4,8 +4,10 @@ import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useBranding } from '@/hooks/useBranding';
+import { useBanners } from '@/hooks/useBanners';
 import { useGameCatalog } from '@/hooks/useGameCatalog';
 import { useGameSearch } from '@/hooks/useGameSearch';
+import BannerCarousel from '@/components/BannerCarousel';
 import {
   filterByCategory,
   filterByProvider,
@@ -196,6 +198,7 @@ function Accordion({ question, answer, isOpen, onClick }) {
 
 export default function Theme1Home() {
   const branding = useBranding();
+  const { banners } = useBanners();
   const router = useRouter();
   const searchParams = useSearchParams();
   const searchQuery = (searchParams.get('q') ?? '').trim();
@@ -246,7 +249,12 @@ export default function Theme1Home() {
         <div className="mx-auto max-w-[1400px] space-y-12 px-4 py-6 xl:px-6">
           {!isFiltering && (
             <>
-              {/* Bento hero — one feature panel + a stacked side column */}
+              {banners.length > 0 ? (
+                /* Admin-controlled hero banner carousel — replaces the default
+                   bento hero whenever the product admin has active banners. */
+                <BannerCarousel banners={banners} />
+              ) : (
+              /* Bento hero — one feature panel + a stacked side column */
               <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 {/* Primary welcome panel */}
                 <div className="ring-grad relative flex min-h-[320px] flex-col justify-between overflow-hidden rounded-3xl bg-panel-strong bg-mesh-amber p-8 sm:p-10 lg:col-span-2">
@@ -300,6 +308,7 @@ export default function Theme1Home() {
                   </div>
                 </div>
               </section>
+              )}
 
               {/* Ticker */}
               <div className="flex items-center overflow-hidden rounded-2xl border border-hairline/[0.07] bg-panel/60">

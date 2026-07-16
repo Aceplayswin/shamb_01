@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from core.models import (
     AiCallLog,
+    Banner,
     Bet,
     Bonus,
     Game,
@@ -309,6 +310,55 @@ def update_bonus(bonus_id: int, data: dict) -> dict:
     if updates:
         Bonus.objects.filter(id=bonus_id).update(**updates)
     return {'updated': True}
+
+
+def _serialize_banner(b: Banner) -> dict:
+    return {
+        'id': b.id,
+        'title': b.title,
+        'image_url': b.image_url,
+        'link_url': b.link_url,
+        'sort_order': b.sort_order,
+        'status': b.status,
+        'created_at': b.created_at.isoformat() if b.created_at else None,
+    }
+
+
+def list_admin_banners() -> list[dict]:
+    return [
+        _serialize_banner(b)
+        for b in Banner.objects.order_by('sort_order', 'id')
+    ]
+
+
+def create_banner(data: dict) -> dict:
+    banner = Banner.objects.create(
+        title=(data.get('title') or None),
+        image_url=data['image_url'],
+        link_url=(data.get('link_url') or None),
+        sort_order=int(data.get('sort_order', 0) or 0),
+        status=data.get('status', 'draft'),
+    )
+    return {'id': banner.id}
+
+
+def update_banner(banner_id: int, data: dict) -> dict:
+    allowed = {'title', 'image_url', 'link_url', 'sort_order', 'status'}
+    updates = {k: v for k, v in data.items() if k in allowed}
+    # Normalize blank optional strings to NULL and coerce sort_order to int.
+    for key in ('title', 'link_url'):
+        if key in updates and not updates[key]:
+            updates[key] = None
+    if 'sort_order' in updates:
+        updates['sort_order'] = int(updates['sort_order'] or 0)
+    if updates:
+        Banner.objects.filter(id=banner_id).update(**updates)
+    return {'updated': True}
+
+
+def delete_banner(banner_id: int) -> dict:
+    Banner.objects.filter(id=banner_id).delete()
+    return {'deleted': True}
 
 
 def list_platform_settings() -> list[dict]:
