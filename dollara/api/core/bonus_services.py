@@ -7,8 +7,28 @@ the public claim/read endpoints.
 
 Every award goes through :func:`_award_bonus`, which enforces the per-bonus
 controls the admin configured — active window, per-user limit, total budget,
-credit target, wagering multiplier — so "fully controllable" holds no matter how
-the bonus was triggered.
+deposit sequence, player type, scope, wagering multiplier — so "fully
+controllable" holds no matter how the bonus was triggered.
+
+The money model is *pending reward*, not free credit:
+
+  1. The player deposits; the deposit alone lands in their real balance.
+  2. Claiming a bonus writes a UserBonus row with
+     ``wagering_required = amount x multiplier``. Nothing is credited.
+  3. The player bets their own real money. Each settled bet adds its stake to
+     ``wagering_completed`` via :func:`record_wagering` — turnover is counted,
+     not wins or losses.
+  4. Once ``wagering_completed >= target`` the bonus flips to 'completed' and
+     only then is the amount paid into the withdrawable main balance.
+
+Targets are provider-weighted: :class:`BonusProvider` overrides the flat
+multiplier per game provider, so a near-coin-flip live-casino table can demand
+far more turnover than a slot before the same bonus clears.
+
+Rows written before this model shipped carry ``award_mode='locked'``: they were
+credited into ``bonus_balance`` up front and burn down ``wallet.wagering_balance``
+as the player bets. They are deliberately left on that path to settle out, and
+:func:`record_wagering` ignores them.
 """
 
 import secrets
@@ -18,7 +38,9 @@ from decimal import Decimal
 from django.db.models import F
 from django.utils import timezone
 
-from core.models import Bonus, Transaction, User, UserBonus, UserSetting, Wallet
+from core.models import (
+    Bonus, BonusProvider, Transaction, User, UserBonus, UserSetting, Wallet,
+)
 from tenants.state import tenant_atomic
 
 ZERO = Decimal('0')
@@ -49,7 +71,67 @@ def _times_awarded(user_id: int, bonus_id: int) -> int:
     return UserBonus.objects.filter(user_id=user_id, bonus_id=bonus_id).count()
 
 
-def _eligibility_error(bonus: Bonus, user_id: int, gross_amount: Decimal) -> str | None:
+def deposit_ordinal(user_id: int) -> int:
+    """Which lifetime deposit the user's latest confirmed deposit is (1-based).
+
+    Counts completed deposit transactions. The deposit flow marks the row
+    COMPLETED *before* firing the bonus engine, so during an award this returns
+    the ordinal of the deposit being processed.
+    """
+    return Transaction.objects.filter(
+        user_id=user_id,
+        type=Transaction.TxType.DEPOSIT,
+        status=Transaction.Status.COMPLETED,
+    ).count()
+
+
+def _sequence_error(bonus: Bonus, ordinal: int | None) -> str | None:
+    """Enforce the is_first/second/third_deposit gates.
+
+    No flag set = the bonus is not sequence-restricted. Several flags set = it
+    fires on any of those ordinals.
+    """
+    wanted = {
+        n
+        for n, on in ((1, bonus.is_first_deposit), (2, bonus.is_second_deposit), (3, bonus.is_third_deposit))
+        if on
+    }
+    if not wanted:
+        return None
+    if ordinal is None:
+        return 'This bonus is only available on a qualifying deposit.'
+    if ordinal not in wanted:
+        labels = {1: 'first', 2: 'second', 3: 'third'}
+        which = ' or '.join(labels[n] for n in sorted(wanted))
+        return f'This bonus applies only to your {which} deposit.'
+    return None
+
+
+def _new_player_error(bonus: Bonus, user_id: int) -> str | None:
+    """Enforce is_new_player_only against the account's registration date."""
+    if not bonus.is_new_player_only:
+        return None
+    user = User.objects.filter(id=user_id).only('created_at').first()
+    if not user:
+        return 'Account not found.'
+    window = timedelta(days=bonus.new_player_days or 0)
+    if window and timezone.now() - user.created_at > window:
+        return 'This bonus is for newly registered accounts only.'
+    return None
+
+
+def _scope_error(bonus: Bonus, user_id: int) -> str | None:
+    """A 'targeted' bonus is issued to exactly one account."""
+    if bonus.scope != Bonus.Scope.TARGETED:
+        return None
+    if bonus.target_user_id != user_id:
+        return 'This bonus is not available on your account.'
+    return None
+
+
+def _eligibility_error(
+    bonus: Bonus, user_id: int, gross_amount: Decimal, ordinal: int | None = None
+) -> str | None:
     """Return a human reason the user cannot receive ``bonus`` right now, else None."""
     if not _is_live(bonus):
         return 'This bonus is not currently active.'
@@ -58,7 +140,11 @@ def _eligibility_error(bonus: Bonus, user_id: int, gross_amount: Decimal) -> str
     left = _budget_left(bonus)
     if left is not None and left <= ZERO:
         return 'This bonus is fully subscribed.'
-    return None
+    return (
+        _scope_error(bonus, user_id)
+        or _new_player_error(bonus, user_id)
+        or _sequence_error(bonus, ordinal)
+    )
 
 
 def _resolve_amount(bonus: Bonus, gross_amount: Decimal) -> Decimal:
@@ -96,12 +182,15 @@ def _award_bonus(
     credit_target: str | None = None,
     validity_days: int | None = None,
 ) -> UserBonus | None:
-    """Credit ``amount`` to the player and write the ledger + wallet transaction.
+    """Record ``amount`` as a pending reward the player must wager to unlock.
 
-    Lands the money in the locked bonus balance or the withdrawable main balance
-    per ``credit_target``, records the wagering requirement, and bumps the
-    bonus's budget counters. Returns the created ``UserBonus`` (or None if the
-    resolved amount was not positive).
+    No money moves here. The bonus is stored with a wagering target and stays
+    ``pending`` until :func:`record_wagering` sees enough turnover, at which
+    point it is credited to the withdrawable main balance. Budget counters are
+    bumped at award time so a reserved bonus cannot be double-promised.
+
+    Returns the created ``UserBonus`` (or None if the resolved amount was not
+    positive).
     """
     amount = amount.quantize(Decimal('0.01'))
     if amount <= ZERO:
@@ -118,26 +207,9 @@ def _award_bonus(
     expires_at = timezone.now() + timedelta(days=days) if days else None
 
     with tenant_atomic():
-        wallet, _ = Wallet.objects.select_for_update().get_or_create(
-            user_id=user_id, defaults={'currency': 'INR'}
-        )
-        if target == Bonus.CreditTarget.MAIN:
-            Wallet.objects.filter(user_id=user_id).update(
-                main_balance=F('main_balance') + amount
-            )
-        else:
-            Wallet.objects.filter(user_id=user_id).update(
-                bonus_balance=F('bonus_balance') + amount,
-                wagering_balance=F('wagering_balance') + wagering_required,
-            )
-
-        tx = Transaction.objects.create(
-            user_id=user_id,
-            type=Transaction.TxType.BONUS_CREDIT,
-            amount=amount,
-            status=Transaction.Status.COMPLETED,
-            notes=notes or (bonus.display_title or bonus.name if bonus else 'Bonus'),
-        )
+        # Materialise the wallet so downstream reads never race a missing row,
+        # but leave every balance untouched — the reward is not money yet.
+        Wallet.objects.get_or_create(user_id=user_id, defaults={'currency': 'INR'})
 
         user_bonus = UserBonus.objects.create(
             user_id=user_id,
@@ -145,11 +217,13 @@ def _award_bonus(
             amount=amount,
             wagering_required=wagering_required,
             credit_target=target,
+            award_mode=UserBonus.AwardMode.PENDING,
             source=source,
-            transaction_id=tx.id,
+            # The money event that drove the award (the deposit), for auditing.
+            transaction_id=transaction_id,
             granted_by=granted_by,
             notes=notes,
-            status=UserBonus.Status.ACTIVE,
+            status=UserBonus.Status.PENDING,
             expires_at=expires_at,
         )
 
@@ -159,7 +233,115 @@ def _award_bonus(
                 total_claims=F('total_claims') + 1,
             )
 
+    # A zero requirement is already satisfied — pay it out immediately rather
+    # than stranding it until the player happens to place a bet.
+    if wagering_required <= ZERO:
+        _credit_cleared_bonus(user_bonus.id)
+        user_bonus.refresh_from_db()
+
     return user_bonus
+
+
+# --- wagering progress -----------------------------------------------------
+
+def _effective_multiplier(bonus: Bonus | None, provider_id: int | None) -> Decimal:
+    """The wagering multiplier that applies to a bet on ``provider_id``.
+
+    A ``BonusProvider`` row for this provider overrides the bonus's flat
+    multiplier — that is the risk-balancing lever (slots 15x, live casino 50x).
+    Anything without an override falls back to the flat rate.
+    """
+    if bonus is None:
+        return ZERO
+    if provider_id is not None:
+        rule = BonusProvider.objects.filter(
+            bonus_id=bonus.id, provider_id=provider_id
+        ).only('wagering_multiplier').first()
+        if rule is not None:
+            return rule.wagering_multiplier
+    return bonus.wagering_multiplier or ZERO
+
+
+def _credit_cleared_bonus(user_bonus_id: int) -> bool:
+    """Pay out a bonus whose wagering target is met. Idempotent.
+
+    Moves the reward into the withdrawable main balance and writes the
+    BONUS_CREDIT transaction — the only point at which a pending bonus becomes
+    real money. Returns True if this call performed the credit.
+    """
+    with tenant_atomic():
+        ub = UserBonus.objects.select_for_update().filter(id=user_bonus_id).first()
+        # Re-check under the lock: a concurrent callback may have paid it already.
+        if ub is None or ub.status != UserBonus.Status.PENDING:
+            return False
+
+        Wallet.objects.filter(user_id=ub.user_id).update(
+            main_balance=F('main_balance') + ub.amount
+        )
+        tx = Transaction.objects.create(
+            user_id=ub.user_id,
+            type=Transaction.TxType.BONUS_CREDIT,
+            amount=ub.amount,
+            status=Transaction.Status.COMPLETED,
+            notes=ub.notes or (
+                (ub.bonus.display_title or ub.bonus.name) if ub.bonus else 'Bonus'
+            ),
+        )
+        ub.status = UserBonus.Status.COMPLETED
+        ub.completed_at = timezone.now()
+        ub.transaction_id = tx.id
+        ub.save(update_fields=['status', 'completed_at', 'transaction_id', 'updated_at'])
+    return True
+
+
+def record_wagering(
+    user_id: int, bet_amount: Decimal, provider_id: int | None = None
+) -> list[int]:
+    """Credit ``bet_amount`` of turnover against the player's pending bonuses.
+
+    Called from bet settlement. Every rupee staked counts toward the target
+    regardless of whether the round won or lost. When a bonus's target is
+    reached it is paid straight into the withdrawable balance.
+
+    The target is provider-weighted: a bonus with per-provider multipliers is
+    judged against the multiplier for the provider this bet was placed on, per
+    the wagering spec. Returns the ids of bonuses cleared by this bet.
+    """
+    if bet_amount is None or bet_amount <= ZERO:
+        return []
+
+    now = timezone.now()
+    pending = list(
+        UserBonus.objects.filter(
+            user_id=user_id,
+            status=UserBonus.Status.PENDING,
+            award_mode=UserBonus.AwardMode.PENDING,
+        ).select_related('bonus')
+    )
+    cleared: list[int] = []
+
+    for ub in pending:
+        # Lapsed rewards stop accruing and are closed out rather than paid.
+        if ub.expires_at and ub.expires_at < now:
+            UserBonus.objects.filter(
+                id=ub.id, status=UserBonus.Status.PENDING
+            ).update(status=UserBonus.Status.EXPIRED)
+            continue
+
+        # F() so simultaneous callbacks for the same player cannot lose turnover.
+        UserBonus.objects.filter(id=ub.id).update(
+            wagering_completed=F('wagering_completed') + bet_amount
+        )
+        completed = UserBonus.objects.values_list(
+            'wagering_completed', flat=True
+        ).get(id=ub.id)
+
+        mult = _effective_multiplier(ub.bonus, provider_id)
+        target = (ub.amount * mult).quantize(Decimal('0.01'))
+        if completed >= target and _credit_cleared_bonus(ub.id):
+            cleared.append(ub.id)
+
+    return cleared
 
 
 def _first_active_bonus(bonus_type: str) -> Bonus | None:
@@ -196,7 +378,9 @@ def award_deposit_bonus(user_id: int, deposit_amount: Decimal, transaction_id: i
         return None
     if deposit_amount < (bonus.min_deposit or ZERO):
         return None
-    if _eligibility_error(bonus, user_id, deposit_amount):
+    # The deposit row is already COMPLETED by the time we run, so this counts
+    # the deposit currently being confirmed.
+    if _eligibility_error(bonus, user_id, deposit_amount, ordinal=deposit_ordinal(user_id)):
         return None
     amount = _resolve_amount(bonus, deposit_amount)
     return _award_bonus(
@@ -314,7 +498,9 @@ def claim_promo_code(user_id: int, code: str, deposit_amount: Decimal = ZERO) ->
     bonus = Bonus.objects.filter(promo_code=code.strip().upper()).first()
     if not bonus:
         raise ValueError('Invalid promo code.')
-    reason = _eligibility_error(bonus, user_id, deposit_amount)
+    reason = _eligibility_error(
+        bonus, user_id, deposit_amount, ordinal=deposit_ordinal(user_id)
+    )
     if reason:
         raise ValueError(reason)
     amount = _resolve_amount(bonus, deposit_amount)
@@ -362,18 +548,29 @@ def list_public_bonuses() -> list[dict]:
 def list_user_bonuses(user_id: int) -> list[dict]:
     """A player's own awarded bonuses + wagering progress."""
     rows = UserBonus.objects.filter(user_id=user_id).select_related('bonus').order_by('-created_at')
-    return [
-        {
+    out = []
+    for ub in rows:
+        required = ub.wagering_required or ZERO
+        remaining = max(required - ub.wagering_completed, ZERO)
+        out.append({
             'id': ub.id,
             'title': (ub.bonus.display_title or ub.bonus.name) if ub.bonus else (ub.notes or 'Bonus'),
             'amount': float(ub.amount),
             'source': ub.source,
             'status': ub.status,
-            'wagering_required': float(ub.wagering_required),
+            'wagering_required': float(required),
             'wagering_completed': float(ub.wagering_completed),
+            'wagering_remaining': float(remaining),
+            # Progress bar for the bonus page.
+            'progress_percent': (
+                float(min(ub.wagering_completed / required, Decimal('1')) * 100)
+                if required > ZERO else 100.0
+            ),
+            # True while the reward is owed but not yet spendable.
+            'is_pending': ub.status == UserBonus.Status.PENDING,
             'credit_target': ub.credit_target,
             'expires_at': ub.expires_at.isoformat() if ub.expires_at else None,
+            'completed_at': ub.completed_at.isoformat() if ub.completed_at else None,
             'created_at': ub.created_at.isoformat(),
-        }
-        for ub in rows
-    ]
+        })
+    return out

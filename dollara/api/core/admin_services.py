@@ -13,6 +13,7 @@ from core.models import (
     Banner,
     Bet,
     Bonus,
+    BonusProvider,
     Game,
     GameProvider,
     GameRound,
@@ -320,11 +321,17 @@ _BONUS_DECIMAL_FIELDS = (
     'value_amount', 'min_deposit', 'max_bonus_cap', 'referrer_reward',
     'wagering_multiplier', 'total_budget',
 )
-_BONUS_INT_FIELDS = ('per_user_limit', 'total_claims', 'bonus_validity_days')
+_BONUS_INT_FIELDS = (
+    'per_user_limit', 'total_claims', 'bonus_validity_days', 'new_player_days',
+    'target_user_id',
+)
 _BONUS_DATE_FIELDS = ('start_date', 'end_date')
 _BONUS_TEXT_FIELDS = (
     'name', 'display_title', 'description', 'bonus_type', 'value_type',
-    'credit_target', 'status', 'claim_method',
+    'credit_target', 'status', 'claim_method', 'scope',
+)
+_BONUS_BOOL_FIELDS = (
+    'is_first_deposit', 'is_second_deposit', 'is_third_deposit', 'is_new_player_only',
 )
 
 
@@ -359,6 +366,21 @@ def _serialize_bonus(b: Bonus) -> dict:
         'credit_target': b.credit_target,
         'status': b.status,
         'claim_method': b.claim_method,
+        'is_first_deposit': b.is_first_deposit,
+        'is_second_deposit': b.is_second_deposit,
+        'is_third_deposit': b.is_third_deposit,
+        'is_new_player_only': b.is_new_player_only,
+        'new_player_days': b.new_player_days,
+        'scope': b.scope,
+        'target_user_id': b.target_user_id,
+        'provider_multipliers': [
+            {
+                'provider_id': r.provider_id,
+                'provider': r.provider.name,
+                'wagering_multiplier': float(r.wagering_multiplier),
+            }
+            for r in b.provider_rules.select_related('provider').all()
+        ],
         'promo_code': b.promo_code,
         'per_user_limit': b.per_user_limit,
         'total_budget': float(b.total_budget) if b.total_budget is not None else None,
@@ -406,6 +428,12 @@ def _clean_bonus_payload(data: dict) -> dict:
     for key in _BONUS_DATE_FIELDS:
         if key in data:
             updates[key] = _parse_dt(data[key])
+    for key in _BONUS_BOOL_FIELDS:
+        if key in data:
+            updates[key] = bool(data[key])
+    # A mass bonus must not keep a stale target pointing at one account.
+    if updates.get('scope') == Bonus.Scope.MASS:
+        updates['target_user_id'] = None
     if 'promo_code' in data:
         updates['promo_code'] = _normalise_promo(data['promo_code'])
     return updates
@@ -455,10 +483,12 @@ def duplicate_bonus(bonus_id: int) -> dict:
 
 
 def grant_bonus_to_user(bonus_id: int, user_id: int, admin_id: int, amount=None, notes: str = '') -> dict:
-    """Manual grant: push a bonus straight to a player's wallet from the panel.
+    """Manual grant: issue a bonus to a player from the panel.
 
-    Honors the bonus's credit target + wagering. ``amount`` overrides the
-    configured value (for one-off goodwill credits)."""
+    Like every other award this lands as a pending reward carrying the bonus's
+    wagering requirement — it reaches the player's withdrawable balance once
+    they clear it, not on grant. ``amount`` overrides the configured value (for
+    one-off goodwill credits)."""
     bonus = Bonus.objects.get(id=bonus_id)
     if not User.objects.filter(id=user_id, role=User.Role.USER).exists():
         raise ValueError('Player account not found')
@@ -474,6 +504,37 @@ def grant_bonus_to_user(bonus_id: int, user_id: int, admin_id: int, amount=None,
     if not awarded:
         raise ValueError('Amount must be greater than zero')
     return {'granted': True, 'amount': float(awarded.amount)}
+
+
+def set_bonus_provider_multipliers(bonus_id: int, rules: list[dict]) -> dict:
+    """Replace a bonus's per-provider wagering multipliers.
+
+    ``rules`` is [{provider_id, wagering_multiplier}, ...]. Providers left out
+    fall back to the bonus's flat ``wagering_multiplier``; passing an empty list
+    clears all overrides. Existing pending bonuses pick the new rates up on
+    their next bet — targets are evaluated per callback, not frozen at award.
+    """
+    bonus = Bonus.objects.get(id=bonus_id)
+    cleaned = []
+    for rule in rules or []:
+        provider_id = int(rule['provider_id'])
+        multiplier = Decimal(str(rule['wagering_multiplier']))
+        if multiplier < 0:
+            raise ValueError('Wagering multiplier cannot be negative')
+        if not GameProvider.objects.filter(id=provider_id).exists():
+            raise ValueError(f'Unknown provider {provider_id}')
+        cleaned.append((provider_id, multiplier))
+
+    with tenant_atomic():
+        keep = [pid for pid, _ in cleaned]
+        BonusProvider.objects.filter(bonus_id=bonus.id).exclude(provider_id__in=keep).delete()
+        for provider_id, multiplier in cleaned:
+            BonusProvider.objects.update_or_create(
+                bonus_id=bonus.id,
+                provider_id=provider_id,
+                defaults={'wagering_multiplier': multiplier},
+            )
+    return {'bonus_id': bonus.id, 'rules': len(cleaned)}
 
 
 def list_issued_bonuses(bonus_id: int | None = None, limit: int = 200) -> list[dict]:
@@ -500,15 +561,20 @@ def list_issued_bonuses(bonus_id: int | None = None, limit: int = 200) -> list[d
 
 
 def revoke_user_bonus(user_bonus_id: int) -> dict:
-    """Forfeit an active awarded bonus and claw the locked funds back.
+    """Forfeit an awarded bonus that has not paid out yet.
 
-    Only touches still-locked bonus-balance credits; already-withdrawable (main
-    balance) or completed grants are left alone."""
+    A pending reward is not in any balance, so revoking it is a pure status
+    change. Legacy 'locked' grants were credited into the bonus balance up
+    front and still need the clawback. Completed grants are withdrawable money
+    and are never touched."""
     with tenant_atomic():
         ub = UserBonus.objects.select_for_update().get(id=user_bonus_id)
-        if ub.status != UserBonus.Status.ACTIVE:
-            raise ValueError('Only active bonuses can be revoked')
-        if ub.credit_target == Bonus.CreditTarget.BONUS:
+        if ub.status not in (UserBonus.Status.PENDING, UserBonus.Status.ACTIVE):
+            raise ValueError('Only bonuses that have not paid out can be revoked')
+        if (
+            ub.award_mode == UserBonus.AwardMode.LOCKED
+            and ub.credit_target == Bonus.CreditTarget.BONUS
+        ):
             Wallet.objects.filter(user_id=ub.user_id).update(
                 bonus_balance=F('bonus_balance') - ub.amount,
                 wagering_balance=F('wagering_balance') - ub.wagering_required,

@@ -25,7 +25,7 @@ from django.conf import settings
 from django.db import IntegrityError
 from django.utils import timezone
 
-from core import game_logging
+from core import bonus_services, game_logging
 from core.game_schemas import CallbackPayload, LaunchRequest
 from core.models import (
     GameRound,
@@ -526,6 +526,21 @@ def _settle(user_id: int, cb: CallbackPayload) -> SettlementResult:
                 notes=f'{"Win" if net > 0 else "Loss"} on {cb.game_uid} '
                       f'(bet={cb.bet_amount}, win={cb.win_amount})',
             )
+
+        # Wagering: every rupee staked counts toward any pending bonus target,
+        # win or lose. Weighted by the provider the bet was placed on. A bonus
+        # that clears here is credited to the withdrawable balance immediately.
+        # Guarded because a fault in the bonus engine must never roll back a
+        # settlement the provider has already applied on their side.
+        if cb.bet_amount > ZERO:
+            try:
+                bonus_services.record_wagering(
+                    user_id,
+                    cb.bet_amount,
+                    provider_id=game.provider_id if game else None,
+                )
+            except Exception as exc:
+                game_logging.wagering_failed(user_id, cb.serial_number, str(exc))
 
         return SettlementResult(result='settled', credit_amount=wallet.main_balance)
 

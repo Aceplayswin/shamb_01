@@ -442,6 +442,10 @@ class Bonus(models.Model):
         CODE = 'code', 'Promo code'
         OPT_IN = 'opt_in', 'Opt in'
 
+    class Scope(models.TextChoices):
+        MASS = 'mass', 'All eligible players'
+        TARGETED = 'targeted', 'Single account'
+
     id = models.BigAutoField(primary_key=True)
     name = models.CharField(max_length=100)
     display_title = models.CharField(max_length=150, null=True, blank=True)
@@ -450,6 +454,14 @@ class Bonus(models.Model):
     value_type = models.CharField(max_length=20, choices=ValueType.choices)
     value_amount = models.DecimalField(max_digits=18, decimal_places=2)
     min_deposit = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    # Deposit-sequence gates. None set = any deposit qualifies; setting several
+    # makes the bonus fire on any of those ordinals.
+    is_first_deposit = models.BooleanField(default=False)
+    is_second_deposit = models.BooleanField(default=False)
+    is_third_deposit = models.BooleanField(default=False)
+    # Restricts the bonus to accounts registered within new_player_days.
+    is_new_player_only = models.BooleanField(default=False)
+    new_player_days = models.IntegerField(default=7)
     max_bonus_cap = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
     referrer_reward = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     wagering_multiplier = models.DecimalField(max_digits=5, decimal_places=2, default=35)
@@ -462,6 +474,8 @@ class Bonus(models.Model):
     claim_method = models.CharField(
         max_length=10, choices=ClaimMethod.choices, default=ClaimMethod.AUTO
     )
+    scope = models.CharField(max_length=10, choices=Scope.choices, default=Scope.MASS)
+    target_user_id = models.BigIntegerField(null=True, blank=True)
     promo_code = models.CharField(max_length=40, null=True, blank=True)
     per_user_limit = models.IntegerField(null=True, blank=True)
     total_budget = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
@@ -488,10 +502,18 @@ class UserBonus(models.Model):
         MANUAL = 'manual', 'Manual'
 
     class Status(models.TextChoices):
+        PENDING = 'pending', 'Pending — wagering in progress'
         ACTIVE = 'active', 'Active'
         COMPLETED = 'completed', 'Completed'
         EXPIRED = 'expired', 'Expired'
         FORFEITED = 'forfeited', 'Forfeited'
+
+    class AwardMode(models.TextChoices):
+        # Legacy: credited into bonus_balance at award time, burns down
+        # wallet.wagering_balance. Only pre-existing rows carry this.
+        LOCKED = 'locked', 'Locked balance (legacy)'
+        # Current: owed but uncredited until wagering_completed hits the target.
+        PENDING = 'pending', 'Pending reward'
 
     id = models.BigAutoField(primary_key=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, db_column='user_id')
@@ -502,17 +524,46 @@ class UserBonus(models.Model):
     wagering_required = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     wagering_completed = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     credit_target = models.CharField(max_length=10, default='bonus')
+    award_mode = models.CharField(
+        max_length=10, choices=AwardMode.choices, default=AwardMode.LOCKED
+    )
     source = models.CharField(max_length=20, choices=Source.choices, default=Source.MANUAL)
     transaction_id = models.BigIntegerField(null=True, blank=True)
     granted_by = models.BigIntegerField(null=True, blank=True)
     notes = models.CharField(max_length=255, null=True, blank=True)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     expires_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'user_bonuses'
+
+
+class BonusProvider(models.Model):
+    """A per-provider wagering multiplier override for one bonus.
+
+    Risk balancing: a slot provider (high house edge) can clear at 15x while a
+    live-casino provider (near coin-flip) demands 50x, so a player cannot grind
+    the requirement cheaply on low-edge games. Absent a row for the provider a
+    bet falls back to ``Bonus.wagering_multiplier``.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+    bonus = models.ForeignKey(
+        Bonus, on_delete=models.CASCADE, db_column='bonus_id', related_name='provider_rules'
+    )
+    provider = models.ForeignKey(
+        GameProvider, on_delete=models.CASCADE, db_column='provider_id'
+    )
+    wagering_multiplier = models.DecimalField(max_digits=6, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'bonus_providers'
+        unique_together = (('bonus', 'provider'),)
 
 
 class PlatformSetting(models.Model):

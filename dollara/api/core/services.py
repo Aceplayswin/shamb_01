@@ -367,9 +367,13 @@ def get_wallet_breakdown(user_id: int) -> dict:
     _require_player(user_id)
     base = get_wallet(user_id)
 
-    # --- Active bonuses grouped by source (only money still in play) ---
+    # --- Outstanding bonuses grouped by source (rewards not yet paid out) ---
+    # 'pending' = owed once wagering clears; 'active' = legacy locked credits.
     bonus_rows = (
-        UserBonus.objects.filter(user_id=user_id, status=UserBonus.Status.ACTIVE)
+        UserBonus.objects.filter(
+            user_id=user_id,
+            status__in=(UserBonus.Status.PENDING, UserBonus.Status.ACTIVE),
+        )
         .values('source')
         .annotate(amount=Sum('amount'))
     )

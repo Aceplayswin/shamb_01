@@ -111,6 +111,18 @@ def duplicate(user_id, game_uid, serial_number, reason) -> None:
     )
 
 
+def wagering_failed(user_id, serial_number, issue) -> None:
+    """Turnover could not be applied to the player's pending bonuses.
+
+    The round itself settled — only the bonus progress is affected, so the
+    player may need the wagering re-applied for this round manually.
+    """
+    _emit(
+        logging.ERROR, 'wagering_failed',
+        user=user_id, serial=serial_number, issue=issue,
+    )
+
+
 def rejected(serial_number, member_account, game_uid, issue) -> None:
     """A callback could not be settled (bad payload, unknown account, no wallet)."""
     _emit(

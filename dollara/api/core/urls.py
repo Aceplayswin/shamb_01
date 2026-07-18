@@ -78,6 +78,7 @@ urlpatterns = [
     path('admin/bonuses/<int:bonus_id>', views.admin_bonuses_update),
     path('admin/bonuses/<int:bonus_id>/duplicate', views.admin_bonuses_duplicate),
     path('admin/bonuses/<int:bonus_id>/grant', views.admin_bonuses_grant),
+    path('admin/bonuses/<int:bonus_id>/providers', views.admin_bonuses_providers),
     path('admin/banners', views.admin_banners),
     path('admin/banners/create', views.admin_banners_create),
     path('admin/banners/<int:banner_id>', views.admin_banners_update),

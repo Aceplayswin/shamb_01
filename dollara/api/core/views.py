@@ -1007,6 +1007,22 @@ def admin_bonuses_grant(request, bonus_id):
         return _error_response(e)
 
 
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_bonuses_providers(request, bonus_id):
+    """Set the per-provider wagering multipliers for one bonus."""
+    try:
+        body = _json_body(request)
+        return JsonResponse(admin_services.set_bonus_provider_multipliers(
+            bonus_id, body.get('rules') or [],
+        ))
+    except (KeyError, json.JSONDecodeError) as e:
+        return _error_response(e)
+    except Exception as e:
+        return _error_response(e)
+
+
 @require_auth(['admin'])
 @require_http_methods(['GET'])
 def admin_bonuses_issued(request):
