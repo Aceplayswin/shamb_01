@@ -41,7 +41,7 @@ const PRIMARY = [
   { label: 'Casino', href: NAV_GAME_LINKS.casino, icon: Dices },
   { label: 'Slots', href: NAV_GAME_LINKS.slots, icon: Cherry },
   { label: 'Fantasy', href: NAV_GAME_LINKS.fantasy, icon: Gamepad2 },
-  { label: 'Promos', href: '#', icon: Gift },
+  { label: 'Promos', href: '/promotions', icon: Gift },
 ];
 
 // Specific table/live games map to their broad category route plus a name
@@ -64,7 +64,7 @@ const MOBILE_TABS_BASE = [
   { label: 'Home', href: '/', icon: Home },
   { label: 'Casino', href: NAV_GAME_LINKS.casino, icon: Dices },
   { label: 'Sports', href: NAV_GAME_LINKS.sports, icon: Trophy },
-  { label: 'Promos', href: '#', icon: Gift },
+  { label: 'Promos', href: '/promotions', icon: Gift },
 ];
 
 function RailItem({ item }) {

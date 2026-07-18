@@ -177,6 +177,9 @@ export default function Theme1Settings() {
             </div>
           </section>
 
+          {/* ---- Security ---- */}
+          <ChangePassword />
+
           {/* ---- Save bar ---- */}
           <div className="sticky bottom-4 z-10 mt-6">
             {status && (
@@ -208,6 +211,114 @@ export default function Theme1Settings() {
         </>
       )}
     </main>
+  );
+}
+
+/* ----------------------------- Change password ---------------------------- */
+
+const EMPTY_PASSWORDS = { current: '', next: '', confirm: '' };
+
+function ChangePassword() {
+  const [form, setForm] = useState(EMPTY_PASSWORDS);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState(null);
+
+  const set = (key, value) => {
+    setForm((f) => ({ ...f, [key]: value }));
+    setStatus(null);
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (form.next !== form.confirm) {
+      setStatus({ type: 'err', text: 'New passwords do not match' });
+      return;
+    }
+    if (form.next.length < 6) {
+      setStatus({ type: 'err', text: 'New password must be at least 6 characters' });
+      return;
+    }
+    setSaving(true);
+    try {
+      await api('/api/v1/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          currentPassword: form.current,
+          newPassword: form.next,
+        }),
+      });
+      setForm(EMPTY_PASSWORDS);
+      setStatus({ type: 'ok', text: 'Password changed' });
+    } catch (err) {
+      setStatus({ type: 'err', text: err.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="mt-5 card-glass p-6">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+        Security
+      </h2>
+      <p className="mt-1 text-xs text-slate-500">
+        Change the password you use to sign in.
+      </p>
+
+      <form onSubmit={submit} className="mt-4 space-y-4">
+        <PasswordField
+          label="Current password"
+          value={form.current}
+          autoComplete="current-password"
+          onChange={(v) => set('current', v)}
+        />
+        <PasswordField
+          label="New password"
+          value={form.next}
+          autoComplete="new-password"
+          onChange={(v) => set('next', v)}
+        />
+        <PasswordField
+          label="Confirm new password"
+          value={form.confirm}
+          autoComplete="new-password"
+          onChange={(v) => set('confirm', v)}
+        />
+
+        {status && (
+          <p
+            className={`text-sm ${
+              status.type === 'ok' ? 'text-green-400' : 'text-red-400'
+            }`}
+          >
+            {status.text}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={saving || !form.current || !form.next || !form.confirm}
+          className="w-full rounded-xl border border-white/15 py-3 text-sm font-semibold text-white transition hover:bg-white/5 disabled:opacity-50"
+        >
+          {saving ? 'Updating…' : 'Change password'}
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function PasswordField({ label, value, onChange, autoComplete }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-white">{label}</label>
+      <input
+        type="password"
+        value={value}
+        autoComplete={autoComplete}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-2 w-full rounded-lg border border-white/10 bg-surface-700 px-4 py-3 text-white outline-none transition focus:border-brand-500/60"
+      />
+    </div>
   );
 }
 

@@ -61,22 +61,47 @@ class ProviderConfig:
         return f'{self.callback_base_url}{path}'
 
 
-def get_config() -> ProviderConfig:
-    """Build the provider config from settings, validating required fields."""
+# Per-provider override keys (as stored on the ``game_providers`` row) mapped to
+# the ProviderConfig field they replace. Blank/NULL values are ignored, so a
+# provider only overrides what it actually integrates differently.
+_OVERRIDE_FIELDS = (
+    'agency_uid',
+    'aes_secret_key',
+    'player_prefix',
+    'server_url',
+    'callback_path',
+    'currency_code',
+)
+
+
+def get_config(overrides: dict | None = None) -> ProviderConfig:
+    """Build the provider config from settings, applying per-provider overrides.
+
+    ``overrides`` is a plain dict taken off a ``GameProvider`` row (see
+    ``core.repositories.GameRepository.provider_overrides``) — this module never
+    touches the ORM. Any key that is missing or blank keeps the platform-wide
+    value from ``settings.GAME_PROVIDER``, so a vendor integrated on its own
+    agency account (a separate lottery provider) can be configured in isolation
+    without disturbing the rest of the catalog.
+    """
     raw = settings.GAME_PROVIDER
-    cfg = ProviderConfig(
-        agency_uid=raw['AGENCY_UID'],
-        aes_secret_key=raw['AES_SECRET_KEY'],
-        player_prefix=raw['PLAYER_PREFIX'],
-        server_url=raw['SERVER_URL'],
-        callback_base_url=raw['CALLBACK_BASE_URL'],
-        callback_path=raw.get('CALLBACK_PATH', '/api/v1/games/callback'),
-        home_url=raw['HOME_URL'],
-        currency_code=raw['CURRENCY_CODE'],
-        default_language=raw['DEFAULT_LANGUAGE'],
-        http_timeout=raw['HTTP_TIMEOUT'],
-    )
-    return cfg
+    values = {
+        'agency_uid': raw['AGENCY_UID'],
+        'aes_secret_key': raw['AES_SECRET_KEY'],
+        'player_prefix': raw['PLAYER_PREFIX'],
+        'server_url': raw['SERVER_URL'],
+        'callback_base_url': raw['CALLBACK_BASE_URL'],
+        'callback_path': raw.get('CALLBACK_PATH', '/api/v1/games/callback'),
+        'home_url': raw['HOME_URL'],
+        'currency_code': raw['CURRENCY_CODE'],
+        'default_language': raw['DEFAULT_LANGUAGE'],
+        'http_timeout': raw['HTTP_TIMEOUT'],
+    }
+    for field in _OVERRIDE_FIELDS:
+        value = (overrides or {}).get(field)
+        if value not in (None, ''):
+            values[field] = value.rstrip('/') if field == 'server_url' else value
+    return ProviderConfig(**values)
 
 
 DEFAULT_LAUNCH_PATH = '/game/v1'
@@ -90,14 +115,20 @@ def normalize_launch_path(path: str | None) -> str:
     return raw if raw.startswith('/') else f'/{raw}'
 
 
-def _launch_path() -> str:
+def _launch_path(overrides: dict | None = None) -> str:
+    """Launch path for this provider, falling back to the platform default."""
+    provider_path = (overrides or {}).get('launch_path')
+    if provider_path:
+        return normalize_launch_path(provider_path)
     return normalize_launch_path(getattr(settings, 'GAME_LAUNCH_PATH', DEFAULT_LAUNCH_PATH))
 
 
-def aggregator_launch_url(cfg: ProviderConfig | None = None) -> str:
+def aggregator_launch_url(
+    cfg: ProviderConfig | None = None, overrides: dict | None = None
+) -> str:
     """Full outbound launch URL (server base + path), for logging and diagnostics."""
-    c = cfg or get_config()
-    return f'{c.server_url.rstrip("/")}{_launch_path()}'
+    c = cfg or get_config(overrides)
+    return f'{c.server_url.rstrip("/")}{_launch_path(overrides)}'
 
 
 def _is_placeholder_server_url(url: str) -> bool:
@@ -118,9 +149,9 @@ def _use_mock_launch(cfg: ProviderConfig) -> bool:
     return False
 
 
-def mock_launch_url(*, game_uid: str) -> str:
+def mock_launch_url(*, game_uid: str, overrides: dict | None = None) -> str:
     """Local/dev launch page when the real aggregator is unavailable."""
-    cfg = get_config()
+    cfg = get_config(overrides)
     qs = urlencode({'game_uid': game_uid})
     return f'{cfg.callback_base_url}/api/v1/games/mock-launch?{qs}'
 
@@ -194,8 +225,7 @@ def _key_bytes(secret: str) -> bytes:
 
 def encrypt(plaintext: str, secret: str | None = None) -> str:
     """AES-256-ECB encrypt and base64-encode a JSON/text payload."""
-    cfg = get_config()
-    key = _key_bytes(secret if secret is not None else cfg.aes_secret_key)
+    key = _key_bytes(secret if secret is not None else get_config().aes_secret_key)
     cipher = Cipher(algorithms.AES(key), modes.ECB())
     encryptor = cipher.encryptor()
     padded = _pkcs7_pad(plaintext.encode('utf-8'))
@@ -205,8 +235,7 @@ def encrypt(plaintext: str, secret: str | None = None) -> str:
 
 def decrypt(payload_b64: str, secret: str | None = None) -> str:
     """Base64-decode and AES-256-ECB decrypt to the original text."""
-    cfg = get_config()
-    key = _key_bytes(secret if secret is not None else cfg.aes_secret_key)
+    key = _key_bytes(secret if secret is not None else get_config().aes_secret_key)
     cipher = Cipher(algorithms.AES(key), modes.ECB())
     decryptor = cipher.decryptor()
     ct = base64.b64decode(payload_b64)
@@ -225,17 +254,22 @@ def decrypt_json(payload_b64: str, secret: str | None = None) -> dict:
 
 # --- Outbound: launch a game session ---
 
-def build_member_account(user_id: int | str) -> str:
+def build_member_account(user_id: int | str, overrides: dict | None = None) -> str:
     """Namespace our internal user id into the aggregator member_account."""
-    cfg = get_config()
-    return f'{cfg.player_prefix}{user_id}'
+    return f'{get_config(overrides).player_prefix}{user_id}'
 
 
-def strip_member_account(member_account: str) -> str:
-    """Reverse of build_member_account: recover the internal user id string."""
-    cfg = get_config()
-    prefix = cfg.player_prefix
-    if prefix and member_account.startswith(prefix):
+def strip_member_account(member_account: str, extra_prefixes: tuple = ()) -> str:
+    """Reverse of build_member_account: recover the internal user id string.
+
+    A callback can arrive from any integrated provider, so every configured
+    prefix (the platform one plus each provider's own) is a candidate. The
+    longest matching prefix wins so ``LOTTO_`` is not mistaken for ``LO``.
+    """
+    candidates = [get_config().player_prefix, *extra_prefixes]
+    matched = [p for p in candidates if p and member_account.startswith(p)]
+    if matched:
+        prefix = max(matched, key=len)
         return member_account[len(prefix):]
     return member_account
 
@@ -248,16 +282,19 @@ def request_launch_url(
     currency_code: str | None = None,
     language: str | None = None,
     platform: str = 'web',
+    overrides: dict | None = None,
 ) -> str:
     """Call the aggregator launch endpoint and return the game_launch_url.
 
     Builds the AES-encrypted payload envelope, POSTs it, and unwraps the
-    response. Raises :class:`ProviderError` on transport failure or a non-zero
-    aggregator code, and :class:`ProviderConfigError` if env is incomplete.
+    response. ``overrides`` selects a separately-integrated provider's own
+    agency account/keys/URL. Raises :class:`ProviderError` on transport failure
+    or a non-zero aggregator code, and :class:`ProviderConfigError` if the
+    configuration is incomplete.
     """
-    cfg = get_config()
+    cfg = get_config(overrides)
     if _use_mock_launch(cfg):
-        return mock_launch_url(game_uid=game_uid)
+        return mock_launch_url(game_uid=game_uid, overrides=overrides)
 
     _require_launch_config(cfg)
 
@@ -265,7 +302,7 @@ def request_launch_url(
     payload = {
         'agency_uid': cfg.agency_uid,
         'timestamp': timestamp,
-        'member_account': build_member_account(user_id),
+        'member_account': build_member_account(user_id, overrides),
         'game_uid': game_uid,
         'credit_amount': str(credit_amount),
         'currency_code': currency_code or cfg.currency_code,
@@ -277,10 +314,10 @@ def request_launch_url(
     envelope = {
         'agency_uid': cfg.agency_uid,
         'timestamp': timestamp,
-        'payload': encrypt_json(payload),
+        'payload': encrypt_json(payload, cfg.aes_secret_key),
     }
 
-    launch_url = aggregator_launch_url(cfg)
+    launch_url = aggregator_launch_url(cfg, overrides)
     try:
         resp = requests.post(
             launch_url,
@@ -310,7 +347,7 @@ def request_launch_url(
     # Some aggregators return the inner payload encrypted, others plain. Handle both.
     if isinstance(launch_payload, str):
         try:
-            launch_payload = decrypt_json(launch_payload)
+            launch_payload = decrypt_json(launch_payload, cfg.aes_secret_key)
         except Exception as exc:  # pragma: no cover - defensive
             raise ProviderError('Failed to decrypt launch payload') from exc
 
@@ -322,26 +359,42 @@ def request_launch_url(
 
 # --- Inbound: decrypt a callback, build the encrypted ack ---
 
-def parse_callback(envelope: dict) -> dict:
+def parse_callback(envelope: dict, extra_secrets: tuple = ()) -> tuple[dict, str | None]:
     """Decrypt an inbound callback envelope into its plain fields.
 
     Accepts either ``{"payload": "<encrypted>"}`` or an already-plain dict.
-    Raises :class:`ProviderError` if the payload cannot be decrypted/parsed.
+    Returns ``(payload, secret_used)`` — the key that decrypted it, so the ack
+    can be encrypted back with the *same* key.
+
+    Which provider sent a callback is only knowable after decryption, so every
+    configured key is tried: the platform-wide one first, then each separately
+    integrated provider's own key (``extra_secrets``). Raises
+    :class:`ProviderError` if no key yields a valid payload.
     """
-    _require_crypto_config(get_config())
+    cfg = get_config()
+    _require_crypto_config(cfg)
     if 'payload' in envelope and isinstance(envelope['payload'], str):
-        try:
-            return decrypt_json(envelope['payload'])
-        except Exception as exc:
-            raise ProviderError('Failed to decrypt callback payload') from exc
+        candidates = [cfg.aes_secret_key, *[s for s in extra_secrets if s]]
+        seen = set()
+        for secret in candidates:
+            if secret in seen:
+                continue
+            seen.add(secret)
+            try:
+                return decrypt_json(envelope['payload'], secret), secret
+            except Exception:
+                continue
+        raise ProviderError('Failed to decrypt callback payload')
     # Fall back to treating the envelope itself as the decrypted body.
-    return envelope
+    return envelope, None
 
 
-def build_ack(credit_amount: str, timestamp: str | None = None) -> dict:
+def build_ack(
+    credit_amount: str, timestamp: str | None = None, secret: str | None = None
+) -> dict:
     """Build the encrypted acknowledgement returned to the aggregator."""
     body = {
         'credit_amount': str(credit_amount),
         'timestamp': timestamp or time.strftime('%Y-%m-%d %H:%M:%S'),
     }
-    return {'code': 0, 'msg': '', 'payload': encrypt_json(body)}
+    return {'code': 0, 'msg': '', 'payload': encrypt_json(body, secret)}

@@ -41,13 +41,37 @@ export default function Theme1Wallet() {
       <div className="mt-5 grid gap-5 lg:grid-cols-3">
         {/* ===== Main column ===== */}
         <div className="space-y-5 lg:col-span-2">
-          {/* Balance hero */}
+          {/* Balance hero — real and bonus money are tracked separately: only
+              real balance is withdrawable, bonus must clear wagering first. */}
           <section className="card-glass relative overflow-hidden p-8">
             <div className="pointer-events-none absolute -right-8 -top-10 h-40 w-40 rounded-full bg-brand-500/10 blur-2xl" />
-            <p className="text-sm text-slate-400">Available balance</p>
+            <p className="text-sm text-slate-400">Total balance</p>
             <p className="mt-1 text-5xl font-extrabold text-gradient-gold">
-              ₹{(wallet?.available ?? 0).toLocaleString('en-IN')}
+              {inr((wallet?.real ?? wallet?.main ?? 0) + (wallet?.bonus ?? 0))}
             </p>
+
+            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <BalanceTile
+                label="Real balance"
+                value={wallet?.real ?? wallet?.main}
+                hint="Withdrawable cash"
+                accent="emerald"
+              />
+              <BalanceTile
+                label="Bonus balance"
+                value={wallet?.bonus}
+                hint="Play-through required"
+                accent="brand"
+              />
+            </div>
+
+            {wallet?.pendingWithdrawal > 0 && (
+              <p className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                {inr(wallet.pendingWithdrawal)} is on hold for a withdrawal awaiting
+                approval. It stays in your balance until an admin approves the payout.
+              </p>
+            )}
+
             <div className="mt-6 grid grid-cols-2 gap-3 sm:max-w-md">
               <Link
                 href="/deposit"
@@ -66,8 +90,8 @@ export default function Theme1Wallet() {
 
           {/* Balance breakdown */}
           <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Stat label="Bonus" value={wallet?.bonus} />
-            <Stat label="Locked" value={wallet?.locked} />
+            <Stat label="Available to play" value={wallet?.available} />
+            <Stat label="On hold (withdrawal)" value={wallet?.pendingWithdrawal ?? wallet?.locked} />
             <Stat label="Exposure" value={wallet?.exposure} />
           </section>
 
@@ -78,8 +102,13 @@ export default function Theme1Wallet() {
             </h2>
 
             <dl className="mt-4 divide-y divide-white/5">
-              <Row label="Available (withdrawable)" value={wallet?.available} strong />
-              <Row label="Locked (in withdrawal)" value={wallet?.locked} />
+              <Row label="Real balance" value={wallet?.real ?? wallet?.main} strong />
+              <Row label="Bonus balance" value={wallet?.bonus} />
+              <Row label="Available to play" value={wallet?.available} />
+              <Row
+                label="On hold (awaiting withdrawal approval)"
+                value={wallet?.pendingWithdrawal ?? wallet?.locked}
+              />
               <Row label="Exposure (open bets)" value={wallet?.exposure} />
             </dl>
 
@@ -131,7 +160,9 @@ export default function Theme1Wallet() {
               <ActionTile href="/deposit" label="Deposit" icon="↑" />
               <ActionTile href="/withdraw" label="Withdraw" icon="↓" />
               <ActionTile href="/bet-history" label="Bet History" icon="🎲" />
-              <ActionTile href="/promotions" label="Promos" icon="🎁" />
+              <ActionTile href="/promotions" label="Promotions" icon="🎁" />
+              <ActionTile href="/bonus" label="My Bonuses" icon="💎" />
+              <ActionTile href="/app" label="Get the App" icon="📱" />
             </div>
           </section>
         </div>
@@ -158,6 +189,23 @@ function Row({ label, value, strong, muted, signed }) {
       <dd className={`text-sm font-semibold ${strong ? 'text-gradient-gold' : tone}`}>
         {display}
       </dd>
+    </div>
+  );
+}
+
+const TILE_ACCENTS = {
+  emerald: 'border-emerald-500/25 bg-emerald-500/[0.07] text-emerald-300',
+  brand: 'border-brand-500/25 bg-brand-500/[0.07] text-brand-300',
+};
+
+function BalanceTile({ label, value, hint, accent }) {
+  return (
+    <div className={`rounded-xl border p-4 ${TILE_ACCENTS[accent] ?? TILE_ACCENTS.brand}`}>
+      <p className="text-[0.65rem] font-semibold uppercase tracking-wide opacity-80">
+        {label}
+      </p>
+      <p className="mt-1 text-2xl font-bold text-white">{inr(value)}</p>
+      {hint && <p className="mt-0.5 text-[0.65rem] opacity-70">{hint}</p>}
     </div>
   );
 }

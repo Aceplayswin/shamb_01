@@ -183,15 +183,39 @@ class WithdrawalStage(models.Model):
 
 
 class GameProvider(models.Model):
+    """An aggregator/vendor. Credentials are optional per-provider overrides.
+
+    Most providers ride the platform-wide aggregator account configured in
+    ``settings.GAME_PROVIDER``. A provider that is integrated separately (a
+    lottery vendor on its own agency account, a second aggregator, …) fills in
+    the columns below; anything left blank falls back to the global env config.
+    See ``services/game_provider.get_config``.
+    """
+
     id = models.BigAutoField(primary_key=True)
     name = models.CharField(max_length=100)
     slug = models.SlugField(max_length=50, unique=True)
     logo_url = models.URLField(max_length=500, null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    # --- Per-provider aggregator credentials (all optional overrides) ---
+    agency_uid = models.CharField(max_length=100, null=True, blank=True)
+    aes_secret_key = models.CharField(max_length=128, null=True, blank=True)
+    server_url = models.CharField(max_length=255, null=True, blank=True)
+    launch_path = models.CharField(max_length=100, null=True, blank=True)
+    player_prefix = models.CharField(max_length=40, null=True, blank=True)
+    callback_path = models.CharField(max_length=100, null=True, blank=True)
+    currency_code = models.CharField(max_length=10, null=True, blank=True)
+    # Sports/lottery style vendors settle long after the stake is taken. Rounds
+    # from these providers stay Pending in bet history until the result lands.
+    delayed_settlement = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = 'game_providers'
+
+    @property
+    def has_custom_credentials(self) -> bool:
+        return bool(self.agency_uid or self.aes_secret_key or self.server_url)
 
 
 class Game(models.Model):
@@ -264,6 +288,9 @@ class GameSession(models.Model):
     total_win = models.DecimalField(max_digits=20, decimal_places=2, default=0)
     profit_loss = models.DecimalField(max_digits=20, decimal_places=2, default=0)
     rounds_count = models.IntegerField(default=0)
+    # Rounds staked but not yet resolved by the provider (sports/lottery). While
+    # this is non-zero the session stays WAIT instead of showing a premature loss.
+    pending_rounds = models.IntegerField(default=0)
     last_balance = models.DecimalField(
         max_digits=20, decimal_places=2, null=True, blank=True
     )
@@ -283,6 +310,10 @@ class GameRound(models.Model):
     `serial_number` is the idempotency key — a unique constraint makes duplicate
     callback delivery a no-op at the database level."""
 
+    class SettleStatus(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        SETTLED = 'settled', 'Settled'
+
     id = models.BigAutoField(primary_key=True)
     session = models.ForeignKey(
         GameSession, on_delete=models.CASCADE, null=True, db_column='session_id'
@@ -292,9 +323,20 @@ class GameRound(models.Model):
         Game, on_delete=models.SET_NULL, null=True, db_column='game_id'
     )
     game_uid = models.CharField(max_length=64, db_index=True)
+    # The game actually played. For a lobby launch (Ezugi/Microgaming) the
+    # aggregator reports the specific table here, not the lobby the player
+    # entered through, so history stays readable.
+    game_name = models.CharField(max_length=150, null=True, blank=True)
     # Aggregator idempotency key (unique). Unique round id from the aggregator.
     serial_number = models.CharField(max_length=100, unique=True)
     game_round = models.CharField(max_length=100, null=True, blank=True)
+    # Stake-only rounds from a delayed-settlement provider stay PENDING until
+    # the result callback arrives; they must not be shown as a loss meanwhile.
+    settle_status = models.CharField(
+        max_length=10, choices=SettleStatus.choices, default=SettleStatus.SETTLED,
+        db_index=True,
+    )
+    settled_at = models.DateTimeField(null=True, blank=True)
     bet_amount = models.DecimalField(max_digits=20, decimal_places=2, default=0)
     win_amount = models.DecimalField(max_digits=20, decimal_places=2, default=0)
     balance_before = models.DecimalField(

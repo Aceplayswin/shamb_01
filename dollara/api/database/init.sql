@@ -213,12 +213,26 @@ CREATE TABLE IF NOT EXISTS user_bonuses (
   FOREIGN KEY (bonus_id) REFERENCES bonuses(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- A vendor/aggregator. The credential columns are OPTIONAL per-provider
+-- overrides: blank means this provider rides the platform-wide aggregator
+-- account from the API environment, filled means it is integrated on its own
+-- account (a standalone lottery vendor, a second aggregator).
 CREATE TABLE IF NOT EXISTS game_providers (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   slug VARCHAR(50) UNIQUE NOT NULL,
   logo_url VARCHAR(500),
   is_active BOOLEAN DEFAULT TRUE,
+  agency_uid VARCHAR(100),
+  aes_secret_key VARCHAR(128),
+  server_url VARCHAR(255),
+  launch_path VARCHAR(100),
+  player_prefix VARCHAR(40),
+  callback_path VARCHAR(100),
+  currency_code VARCHAR(10),
+  -- Sports/lottery vendors settle long after the stake; their rounds stay
+  -- Pending in bet history until the result callback lands.
+  delayed_settlement BOOLEAN NOT NULL DEFAULT FALSE,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -289,6 +303,8 @@ CREATE TABLE IF NOT EXISTS game_sessions (
   total_win DECIMAL(20,2) DEFAULT 0,
   profit_loss DECIMAL(20,2) DEFAULT 0,
   rounds_count INT DEFAULT 0,
+  -- Stakes not yet resolved by the provider. Non-zero keeps status at 'wait'.
+  pending_rounds INT NOT NULL DEFAULT 0,
   last_balance DECIMAL(20,2),
   status ENUM('wait', 'profit', 'loss') DEFAULT 'wait',
   last_played_at DATETIME,
@@ -310,8 +326,13 @@ CREATE TABLE IF NOT EXISTS game_rounds (
   user_id BIGINT UNSIGNED NOT NULL,
   game_id BIGINT UNSIGNED,
   game_uid VARCHAR(64) NOT NULL,
+  -- The game actually played: a lobby launch reports the specific table here.
+  game_name VARCHAR(150),
   serial_number VARCHAR(100) NOT NULL UNIQUE,
   game_round VARCHAR(100),
+  -- A stake on a late-settling provider is 'pending' until its result arrives.
+  settle_status ENUM('pending', 'settled') NOT NULL DEFAULT 'settled',
+  settled_at DATETIME,
   bet_amount DECIMAL(20,2) DEFAULT 0,
   win_amount DECIMAL(20,2) DEFAULT 0,
   balance_before DECIMAL(20,2),
@@ -527,7 +548,8 @@ INSERT INTO game_providers (id, name, slug, is_active) VALUES
   (4, 'Aggregator Live Casino', 'aggregator-live', TRUE),
   (5, 'Aggregator Poker', 'aggregator-poker', TRUE),
   (6, 'Aggregator Slots', 'aggregator-slots', TRUE),
-  (7, 'Aggregator Sportsbook', 'aggregator-sports', TRUE);
+  (7, 'Aggregator Sportsbook', 'aggregator-sports', TRUE)
+ON DUPLICATE KEY UPDATE name = VALUES(name);
 
 INSERT INTO games (provider_id, name, slug, category, game_uid, game_type, thumbnail_url, is_featured, is_active_web, is_active_mobile, is_active, sort_order) VALUES
   (4, 'Microgaming Lobby', 'microgaming-lobby-4e58131a', 'live_casino', '4e58131adb95bb061a40e6e309116c19', 'CasinoLive', 'https://bc.imgix.net/game/image/97a368dcf8.png?_v=4&auto=format&dpr=1.125&w=200', FALSE, TRUE, TRUE, TRUE, 0),
@@ -792,7 +814,11 @@ INSERT INTO games (provider_id, name, slug, category, game_uid, game_type, thumb
   (6, 'Dragons World', 'dragons-world-00b88680', 'slots', '00b886803f3d067f7028872468e84745', 'Slot Game', 'https://huidu-bucket.s3.ap-southeast-1.amazonaws.com/api/jdb/Dragons-World.png', FALSE, TRUE, TRUE, TRUE, 259),
   (6, 'Go Lai Fu', 'go-lai-fu-a3584394', 'slots', 'a3584394182e8abce362d90c2f048c75', 'Slot Game', 'https://huidu-bucket.s3.ap-southeast-1.amazonaws.com/api/jdb/Go-Lai-Fu.png', FALSE, TRUE, TRUE, TRUE, 260),
   (7, 'SABA Sports', 'saba-sports-08ced9dd', 'sports', '08ced9dd788aed11ff3c7f387ae0f063', 'Sport', 'https://ossimg.tirangaagent.com/Tiranga/vendorlogo/vendorlogo_20240814202959vsy1.png', FALSE, TRUE, TRUE, TRUE, 261),
-  (2, 'Esports', 'esports-4ee8e005', 'virtual_sports', '4ee8e0051a035b463b47c3c473ce317d', 'SportsGame', 'https://i.postimg.cc/FHHg66F4/Screenshot-2025-03-21-153241.png', FALSE, TRUE, TRUE, TRUE, 262);
+  (2, 'Esports', 'esports-4ee8e005', 'virtual_sports', '4ee8e0051a035b463b47c3c473ce317d', 'SportsGame', 'https://i.postimg.cc/FHHg66F4/Screenshot-2025-03-21-153241.png', FALSE, TRUE, TRUE, TRUE, 262)
+-- Re-running this file must not abort on the seeded catalog, otherwise a live
+-- database never reaches the upgrade block below. Existing rows are left alone
+-- so admin edits (activation, thumbnails, sort order) survive a re-import.
+ON DUPLICATE KEY UPDATE slug = slug;
 
 -- ---------------------------------------------------------------------------
 -- Idempotent upgrades for existing databases.
@@ -843,6 +869,73 @@ CALL _dollara_add_column('user_bonuses', 'updated_at',     "updated_at DATETIME 
 CALL _dollara_add_column('user_settings', 'referral_code', "referral_code VARCHAR(20) AFTER agent_id");
 CALL _dollara_add_column('user_settings', 'referred_by',   "referred_by BIGINT UNSIGNED AFTER referral_code");
 
+-- game_providers: optional per-provider aggregator credentials. A vendor that
+-- is integrated on its own agency account (a separate lottery provider, a
+-- second aggregator) overrides the platform-wide env config here; blank
+-- columns fall back to settings.GAME_PROVIDER.
+CALL _dollara_add_column('game_providers', 'agency_uid',         "agency_uid VARCHAR(100) AFTER is_active");
+CALL _dollara_add_column('game_providers', 'aes_secret_key',     "aes_secret_key VARCHAR(128) AFTER agency_uid");
+CALL _dollara_add_column('game_providers', 'server_url',         "server_url VARCHAR(255) AFTER aes_secret_key");
+CALL _dollara_add_column('game_providers', 'launch_path',        "launch_path VARCHAR(100) AFTER server_url");
+CALL _dollara_add_column('game_providers', 'player_prefix',      "player_prefix VARCHAR(40) AFTER launch_path");
+CALL _dollara_add_column('game_providers', 'callback_path',      "callback_path VARCHAR(100) AFTER player_prefix");
+CALL _dollara_add_column('game_providers', 'currency_code',      "currency_code VARCHAR(10) AFTER callback_path");
+-- Sports/lottery vendors settle long after the stake; their rounds stay
+-- Pending in bet history until the result callback lands.
+CALL _dollara_add_column('game_providers', 'delayed_settlement', "delayed_settlement BOOLEAN NOT NULL DEFAULT FALSE AFTER currency_code");
+
+-- game_sessions: outstanding (unresolved) round counter drives the WAIT status.
+CALL _dollara_add_column('game_sessions', 'pending_rounds', "pending_rounds INT NOT NULL DEFAULT 0 AFTER rounds_count");
+
+-- game_rounds: per-round settlement state + the game actually played (lobby
+-- launches report the specific table, not the lobby the player entered).
+CALL _dollara_add_column('game_rounds', 'game_name',    "game_name VARCHAR(150) AFTER game_uid");
+CALL _dollara_add_column('game_rounds', 'settle_status', "settle_status ENUM('pending','settled') NOT NULL DEFAULT 'settled' AFTER game_round");
+CALL _dollara_add_column('game_rounds', 'settled_at',   "settled_at DATETIME AFTER settle_status");
+
 DROP PROCEDURE IF EXISTS _dollara_add_column;
+
+-- Index helper: add an index only when it is missing (idempotent re-runs).
+DROP PROCEDURE IF EXISTS _dollara_add_index;
+DELIMITER $$
+CREATE PROCEDURE _dollara_add_index(
+  IN tbl VARCHAR(64), IN idx VARCHAR(64), IN cols VARCHAR(255)
+)
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = tbl AND INDEX_NAME = idx
+  ) THEN
+    SET @sql = CONCAT('ALTER TABLE `', tbl, '` ADD INDEX `', idx, '` (', cols, ')');
+    PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+  END IF;
+END$$
+DELIMITER ;
+
+-- Pending-round lookup on the result callback, and the big-wins feed.
+CALL _dollara_add_index('game_rounds', 'idx_gr_settle',    'settle_status');
+CALL _dollara_add_index('game_rounds', 'idx_gr_round',     'user_id, game_round');
+CALL _dollara_add_index('game_rounds', 'idx_gr_win',       'win_amount, created_at');
+
+DROP PROCEDURE IF EXISTS _dollara_add_index;
+
+-- ---------------------------------------------------------------------------
+-- Provider integration defaults. These run last because they depend on the
+-- columns the migration block above guarantees exist.
+-- ---------------------------------------------------------------------------
+
+-- Sportsbook stakes are resolved by a separate result callback, so their rounds
+-- must stay Pending in bet history rather than reading as an instant loss.
+UPDATE game_providers SET delayed_settlement = TRUE
+WHERE slug IN ('aggregator-sports', 'aggregator-esports');
+
+-- Lottery vendors are typically integrated on their own agency account rather
+-- than the shared aggregator one. This placeholder row is where those
+-- credentials go: fill it in under Admin → Providers → "Own aggregator
+-- account", attach the vendor's games to it, then enable it. It ships disabled
+-- so no player can reach an unconfigured launch.
+INSERT INTO game_providers (id, name, slug, is_active, delayed_settlement) VALUES
+  (8, 'Lottery Vendor', 'lottery-vendor', FALSE, TRUE)
+ON DUPLICATE KEY UPDATE name = VALUES(name);
 
 SET FOREIGN_KEY_CHECKS = 1;

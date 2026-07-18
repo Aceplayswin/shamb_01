@@ -1,7 +1,15 @@
 import json
 
 from django.conf import settings
-from django.http import HttpResponse, JsonResponse
+import csv
+from datetime import datetime
+
+from django.http import (
+    HttpResponse,
+    HttpResponseRedirect,
+    JsonResponse,
+    StreamingHttpResponse,
+)
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
@@ -306,6 +314,41 @@ def login(request):
         return _error_response(e, 401)
 
 
+@csrf_exempt
+@require_auth(['user', 'admin'])
+@require_http_methods(['POST'])
+def change_password(request):
+    """Signed-in password change (verifies the current password)."""
+    try:
+        body = _json_body(request)
+        return JsonResponse(services.change_password(
+            request.auth.sub,
+            body.get('currentPassword') or body.get('current_password') or '',
+            body.get('newPassword') or body.get('new_password') or '',
+        ))
+    except json.JSONDecodeError as e:
+        return _error_response(e)
+    except ValueError as e:
+        return _error_response(e)
+
+
+# --- Mobile app (APK) ---
+@require_http_methods(['GET'])
+def app_download(request):
+    """Public app-install info (APK URL, version) set by the product admin."""
+    return JsonResponse(services.get_app_download())
+
+
+@require_http_methods(['GET'])
+def app_download_redirect(request):
+    """Send the browser straight to the APK — the target of the install button
+    and the QR code, so the download link stays stable if the file is replaced."""
+    config = services.get_app_download()
+    if not config.get('available'):
+        return JsonResponse({'error': 'App download is not available yet'}, status=404)
+    return HttpResponseRedirect(config['apk_url'])
+
+
 # --- Settings / preferences ---
 @csrf_exempt
 @require_auth(['user'])
@@ -529,9 +572,35 @@ def games_history(request):
 
 @require_auth(['user'])
 @require_http_methods(['GET'])
+def games_session_rounds(request, session_uid):
+    """Round-by-round detail behind one bet-history row."""
+    try:
+        return JsonResponse(
+            game_services.get_session_rounds(request.auth.sub, session_uid)
+        )
+    except GameError as e:
+        return JsonResponse(
+            {'status_code': e.code, 'error': str(e)},
+            status=_GAME_ERROR_STATUS.get(e.code, 400),
+        )
+
+
+@require_auth(['user'])
+@require_http_methods(['GET'])
 def games_pnl(request):
     """Aggregate betting profit/loss for the current user."""
     return JsonResponse(game_services.get_user_pnl(request.auth.sub))
+
+
+@require_http_methods(['GET'])
+def games_big_wins(request):
+    """Recent big wins across all players (masked names). Public."""
+    limit = min(int(request.GET.get('limit', 12)), 50)
+    min_win = request.GET.get('minWin')
+    return JsonResponse(
+        game_services.get_big_wins(limit, float(min_win) if min_win else None),
+        safe=False,
+    )
 
 
 @csrf_exempt
@@ -1035,10 +1104,163 @@ def admin_wallet_adjust(request, user_id):
         return _error_response(e)
 
 
+# --- Admin: bet history ---
+def _parse_date(value):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, '%Y-%m-%d').date()
+    except ValueError:
+        return None
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_bet_history(request):
+    """Play sessions across all players — the admin bet-history view."""
+    user_id = request.GET.get('userId')
+    return JsonResponse(admin_services.list_bet_history(
+        limit=int(request.GET.get('limit', 50)),
+        offset=int(request.GET.get('offset', 0)),
+        user_id=int(user_id) if user_id else None,
+        status=request.GET.get('status'),
+        game_uid=request.GET.get('gameUid'),
+        date_from=_parse_date(request.GET.get('from')),
+        date_to=_parse_date(request.GET.get('to')),
+    ))
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_bet_history_rounds(request, session_uid):
+    """Round-by-round drill-down for one session."""
+    try:
+        return JsonResponse(admin_services.get_bet_history_rounds(session_uid))
+    except ValueError as e:
+        return _error_response(e, 404)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_settle_stale_rounds(request):
+    """Force-settle stakes a provider never reported a result for.
+
+    The scheduled command does this automatically; this is the manual escape
+    hatch when a vendor outage leaves bets stuck on Pending.
+    """
+    try:
+        body = _json_body(request)
+    except json.JSONDecodeError:
+        body = {}
+    hours = body.get('hours')
+    return JsonResponse(
+        game_services.settle_stale_pending_rounds(int(hours) if hours else None)
+    )
+
+
+# --- Admin: manage admin (staff accounts) ---
 @require_auth(['admin'])
 @require_http_methods(['GET'])
 def admin_staff(request):
     return JsonResponse(admin_services.list_admin_users_list(), safe=False)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_staff_create(request):
+    try:
+        return JsonResponse(
+            admin_services.create_staff(_json_body(request), request.auth.role),
+            status=201,
+        )
+    except PermissionError as e:
+        return _error_response(e, 403)
+    except (json.JSONDecodeError, ValueError) as e:
+        return _error_response(e)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['PATCH', 'DELETE'])
+def admin_staff_update(request, staff_id):
+    try:
+        if request.method == 'DELETE':
+            return JsonResponse(admin_services.delete_staff(
+                staff_id, request.auth.sub, request.auth.role
+            ))
+        return JsonResponse(admin_services.update_staff(
+            staff_id, _json_body(request), request.auth.sub, request.auth.role
+        ))
+    except PermissionError as e:
+        return _error_response(e, 403)
+    except (json.JSONDecodeError, ValueError) as e:
+        return _error_response(e)
+
+
+# --- Admin: report export ---
+class _CsvEcho:
+    """File-like sink so csv.writer can stream rows straight to the response."""
+
+    def write(self, value):
+        return value
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_reports(request):
+    """The report kinds available for export."""
+    return JsonResponse(admin_services.list_report_kinds(), safe=False)
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_report_export(request, kind):
+    """Stream one report as a CSV download."""
+    date_from = _parse_date(request.GET.get('from'))
+    date_to = _parse_date(request.GET.get('to'))
+    try:
+        header, rows = admin_services.build_report(kind, date_from, date_to)
+    except ValueError as e:
+        return _error_response(e, 404)
+
+    writer = csv.writer(_CsvEcho())
+
+    def stream():
+        yield writer.writerow(header)
+        for row in rows:
+            yield writer.writerow(row)
+
+    stamp = datetime.now().strftime('%Y%m%d-%H%M')
+    response = StreamingHttpResponse(stream(), content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{kind}-{stamp}.csv"'
+    return response
+
+
+# --- Admin: mobile app (APK) distribution ---
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_app_download(request):
+    return JsonResponse(services.get_app_download())
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['PUT'])
+def admin_app_download_update(request):
+    """Publish/replace the downloadable app build."""
+    try:
+        body = _json_body(request)
+        config = {
+            key: body.get(key, default)
+            for key, default in services.APP_DOWNLOAD_DEFAULTS.items()
+        }
+        config['enabled'] = bool(config.get('enabled'))
+        admin_services.update_platform_setting(services.APP_DOWNLOAD_KEY, config)
+        return JsonResponse(services.get_app_download())
+    except json.JSONDecodeError as e:
+        return _error_response(e)
 
 
 @require_auth(['admin'])

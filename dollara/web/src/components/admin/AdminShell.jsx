@@ -29,6 +29,9 @@ import {
   Loader2,
   Image as ImageIcon,
   UploadCloud,
+  History,
+  Smartphone,
+  FileSpreadsheet,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { adminApi, adminUploadImage, clearAdminToken, getAdminRole, getAdminToken } from '@/services/adminApi';
@@ -43,6 +46,7 @@ const NAV_GROUPS = [
     label: 'Players',
     items: [
       { href: '/admin/users', label: 'Users', icon: Users },
+      { href: '/admin/bet-history', label: 'Bet History', icon: History },
       { href: '/admin/bets', label: 'Bets', icon: Dices },
     ],
   },
@@ -59,6 +63,7 @@ const NAV_GROUPS = [
     label: 'Content',
     items: [
       { href: '/admin/banners', label: 'Banners', icon: ImageIcon },
+      { href: '/admin/app', label: 'App Download', icon: Smartphone },
     ],
   },
   {
@@ -71,9 +76,10 @@ const NAV_GROUPS = [
   {
     label: 'System',
     items: [
+      { href: '/admin/reports', label: 'Reports', icon: FileSpreadsheet },
       { href: '/admin/ai-calls', label: 'AI Calls', icon: PhoneCall },
       { href: '/admin/settings', label: 'Settings', icon: Settings },
-      { href: '/admin/staff', label: 'Staff', icon: ShieldCheck },
+      { href: '/admin/staff', label: 'Manage Admin', icon: ShieldCheck },
     ],
   },
 ];

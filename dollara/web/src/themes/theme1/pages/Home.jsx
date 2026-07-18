@@ -8,6 +8,7 @@ import { useBanners } from '@/hooks/useBanners';
 import { useGameCatalog } from '@/hooks/useGameCatalog';
 import { useGameSearch } from '@/hooks/useGameSearch';
 import BannerCarousel from '@/components/BannerCarousel';
+import { BigWins } from '@/components/BigWins';
 import {
   filterByCategory,
   filterByProvider,
@@ -443,6 +444,9 @@ export default function Theme1Home() {
                 theme={THEMES.slots}
                 ranked
               />
+
+              {/* Recent big wins — real settled wins, names masked server-side */}
+              <BigWins limit={8} />
 
               {/* Why choose — feature row */}
               <section>

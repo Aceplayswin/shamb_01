@@ -25,6 +25,8 @@ import Theme1Profile from './theme1/pages/Profile';
 import Theme1Settings from './theme1/pages/settings';
 import Theme1BetHistory from './theme1/pages/BetHistory';
 import Theme1Promotions from './theme1/pages/Promotions';
+import Theme1Bonus from './theme1/pages/Bonus';
+import Theme1AppDownload from './theme1/pages/AppDownload';
 import Theme1Refer from './theme1/pages/Refer';
 import Theme1Rules from './theme1/pages/Rules';
 import Theme1Onboarding from './theme1/pages/Onboarding';
@@ -87,6 +89,8 @@ const THEMES = {
       settings: Theme1Settings,
       betHistory: Theme1BetHistory,
       promotions: Theme1Promotions,
+      bonus: Theme1Bonus,
+      appDownload: Theme1AppDownload,
       refer: Theme1Refer,
       rules: Theme1Rules,
       onboarding: Theme1Onboarding,

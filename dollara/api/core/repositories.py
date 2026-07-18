@@ -10,11 +10,16 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from datetime import timedelta
+
+from django.core.cache import cache
 from django.db.models import Count, F, Q, Sum
+from django.utils import timezone
 
 from core.models import (
     Game,
     GameCallbackLog,
+    GameProvider,
     GameRound,
     GameSession,
     PlatformSetting,
@@ -24,6 +29,45 @@ from core.models import (
 # Platform setting key that mirrors the legacy tblservices.GAME_STATUS master
 # on/off switch for all game launches.
 GAME_STATUS_KEY = 'game_status'
+
+
+# Every inbound aggregator callback needs the set of provider keys/prefixes to
+# identify its sender. That is effectively static config on the hottest path in
+# the system, so it is cached and invalidated whenever a provider is written
+# (see `invalidate_provider_cache`, called from the admin provider endpoints).
+PROVIDER_CREDENTIAL_CACHE_KEY = 'game:provider_credentials'
+PROVIDER_CREDENTIAL_CACHE_TTL = 300
+
+
+def _provider_credential_cache() -> dict:
+    cached = cache.get(PROVIDER_CREDENTIAL_CACHE_KEY)
+    if cached is not None:
+        return cached
+    rows = GameProvider.objects.values_list('aes_secret_key', 'player_prefix')
+    credentials = {
+        'secrets': [secret for secret, _ in rows if secret],
+        'prefixes': [prefix for _, prefix in rows if prefix],
+    }
+    cache.set(
+        PROVIDER_CREDENTIAL_CACHE_KEY, credentials, PROVIDER_CREDENTIAL_CACHE_TTL
+    )
+    return credentials
+
+
+def invalidate_provider_cache() -> None:
+    """Drop the cached provider credentials after an admin edit."""
+    cache.delete(PROVIDER_CREDENTIAL_CACHE_KEY)
+
+
+# Game categories whose providers typically settle long after the stake is
+# taken (a match/draw has to finish first). Used as the default when a provider
+# has not been explicitly flagged `delayed_settlement` in the admin panel.
+DELAYED_SETTLEMENT_CATEGORIES = frozenset({
+    Game.Category.SPORTS,
+    Game.Category.VIRTUAL_SPORTS,
+    Game.Category.FANTASY,
+    Game.Category.LOTTERY,
+})
 
 
 class GameRepository:
@@ -40,7 +84,49 @@ class GameRepository:
 
     @staticmethod
     def get_by_uid(game_uid: str) -> Game | None:
-        return Game.objects.filter(game_uid=game_uid).first()
+        return Game.objects.select_related('provider').filter(game_uid=game_uid).first()
+
+    @staticmethod
+    def provider_overrides(game: Game | None) -> dict:
+        """Per-provider aggregator credential overrides for this game's vendor.
+
+        Returns ``{}`` for games with no provider or a provider that rides the
+        platform-wide account, so the caller transparently gets the env config.
+        """
+        provider = getattr(game, 'provider', None)
+        if provider is None:
+            return {}
+        return {
+            'agency_uid': provider.agency_uid,
+            'aes_secret_key': provider.aes_secret_key,
+            'server_url': provider.server_url,
+            'launch_path': provider.launch_path,
+            'player_prefix': provider.player_prefix,
+            'callback_path': provider.callback_path,
+            'currency_code': provider.currency_code,
+        }
+
+    @staticmethod
+    def settles_late(game: Game | None) -> bool:
+        """Whether a stake on this game is resolved by a later result callback.
+
+        An explicit provider flag wins; otherwise the game's category decides
+        (sports/lottery/fantasy settle late, slots settle in the same call).
+        """
+        provider = getattr(game, 'provider', None)
+        if provider is not None and provider.delayed_settlement:
+            return True
+        return bool(game and game.category in DELAYED_SETTLEMENT_CATEGORIES)
+
+    @staticmethod
+    def provider_secrets() -> list[str]:
+        """AES keys of every separately-integrated provider (callback decrypt)."""
+        return _provider_credential_cache()['secrets']
+
+    @staticmethod
+    def provider_prefixes() -> list[str]:
+        """member_account prefixes of every separately-integrated provider."""
+        return _provider_credential_cache()['prefixes']
 
     @staticmethod
     def get_by_id(game_id: int) -> Game | None:
@@ -49,6 +135,12 @@ class GameRepository:
     @staticmethod
     def increment_play_count(game_id: int) -> None:
         Game.objects.filter(id=game_id).update(play_count=F('play_count') + 1)
+
+
+# How far back a callback whose game_uid matches no session may still be folded
+# into the player's most recent session. Lobby products (Ezugi, Microgaming)
+# launch a lobby UID but report rounds under the specific table's UID.
+LOBBY_ATTRIBUTION_WINDOW = timedelta(hours=12)
 
 
 class GameSessionRepository:
@@ -62,33 +154,114 @@ class GameSessionRepository:
         )
 
     @staticmethod
-    def create(**fields) -> GameSession:
-        return GameSession.objects.create(**fields)
+    def get_unplayed_for_user_game(user_id: int, game_uid: str) -> GameSession | None:
+        """A previous launch of this game the player never actually bet in.
 
-    @staticmethod
-    def latest_for_settlement(user_id: int, game_uid: str) -> GameSession | None:
-        """Most recent session to attribute an incoming round to.
-
-        Mirrors the legacy behaviour of folding callbacks into the latest match
-        row for the same user + game UID.
+        Re-launching reuses it instead of piling up empty rows in bet history.
         """
         return (
-            GameSession.objects.filter(user_id=user_id, game_uid=game_uid)
+            GameSession.objects.filter(
+                user_id=user_id, game_uid=game_uid, rounds_count=0, total_bet=0
+            )
             .order_by('-created_at')
             .first()
         )
 
     @staticmethod
+    def create(**fields) -> GameSession:
+        return GameSession.objects.create(**fields)
+
+    @staticmethod
+    def latest_for_settlement(
+        user_id: int, game_uid: str, provider_id: int | None = None
+    ) -> GameSession | None:
+        """Most recent session to attribute an incoming round to.
+
+        Exact user+game_uid match first (the normal case). Failing that — a
+        lobby launch, where the aggregator reports the table's UID rather than
+        the lobby's — the player's most recent recent session takes the round,
+        so lobby play lands in bet history with real amounts instead of an
+        orphaned zero row.
+
+        The fallback is scoped to the *same provider* where we can identify it,
+        so an unmatched round is never folded into an unrelated vendor's game;
+        without that a stray callback could inflate whichever session the player
+        happened to open last.
+        """
+        exact = (
+            GameSession.objects.filter(user_id=user_id, game_uid=game_uid)
+            .order_by('-created_at')
+            .first()
+        )
+        if exact:
+            return exact
+
+        qs = GameSession.objects.filter(
+            user_id=user_id,
+            created_at__gte=timezone.now() - LOBBY_ATTRIBUTION_WINDOW,
+        )
+        if provider_id is not None:
+            qs = qs.filter(game__provider_id=provider_id)
+        return qs.order_by('-created_at').first()
+
+    @staticmethod
+    def _played(qs):
+        """Sessions the player actually bet in — a launch alone is not history."""
+        return qs.filter(Q(rounds_count__gt=0) | Q(total_bet__gt=0))
+
+    @staticmethod
     def list_for_user(user_id: int, limit: int, offset: int) -> list[GameSession]:
         return list(
-            GameSession.objects.filter(user_id=user_id)
+            GameSessionRepository._played(
+                GameSession.objects.filter(user_id=user_id)
+            )
             .select_related('game')
             .order_by('-updated_at')[offset : offset + limit]
         )
 
     @staticmethod
     def count_for_user(user_id: int) -> int:
-        return GameSession.objects.filter(user_id=user_id).count()
+        return GameSessionRepository._played(
+            GameSession.objects.filter(user_id=user_id)
+        ).count()
+
+    @staticmethod
+    def get_for_user(user_id: int, session_uid: str) -> GameSession | None:
+        return (
+            GameSession.objects.select_related('game')
+            .filter(user_id=user_id, session_uid=session_uid)
+            .first()
+        )
+
+    @staticmethod
+    def admin_queryset(
+        user_id: int | None = None,
+        status: str | None = None,
+        game_uid: str | None = None,
+        date_from=None,
+        date_to=None,
+    ):
+        """Filtered bet-history queryset. Both the page of rows and the summary
+        totals are built from this, so the headline figures always describe
+        exactly the rows the admin is looking at."""
+        qs = GameSessionRepository._played(
+            GameSession.objects.select_related('game', 'user')
+        )
+        if user_id:
+            qs = qs.filter(user_id=user_id)
+        if status:
+            qs = qs.filter(status=status)
+        if game_uid:
+            qs = qs.filter(game_uid=game_uid)
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+        return qs
+
+    @staticmethod
+    def page(qs, limit: int, offset: int) -> list[GameSession]:
+        return list(qs.order_by('-updated_at')[offset : offset + limit])
 
 
 class GameRoundRepository:
@@ -101,6 +274,84 @@ class GameRoundRepository:
         return GameRound.objects.create(**fields)
 
     @staticmethod
+    def lock_open_stakes(
+        user_id: int,
+        game_round: str | None,
+        provider_id: int | None = None,
+        game_uid: str | None = None,
+    ) -> list[GameRound]:
+        """Lock and return the unresolved stakes a result callback settles.
+
+        Keyed on the provider's ``game_round`` (the match/draw id), which is how
+        a sportsbook ties a payout back to the stake it belongs to. Round ids
+        are only unique *within* a vendor, so the match is additionally scoped
+        to the sending provider — otherwise a lottery draw numbered "1001" would
+        resolve a football bet on round "1001".
+
+        Rows are locked FOR UPDATE so two callbacks racing on the same round
+        cannot both resolve it and double-decrement the session counter. Must be
+        called inside a transaction.
+        """
+        if not game_round:
+            return []
+        qs = GameRound.objects.filter(
+            user_id=user_id,
+            game_round=game_round,
+            settle_status=GameRound.SettleStatus.PENDING,
+        )
+        if provider_id is not None:
+            qs = qs.filter(game__provider_id=provider_id)
+        elif game_uid:
+            # Unknown game (not in our catalog): fall back to the narrowest
+            # scope available rather than matching every provider's round ids.
+            qs = qs.filter(game_uid=game_uid)
+        return list(qs.select_for_update())
+
+    @staticmethod
+    def mark_settled(round_ids: list[int]) -> int:
+        if not round_ids:
+            return 0
+        return GameRound.objects.filter(id__in=round_ids).update(
+            settle_status=GameRound.SettleStatus.SETTLED,
+            settled_at=timezone.now(),
+        )
+
+    @staticmethod
+    def lock_stale_pending(cutoff, limit: int = 500) -> list[GameRound]:
+        """Stakes still unresolved past the cutoff, locked for settlement.
+
+        Some vendors never send a resolvable result for a losing bet, which
+        would otherwise leave the round Pending indefinitely. Must be called
+        inside a transaction.
+        """
+        return list(
+            GameRound.objects.filter(
+                settle_status=GameRound.SettleStatus.PENDING,
+                created_at__lt=cutoff,
+            ).select_for_update()[:limit]
+        )
+
+    @staticmethod
+    def list_for_session(session_id: int, limit: int = 200) -> list[GameRound]:
+        return list(
+            GameRound.objects.filter(session_id=session_id)
+            .select_related('game')
+            .order_by('-created_at')[:limit]
+        )
+
+    @staticmethod
+    def recent_big_wins(limit: int, min_win: Decimal) -> list[GameRound]:
+        """Recently settled winning rounds for the public big-wins feed."""
+        return list(
+            GameRound.objects.filter(
+                win_amount__gte=min_win,
+                settle_status=GameRound.SettleStatus.SETTLED,
+            )
+            .select_related('user', 'game')
+            .order_by('-created_at')[:limit]
+        )
+
+    @staticmethod
     def user_pnl(user_id: int) -> dict:
         agg = GameRound.objects.filter(user_id=user_id).aggregate(
             total_bet=Sum('bet_amount'),
@@ -109,11 +360,16 @@ class GameRoundRepository:
         )
         bet = agg['total_bet'] or Decimal('0')
         win = agg['total_win'] or Decimal('0')
+        pending = GameRound.objects.filter(
+            user_id=user_id, settle_status=GameRound.SettleStatus.PENDING
+        ).aggregate(amount=Sum('bet_amount'), rounds=Count('id'))
         return {
             'total_bet': bet,
             'total_win': win,
             'profit_loss': win - bet,
             'rounds': agg['rounds'] or 0,
+            'pending_amount': pending['amount'] or Decimal('0'),
+            'pending_rounds': pending['rounds'] or 0,
         }
 
 

@@ -18,6 +18,7 @@ from core.models import (
     Game,
     GameSession,
     OtpVerification,
+    PlatformSetting,
     Transaction,
     User,
     UserBonus,
@@ -30,6 +31,11 @@ from tenants.state import get_current_tenant_id, tenant_atomic
 
 def _hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def hash_password(password: str) -> str:
+    """Public alias — used by the admin panel when provisioning staff logins."""
+    return _hash_password(password)
 
 
 def _check_password(password: str, password_hash: str) -> bool:
@@ -261,6 +267,50 @@ def login_admin(username: str, password: str) -> dict:
     }
 
 
+def change_password(user_id: int, current_password: str, new_password: str) -> dict:
+    """Player-initiated password change. Verifies the current password first."""
+    user = User.objects.filter(id=user_id).first()
+    if not user:
+        raise ValueError('Account not found')
+    if not user.password_hash:
+        raise ValueError('This account has no password set. Please contact support.')
+    if not current_password or not _check_password(current_password, user.password_hash):
+        raise ValueError('Current password is incorrect')
+    if not new_password or len(new_password) < 6:
+        raise ValueError('New password must be at least 6 characters')
+    if new_password == current_password:
+        raise ValueError('New password must be different from the current one')
+    user.password_hash = _hash_password(new_password)
+    user.save(update_fields=['password_hash', 'updated_at'])
+    return {'updated': True}
+
+
+# --- Mobile app (APK) distribution -----------------------------------------
+
+APP_DOWNLOAD_KEY = 'mobile_app'
+
+APP_DOWNLOAD_DEFAULTS = {
+    'enabled': False,
+    'apk_url': '',
+    'version': '',
+    'size_mb': None,
+    'min_android': '',
+    'release_notes': '',
+    'ios_url': '',
+}
+
+
+def get_app_download() -> dict:
+    """Public APK/app-install config, as set by the product admin."""
+    row = PlatformSetting.objects.filter(setting_key=APP_DOWNLOAD_KEY).first()
+    value = row.setting_value if row and isinstance(row.setting_value, dict) else {}
+    config = {**APP_DOWNLOAD_DEFAULTS, **value}
+    # An app with no download URL is never "available", whatever the flag says.
+    config['available'] = bool(config.get('enabled') and config.get('apk_url'))
+    config['updated_at'] = row.updated_at.isoformat() if row else None
+    return config
+
+
 def _require_player(user_id: int) -> User:
     user = User.objects.filter(id=user_id, role=User.Role.USER).first()
     if not user:
@@ -273,11 +323,19 @@ def get_wallet(user_id: int) -> dict:
     wallet, _ = Wallet.objects.get_or_create(user_id=user_id, defaults={'currency': 'INR'})
     main = float(wallet.main_balance)
     locked = float(wallet.locked_balance)
+    bonus = float(wallet.bonus_balance)
     return {
+        # `real` and `bonus` are the two balances a player is shown; `main` is
+        # kept as an alias so existing clients keep working.
+        'real': main,
         'main': main,
-        'bonus': float(wallet.bonus_balance),
+        'bonus': bonus,
+        'total': main + bonus,
         'exposure': float(wallet.exposure_balance),
+        # Held for a withdrawal that is still awaiting admin approval. The money
+        # has NOT left the real balance yet — approval is what debits it.
         'locked': locked,
+        'pendingWithdrawal': locked,
         'currency': wallet.currency,
         'available': main - locked,
     }
@@ -451,6 +509,9 @@ def create_withdrawal(user_id: int, amount: float, payment_method: str) -> dict:
             status=Transaction.Status.PENDING,
             payment_method=payment_method,
         )
+        # Place a HOLD only — the balance itself is untouched until an admin
+        # approves. The hold is what stops the same money being staked or
+        # withdrawn twice while the request sits in the queue.
         Wallet.objects.filter(user_id=user_id).update(
             locked_balance=F('locked_balance') + Decimal(str(amount))
         )
@@ -464,16 +525,16 @@ def create_withdrawal(user_id: int, amount: float, payment_method: str) -> dict:
             WithdrawalStage.objects.create(transaction=tx, stage=stage, status='pending')
 
     # The withdrawal now waits for the product admin to approve or reject it
-    # (see admin_withdrawal_approve / admin_withdrawal_reject). The amount is
-    # already moved to locked_balance above so the user can't spend it meanwhile.
+    # (see approve_withdrawal / reject_withdrawal).
     return {'transactionId': tx.id, 'status': 'pending'}
 
 
 def approve_withdrawal(transaction_id: int) -> dict:
-    """Admin action: pay out a pending withdrawal by removing the held funds.
+    """Admin action: pay out a pending withdrawal.
 
-    The amount was locked at request time; approving debits it from
-    locked_balance (the money leaves the wallet). Idempotent.
+    This is the *only* point at which a withdrawal reduces the player's
+    balance — requesting one merely holds the funds. Debits the real balance
+    and releases the hold together. Idempotent.
     """
     with tenant_atomic():
         tx = Transaction.objects.select_for_update().get(
@@ -481,17 +542,24 @@ def approve_withdrawal(transaction_id: int) -> dict:
         )
         if tx.status in (Transaction.Status.COMPLETED, Transaction.Status.REJECTED):
             raise ValueError(f'Withdrawal already {tx.status}')
+        wallet = Wallet.objects.select_for_update().get(user_id=tx.user_id)
+        if wallet.main_balance < tx.amount:
+            raise ValueError('User balance is no longer sufficient for this payout')
         tx.status = Transaction.Status.COMPLETED
         tx.save(update_fields=['status', 'updated_at'])
-        Wallet.objects.filter(user_id=tx.user_id).update(
-            locked_balance=F('locked_balance') - tx.amount
-        )
-    return {'approved': True}
+        wallet.main_balance -= tx.amount
+        wallet.locked_balance = max(Decimal('0'), wallet.locked_balance - tx.amount)
+        wallet.save(update_fields=['main_balance', 'locked_balance', 'updated_at'])
+        WithdrawalStage.objects.filter(transaction=tx).update(status='completed')
+    return {'approved': True, 'debited': float(tx.amount)}
 
 
 def reject_withdrawal(transaction_id: int, reason: str) -> dict:
-    """Admin action: reject a pending withdrawal and return the held funds to
-    the user's spendable (main) balance. Idempotent."""
+    """Admin action: reject a pending withdrawal.
+
+    Only the hold is released — nothing was ever debited, so the player's real
+    balance is left exactly as it was. Idempotent.
+    """
     with tenant_atomic():
         tx = Transaction.objects.select_for_update().get(
             id=transaction_id, type=Transaction.TxType.WITHDRAWAL
@@ -501,10 +569,10 @@ def reject_withdrawal(transaction_id: int, reason: str) -> dict:
         tx.status = Transaction.Status.REJECTED
         tx.notes = reason or tx.notes
         tx.save(update_fields=['status', 'notes', 'updated_at'])
-        Wallet.objects.filter(user_id=tx.user_id).update(
-            locked_balance=F('locked_balance') - tx.amount,
-            main_balance=F('main_balance') + tx.amount,
-        )
+        wallet = Wallet.objects.select_for_update().get(user_id=tx.user_id)
+        wallet.locked_balance = max(Decimal('0'), wallet.locked_balance - tx.amount)
+        wallet.save(update_fields=['locked_balance', 'updated_at'])
+        WithdrawalStage.objects.filter(transaction=tx).update(status='rejected')
     return {'rejected': True}
 
 

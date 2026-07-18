@@ -206,3 +206,8 @@ GAME_MIN_LAUNCH_BALANCE = os.getenv('GAME_MIN_LAUNCH_BALANCE', '100')
 GAME_MOCK_LAUNCH = os.getenv('GAME_MOCK_LAUNCH', '').lower() in ('1', 'true', 'yes')
 # Launch endpoint path on the aggregator (default matches legacy /game/v1).
 GAME_LAUNCH_PATH = _normalize_launch_path(os.getenv('GAME_LAUNCH_PATH', '/game/v1'))
+# Minimum win that qualifies for the public "recent big wins" feed.
+GAME_BIG_WIN_THRESHOLD = os.getenv('GAME_BIG_WIN_THRESHOLD', '1000')
+# How long a stake may sit unresolved before the sweep force-settles it, so a
+# provider that never reports a result cannot pin a bet on "Pending" forever.
+GAME_PENDING_STAKE_MAX_HOURS = os.getenv('GAME_PENDING_STAKE_MAX_HOURS', '72')

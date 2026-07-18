@@ -3,7 +3,18 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LogOut, User, Wallet, History, Gift, Users, ScrollText } from 'lucide-react';
+import {
+  Gift,
+  History,
+  LogOut,
+  ScrollText,
+  Settings,
+  Smartphone,
+  Sparkles,
+  User,
+  Users,
+  Wallet,
+} from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 
 function profileInitials(user) {
@@ -121,9 +132,21 @@ export function ProfileMenu({ variant = 'theme1', buttonClassName }) {
             <Gift className="h-4 w-4" />
             Promotions
           </Link>
+          <Link href="/bonus" role="menuitem" className={styles.item} onClick={() => setOpen(false)}>
+            <Sparkles className="h-4 w-4" />
+            My Bonuses
+          </Link>
           <Link href="/refer" role="menuitem" className={styles.item} onClick={() => setOpen(false)}>
             <Users className="h-4 w-4" />
             Refer &amp; Earn
+          </Link>
+          <Link href="/settings" role="menuitem" className={styles.item} onClick={() => setOpen(false)}>
+            <Settings className="h-4 w-4" />
+            Settings
+          </Link>
+          <Link href="/app" role="menuitem" className={styles.item} onClick={() => setOpen(false)}>
+            <Smartphone className="h-4 w-4" />
+            Get the App
           </Link>
           <Link href="/rules" role="menuitem" className={styles.item} onClick={() => setOpen(false)}>
             <ScrollText className="h-4 w-4" />

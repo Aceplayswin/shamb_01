@@ -9,8 +9,12 @@ urlpatterns = [
     path('auth/register/otp', views.register_otp),
     path('auth/demo', views.demo_session),
     path('auth/login', views.login),
+    path('auth/change-password', views.change_password),
     # Settings / preferences
     path('settings', views.user_settings),
+    # Mobile app install (APK) — public config + download redirect
+    path('app/download', views.app_download),
+    path('app/apk', views.app_download_redirect),
     # Wallet
     path('wallet', views.wallet_get),
     path('wallet/breakdown', views.wallet_breakdown),
@@ -31,7 +35,9 @@ urlpatterns = [
     path('games/bet', views.games_bet),
     path('games/launch', views.games_launch),
     path('games/history', views.games_history),
+    path('games/history/<str:session_uid>/rounds', views.games_session_rounds),
     path('games/pnl', views.games_pnl),
+    path('games/big-wins', views.games_big_wins),
     # Inbound aggregator bet/win callback (auth via AES payload, not JWT).
     path('games/callback', views.games_callback),
     path('games/mock-launch', views.games_mock_launch),
@@ -78,7 +84,20 @@ urlpatterns = [
     path('admin/settings', views.admin_settings),
     path('admin/settings/<str:setting_key>', views.admin_settings_update),
     path('admin/ai-calls', views.admin_ai_calls),
+    # Bet history (all players) + per-session round drill-down
+    path('admin/bet-history', views.admin_bet_history),
+    path('admin/bet-history/<str:session_uid>/rounds', views.admin_bet_history_rounds),
+    path('admin/bet-history/settle-stale', views.admin_settle_stale_rounds),
+    # Manage admin (staff accounts) — super-admin only for writes
     path('admin/staff', views.admin_staff),
+    path('admin/staff/create', views.admin_staff_create),
+    path('admin/staff/<int:staff_id>', views.admin_staff_update),
+    # Report export (CSV)
+    path('admin/reports', views.admin_reports),
+    path('admin/reports/<str:kind>/export', views.admin_report_export),
+    # Mobile app (APK) distribution
+    path('admin/app-download', views.admin_app_download),
+    path('admin/app-download/update', views.admin_app_download_update),
     path('admin/withdrawals/pending', views.admin_withdrawals_pending),
     path('admin/withdrawals/<int:tx_id>/approve', views.admin_withdrawal_approve),
     path('admin/withdrawals/<int:tx_id>/reject', views.admin_withdrawal_reject),

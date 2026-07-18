@@ -15,6 +15,8 @@ from core.models import (
     Bonus,
     Game,
     GameProvider,
+    GameRound,
+    GameSession,
     PlatformSetting,
     Transaction,
     User,
@@ -22,8 +24,13 @@ from core.models import (
     UserSetting,
     Wallet,
 )
-from core import bonus_services
-from core.services import get_user_settings
+from core.repositories import (
+    GameRoundRepository,
+    GameSessionRepository,
+    invalidate_provider_cache,
+)
+from core import bonus_services, game_services
+from core.services import get_user_settings, hash_password
 from tenants.state import get_current_tenant_id, tenant_atomic
 
 UPLOAD_ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'}
@@ -210,35 +217,80 @@ def update_game(game_id: int, data: dict) -> dict:
     return {'updated': True}
 
 
+# Per-provider aggregator credential columns. A vendor integrated on its own
+# agency account (a standalone lottery provider, a second aggregator) fills
+# these in; blanks fall back to the platform-wide env config.
+_PROVIDER_CREDENTIAL_FIELDS = (
+    'agency_uid', 'aes_secret_key', 'server_url', 'launch_path',
+    'player_prefix', 'callback_path', 'currency_code',
+)
+
+
+def _serialize_provider(p: GameProvider) -> dict:
+    return {
+        'id': p.id,
+        'name': p.name,
+        'slug': p.slug,
+        'logo_url': p.logo_url,
+        'is_active': p.is_active,
+        'agency_uid': p.agency_uid,
+        # The secret is write-only: the panel shows whether one is set, never
+        # the value itself.
+        'has_aes_secret_key': bool(p.aes_secret_key),
+        'server_url': p.server_url,
+        'launch_path': p.launch_path,
+        'player_prefix': p.player_prefix,
+        'callback_path': p.callback_path,
+        'currency_code': p.currency_code,
+        'delayed_settlement': p.delayed_settlement,
+        'uses_own_account': p.has_custom_credentials,
+        'game_count': getattr(p, 'games', None),
+        'created_at': p.created_at.isoformat(),
+    }
+
+
 def list_admin_providers() -> list[dict]:
+    # annotate the catalog size rather than counting per row (N+1).
     return [
-        {
-            'id': p.id,
-            'name': p.name,
-            'slug': p.slug,
-            'logo_url': p.logo_url,
-            'is_active': p.is_active,
-            'created_at': p.created_at.isoformat(),
-        }
-        for p in GameProvider.objects.order_by('name')
+        _serialize_provider(p)
+        for p in GameProvider.objects.annotate(games=Count('game')).order_by('name')
     ]
 
 
+def _clean_provider_payload(data: dict) -> dict:
+    updates: dict = {}
+    for key in ('name', 'slug', 'logo_url', *_PROVIDER_CREDENTIAL_FIELDS):
+        if key in data:
+            value = data[key]
+            value = value.strip() if isinstance(value, str) else value
+            updates[key] = value or None
+    for key in ('is_active', 'delayed_settlement'):
+        if key in data:
+            updates[key] = bool(data[key])
+    # Blanking the secret field in the form must not wipe a configured key —
+    # only an explicit new value replaces it.
+    if updates.get('aes_secret_key') is None:
+        updates.pop('aes_secret_key', None)
+    return updates
+
+
 def create_provider(data: dict) -> dict:
-    provider = GameProvider.objects.create(
-        name=data['name'],
-        slug=data['slug'],
-        logo_url=data.get('logo_url'),
-        is_active=bool(data.get('is_active', True)),
-    )
+    payload = _clean_provider_payload(data)
+    if not payload.get('name') or not payload.get('slug'):
+        raise ValueError('Provider name and slug are required')
+    payload.setdefault('is_active', True)
+    provider = GameProvider.objects.create(**payload)
+    invalidate_provider_cache()
     return {'id': provider.id}
 
 
 def update_provider(provider_id: int, data: dict) -> dict:
-    allowed = {'name', 'slug', 'logo_url', 'is_active'}
-    updates = {k: v for k, v in data.items() if k in allowed}
+    updates = _clean_provider_payload(data)
     if updates:
         GameProvider.objects.filter(id=provider_id).update(**updates)
+        # Callback decryption reads these keys from cache — refresh it now so a
+        # credential change takes effect on the very next callback.
+        invalidate_provider_cache()
     return {'updated': True}
 
 
@@ -571,20 +623,129 @@ def wallet_adjustment(user_id: int, amount: float, notes: str) -> dict:
     return {'new_balance': float(wallet.main_balance)}
 
 
+# --------------------------------------------------------------------------- #
+# Manage Admin — staff accounts
+# --------------------------------------------------------------------------- #
+
+STAFF_ROLES = (User.Role.ADMIN, User.Role.SUPER_ADMIN)
+
+
+def _serialize_staff(a: User) -> dict:
+    return {
+        'id': a.id,
+        'username': a.username,
+        'full_name': a.full_name,
+        'email': a.email,
+        'phone': a.phone,
+        'role': a.role,
+        'account_status': a.account_status,
+        'is_active': a.account_status == User.AccountStatus.ACTIVE,
+        'last_login_at': a.last_login_at.isoformat() if a.last_login_at else None,
+        'created_at': a.created_at.isoformat(),
+    }
+
+
 def list_admin_users_list() -> list[dict]:
-    staff_roles = [User.Role.ADMIN, User.Role.SUPER_ADMIN]
     return [
-        {
-            'id': a.id,
-            'username': a.username,
-            'email': a.email,
-            'role': a.role,
-            'is_active': a.account_status == User.AccountStatus.ACTIVE,
-            'last_login_at': a.last_login_at.isoformat() if a.last_login_at else None,
-            'created_at': a.created_at.isoformat(),
-        }
-        for a in User.objects.filter(role__in=staff_roles).order_by('username')
+        _serialize_staff(a)
+        for a in User.objects.filter(role__in=STAFF_ROLES).order_by('username')
     ]
+
+
+def _get_staff(staff_id: int) -> User:
+    staff = User.objects.filter(id=staff_id, role__in=STAFF_ROLES).first()
+    if not staff:
+        raise ValueError('Admin account not found')
+    return staff
+
+
+def create_staff(data: dict, actor_role: str) -> dict:
+    """Create an admin account. Only a super admin may mint another one."""
+    if actor_role != User.Role.SUPER_ADMIN:
+        raise PermissionError('Only a super admin can create admin accounts')
+
+    username = (data.get('username') or '').strip()
+    password = data.get('password') or ''
+    role = data.get('role') or User.Role.ADMIN
+    if not username:
+        raise ValueError('Username is required')
+    if len(password) < 8:
+        raise ValueError('Password must be at least 8 characters')
+    if role not in STAFF_ROLES:
+        raise ValueError('Role must be admin or super_admin')
+    if User.objects.filter(username=username).exists():
+        raise ValueError('That username is already taken')
+    email = (data.get('email') or '').strip() or None
+    if email and User.objects.filter(email=email).exists():
+        raise ValueError('That email is already in use')
+
+    staff = User.objects.create(
+        username=username,
+        email=email,
+        full_name=(data.get('full_name') or '').strip() or None,
+        role=role,
+        account_status=User.AccountStatus.ACTIVE,
+        password_hash=hash_password(password),
+    )
+    return _serialize_staff(staff)
+
+
+def update_staff(staff_id: int, data: dict, actor_id: int, actor_role: str) -> dict:
+    """Change an admin's role/status/details, or reset their password."""
+    if actor_role != User.Role.SUPER_ADMIN:
+        raise PermissionError('Only a super admin can manage admin accounts')
+    staff = _get_staff(staff_id)
+
+    if 'role' in data and data['role']:
+        if data['role'] not in STAFF_ROLES:
+            raise ValueError('Role must be admin or super_admin')
+        # Never let the last super admin demote themselves out of the console.
+        if staff.id == actor_id and data['role'] != User.Role.SUPER_ADMIN:
+            raise ValueError('You cannot change your own role')
+        staff.role = data['role']
+    if 'account_status' in data and data['account_status']:
+        if staff.id == actor_id and data['account_status'] != User.AccountStatus.ACTIVE:
+            raise ValueError('You cannot deactivate your own account')
+        staff.account_status = data['account_status']
+    for field in ('full_name', 'email'):
+        if field in data:
+            setattr(staff, field, (data[field] or '').strip() or None)
+    if data.get('password'):
+        if len(data['password']) < 8:
+            raise ValueError('Password must be at least 8 characters')
+        staff.password_hash = hash_password(data['password'])
+
+    _assert_super_admin_remains(staff)
+    staff.save()
+    return _serialize_staff(staff)
+
+
+def delete_staff(staff_id: int, actor_id: int, actor_role: str) -> dict:
+    if actor_role != User.Role.SUPER_ADMIN:
+        raise PermissionError('Only a super admin can remove admin accounts')
+    if staff_id == actor_id:
+        raise ValueError('You cannot delete your own account')
+    staff = _get_staff(staff_id)
+    if staff.role == User.Role.SUPER_ADMIN and _active_super_admins().count() <= 1:
+        raise ValueError('The last super admin cannot be removed')
+    staff.delete()
+    return {'deleted': True}
+
+
+def _active_super_admins():
+    return User.objects.filter(
+        role=User.Role.SUPER_ADMIN, account_status=User.AccountStatus.ACTIVE
+    )
+
+
+def _assert_super_admin_remains(staff: User) -> None:
+    """Refuse an edit that would leave the product with no active super admin."""
+    demoted_or_disabled = (
+        staff.role != User.Role.SUPER_ADMIN
+        or staff.account_status != User.AccountStatus.ACTIVE
+    )
+    if demoted_or_disabled and not _active_super_admins().exclude(id=staff.id).exists():
+        raise ValueError('At least one active super admin must remain')
 
 
 def get_dashboard_charts(days: int = 7) -> dict:
@@ -674,6 +835,236 @@ def get_recent_activity(limit: int = 12) -> list[dict]:
         }
         for t in txs
     ]
+
+
+# --------------------------------------------------------------------------- #
+# Bet history (admin view)
+# --------------------------------------------------------------------------- #
+
+def list_bet_history(
+    limit: int = 50,
+    offset: int = 0,
+    user_id: int | None = None,
+    status: str | None = None,
+    game_uid: str | None = None,
+    date_from=None,
+    date_to=None,
+) -> dict:
+    """Every player's play sessions, with the same pending-aware result the
+    player sees. Launch-only sessions are excluded — they are not bets."""
+    qs = GameSessionRepository.admin_queryset(
+        user_id, status, game_uid, date_from, date_to
+    )
+    total = qs.count()
+    records = []
+    for s in GameSessionRepository.page(qs, limit, offset):
+        row = game_services.serialize_session(s)
+        row['user_id'] = s.user_id
+        row['username'] = s.user.username
+        row['full_name'] = s.user.full_name
+        records.append(row)
+
+    # Summarise the SAME filtered set, so the headline figures describe the
+    # rows on screen rather than the platform's all-time totals.
+    totals = qs.aggregate(
+        bet=Sum('total_bet'), win=Sum('total_win'), net=Sum('profit_loss')
+    )
+    return {
+        'records': records,
+        'total': total,
+        'limit': limit,
+        'offset': offset,
+        'summary': {
+            'total_bet': float(totals['bet'] or 0),
+            'total_win': float(totals['win'] or 0),
+            # Positive = the house is up (players' net P&L inverted).
+            'gross_gaming_revenue': -float(totals['net'] or 0),
+        },
+    }
+
+
+def get_bet_history_rounds(session_uid: str) -> dict:
+    """Round-by-round drill-down for one session, for the admin panel."""
+    session = GameSession.objects.select_related('game', 'user').filter(
+        session_uid=session_uid
+    ).first()
+    if not session:
+        raise ValueError('Session not found')
+    rounds = GameRoundRepository.list_for_session(session.id)
+    detail = game_services.serialize_session(session)
+    detail['user_id'] = session.user_id
+    detail['username'] = session.user.username
+    return {
+        'session': detail,
+        'rounds': [game_services.serialize_round(r) for r in rounds],
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Report export (CSV)
+# --------------------------------------------------------------------------- #
+
+def _d(value) -> str:
+    return value.isoformat() if value else ''
+
+
+def _report_users(date_from, date_to):
+    qs = User.objects.filter(role=User.Role.USER).select_related(
+        'wallet', 'usersetting'
+    ).order_by('-created_at')
+    if date_from:
+        qs = qs.filter(created_at__date__gte=date_from)
+    if date_to:
+        qs = qs.filter(created_at__date__lte=date_to)
+    header = [
+        'ID', 'Username', 'Full name', 'Phone', 'Email', 'Status', 'KYC',
+        'Real balance', 'Bonus balance', 'Registered', 'Last login',
+    ]
+
+    def rows():
+        for u in qs.iterator():
+            wallet = getattr(u, 'wallet', None)
+            prefs = getattr(u, 'usersetting', None)
+            yield [
+                u.id, u.username, u.full_name, u.phone, u.email,
+                u.account_status, prefs.kyc_status if prefs else '',
+                float(wallet.main_balance) if wallet else 0,
+                float(wallet.bonus_balance) if wallet else 0,
+                _d(u.created_at), _d(u.last_login_at),
+            ]
+
+    return header, rows()
+
+
+def _report_transactions(date_from, date_to, tx_type=None):
+    qs = Transaction.objects.select_related('user').order_by('-created_at')
+    if tx_type:
+        qs = qs.filter(type=tx_type)
+    if date_from:
+        qs = qs.filter(created_at__date__gte=date_from)
+    if date_to:
+        qs = qs.filter(created_at__date__lte=date_to)
+    header = [
+        'ID', 'User ID', 'Username', 'Type', 'Amount', 'Currency', 'Status',
+        'Method', 'Reference', 'Notes', 'Created',
+    ]
+
+    def rows():
+        for t in qs.iterator():
+            yield [
+                t.id, t.user_id, t.user.username, t.type, float(t.amount),
+                t.currency, t.status, t.payment_method, t.reference_number,
+                (t.notes or '').replace('\n', ' '), _d(t.created_at),
+            ]
+
+    return header, rows()
+
+
+def _report_bet_history(date_from, date_to):
+    qs = GameSession.objects.select_related('user', 'game').filter(
+        Q(rounds_count__gt=0) | Q(total_bet__gt=0)
+    ).order_by('-updated_at')
+    if date_from:
+        qs = qs.filter(created_at__date__gte=date_from)
+    if date_to:
+        qs = qs.filter(created_at__date__lte=date_to)
+    header = [
+        'Session', 'User ID', 'Username', 'Game', 'Category', 'Rounds',
+        'Pending', 'Staked', 'Won', 'P&L', 'Result', 'Started', 'Last played',
+    ]
+
+    def rows():
+        for s in qs.iterator():
+            data = game_services.serialize_session(s)
+            yield [
+                s.session_uid, s.user_id, s.user.username, s.game_name,
+                s.game.category if s.game else '', s.rounds_count,
+                s.pending_rounds, float(s.total_bet), float(s.total_win),
+                float(s.profit_loss), data['result'], _d(s.created_at),
+                _d(s.last_played_at),
+            ]
+
+    return header, rows()
+
+
+def _report_rounds(date_from, date_to):
+    qs = GameRound.objects.select_related('user', 'game').order_by('-created_at')
+    if date_from:
+        qs = qs.filter(created_at__date__gte=date_from)
+    if date_to:
+        qs = qs.filter(created_at__date__lte=date_to)
+    header = [
+        'ID', 'Serial', 'Round', 'User ID', 'Username', 'Game', 'Bet', 'Win',
+        'P&L', 'Balance after', 'Settlement', 'Created',
+    ]
+
+    def rows():
+        for r in qs.iterator():
+            yield [
+                r.id, r.serial_number, r.game_round, r.user_id, r.user.username,
+                r.game_name or (r.game.name if r.game else ''),
+                float(r.bet_amount), float(r.win_amount),
+                float(r.win_amount - r.bet_amount),
+                float(r.balance_after) if r.balance_after is not None else '',
+                r.settle_status, _d(r.created_at),
+            ]
+
+    return header, rows()
+
+
+def _report_bonuses(date_from, date_to):
+    qs = UserBonus.objects.select_related('user', 'bonus').order_by('-created_at')
+    if date_from:
+        qs = qs.filter(created_at__date__gte=date_from)
+    if date_to:
+        qs = qs.filter(created_at__date__lte=date_to)
+    header = [
+        'ID', 'User ID', 'Username', 'Bonus', 'Amount', 'Source', 'Status',
+        'Wagering required', 'Wagering done', 'Created',
+    ]
+
+    def rows():
+        for ub in qs.iterator():
+            yield [
+                ub.id, ub.user_id, ub.user.username,
+                (ub.bonus.display_title or ub.bonus.name) if ub.bonus else (ub.notes or ''),
+                float(ub.amount), ub.source, ub.status,
+                float(ub.wagering_required), float(ub.wagering_completed),
+                _d(ub.created_at),
+            ]
+
+    return header, rows()
+
+
+# Report kind -> (label, builder). Each builder returns (header, row iterator)
+# so exports stream instead of materialising the whole table in memory.
+REPORT_KINDS = {
+    'users': ('Users', lambda f, t: _report_users(f, t)),
+    'transactions': ('Transactions', lambda f, t: _report_transactions(f, t)),
+    'deposits': (
+        'Deposits',
+        lambda f, t: _report_transactions(f, t, Transaction.TxType.DEPOSIT),
+    ),
+    'withdrawals': (
+        'Withdrawals',
+        lambda f, t: _report_transactions(f, t, Transaction.TxType.WITHDRAWAL),
+    ),
+    'bet-history': ('Bet history', lambda f, t: _report_bet_history(f, t)),
+    'rounds': ('Game rounds', lambda f, t: _report_rounds(f, t)),
+    'bonuses': ('Issued bonuses', lambda f, t: _report_bonuses(f, t)),
+}
+
+
+def list_report_kinds() -> list[dict]:
+    return [{'kind': kind, 'label': label} for kind, (label, _) in REPORT_KINDS.items()]
+
+
+def build_report(kind: str, date_from=None, date_to=None):
+    """Resolve a report kind to ``(header, rows)`` for CSV streaming."""
+    entry = REPORT_KINDS.get(kind)
+    if not entry:
+        raise ValueError(f'Unknown report: {kind}')
+    return entry[1](date_from, date_to)
 
 
 def get_user_full_detail(user_id: int) -> dict:
