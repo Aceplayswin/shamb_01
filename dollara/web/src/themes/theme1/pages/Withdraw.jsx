@@ -37,6 +37,8 @@ export default function Theme1Withdraw() {
   const timers = useRef([]);
 
   const available = wallet?.available ?? 0;
+  const walletBalance = wallet?.main ?? wallet?.real ?? 0;
+  const heldForWithdrawal = wallet?.pendingWithdrawal ?? wallet?.locked ?? 0;
   const numAmount = parseFloat(amount) || 0;
   const amountValid = numAmount >= MIN_WITHDRAWAL && numAmount <= available;
 
@@ -277,7 +279,11 @@ export default function Theme1Withdraw() {
               <Row label="Method" value={METHODS.find((m) => m.id === method)?.label} />
               <Row label="Destination" value={destSummary()} />
               <Row label="Request ID" value={`#${transactionId}`} />
-              <Row label="Available balance" value={`₹${available.toLocaleString('en-IN')}`} last />
+              {/* Spell out balance vs. hold. Showing "available" alone here read as
+                  though the payout had already been taken out of the account. */}
+              <Row label="Wallet balance" value={`₹${walletBalance.toLocaleString('en-IN')}`} />
+              <Row label="On hold for this request" value={`₹${heldForWithdrawal.toLocaleString('en-IN')}`} />
+              <Row label="Available to play" value={`₹${available.toLocaleString('en-IN')}`} last />
             </div>
           </section>
           <div className="flex gap-3">

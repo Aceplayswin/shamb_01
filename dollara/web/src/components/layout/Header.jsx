@@ -120,7 +120,12 @@ export function Header() {
     ...MOBILE_TABS_BASE,
     { label: 'Account', href: token ? '/profile' : '/login', icon: User },
   ];
-  const balance = wallet?.available ?? wallet?.main ?? 0;
+  // Show the player's real balance, NOT `available`. A pending withdrawal only
+  // holds funds — nothing is debited until an admin approves it — so netting the
+  // hold off here made the pill read ₹0.00 and look like the money was already
+  // taken. The hold is called out in the tooltip and on the wallet page instead.
+  const balance = wallet?.main ?? wallet?.real ?? 0;
+  const heldForWithdrawal = wallet?.pendingWithdrawal ?? wallet?.locked ?? 0;
   return (
     <>
       {/* ===== Desktop: full-height side rail (crosses under navbar) ===== */}
@@ -227,7 +232,13 @@ export function Header() {
             <Link
               href={token ? '/wallet' : '/login'}
               className="flex items-center gap-2"
-              title={token ? 'View wallet' : 'Sign in'}
+              title={
+                !token
+                  ? 'Sign in'
+                  : heldForWithdrawal > 0
+                    ? `View wallet — ₹${Number(heldForWithdrawal).toLocaleString('en-IN')} on hold for a pending withdrawal`
+                    : 'View wallet'
+              }
             >
               <Wallet className="h-4 w-4 text-brand-400" />
               <span className="text-sm font-bold text-app-fg">

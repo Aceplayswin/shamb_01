@@ -13,7 +13,8 @@ export function BalanceCard({ compact = false }) {
     return (
       <View style={styles.compact}>
         <Icon name="wallet-outline" size={16} color={colors.brand400} />
-        <Text style={styles.compactAmount}>{fmt(wallet.available)}</Text>
+        {/* Real balance — a pending withdrawal holds funds but does not debit them. */}
+        <Text style={styles.compactAmount}>{fmt(wallet.main)}</Text>
       </View>
     );
   }
@@ -22,7 +23,7 @@ export function BalanceCard({ compact = false }) {
     <View style={styles.card}>
       <View style={styles.glow} />
       <Text style={styles.eyebrow}>Total balance</Text>
-      <Text style={styles.total}>{fmt(wallet.available)}</Text>
+      <Text style={styles.total}>{fmt(wallet.total)}</Text>
       <View style={styles.row}>
         <Stat label="Main" value={fmt(wallet.main)} color={colors.green} />
         <View style={styles.divider} />

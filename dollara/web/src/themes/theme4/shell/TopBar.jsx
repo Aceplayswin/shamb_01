@@ -63,7 +63,9 @@ export function Theme4TopBar() {
   const token = useAuthStore((s) => s.token);
   const wallet = useAuthStore((s) => s.wallet);
   const isHydrated = useAuthStore((s) => s.isHydrated);
-  const balance = wallet?.available ?? wallet?.main ?? 0;
+  // Real balance, not `available` — a pending withdrawal only holds funds, it
+  // does not debit them, so netting the hold off made this read ₹0.00.
+  const balance = wallet?.main ?? wallet?.real ?? 0;
 
   return (
     <header className="sticky top-0 z-40">
