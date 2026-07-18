@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
   phone VARCHAR(20) UNIQUE,
   password_hash VARCHAR(255),
   full_name VARCHAR(100),
-  role ENUM('user', 'admin', 'super_admin') NOT NULL DEFAULT 'user',
+  role ENUM('user', 'admin') NOT NULL DEFAULT 'user',
   account_status ENUM('active', 'inactive', 'suspended', 'blocked') DEFAULT 'active',
   last_login_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
