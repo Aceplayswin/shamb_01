@@ -554,7 +554,10 @@ def approve_withdrawal(transaction_id: int) -> dict:
         wallet.main_balance -= tx.amount
         wallet.locked_balance = max(Decimal('0'), wallet.locked_balance - tx.amount)
         wallet.save(update_fields=['main_balance', 'locked_balance', 'updated_at'])
-        WithdrawalStage.objects.filter(transaction=tx).update(status='completed')
+        # `withdrawal_stages.status` is ENUM('pending','passed','failed','review') —
+        # anything outside that set is rejected by MySQL with error 1265 and rolls
+        # back the whole approval.
+        WithdrawalStage.objects.filter(transaction=tx).update(status='passed')
     return {'approved': True, 'debited': float(tx.amount)}
 
 
@@ -576,7 +579,8 @@ def reject_withdrawal(transaction_id: int, reason: str) -> dict:
         wallet = Wallet.objects.select_for_update().get(user_id=tx.user_id)
         wallet.locked_balance = max(Decimal('0'), wallet.locked_balance - tx.amount)
         wallet.save(update_fields=['locked_balance', 'updated_at'])
-        WithdrawalStage.objects.filter(transaction=tx).update(status='rejected')
+        # See approve_withdrawal — 'rejected' is not a valid stage status.
+        WithdrawalStage.objects.filter(transaction=tx).update(status='failed')
     return {'rejected': True}
 
 
