@@ -8,9 +8,6 @@ import { usePathname } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 
-// Routes where the marketing CTA block in the footer was previously hidden.
-const NO_CTA = ['/login', '/register', '/onboarding'];
-
 export default function Theme1Shell({ children }) {
   const pathname = usePathname();
 
@@ -20,7 +17,6 @@ export default function Theme1Shell({ children }) {
   }
 
   const isPlayRoute = pathname?.startsWith('/play/');
-  const showCta = !isPlayRoute && !NO_CTA.some((p) => pathname === p || pathname?.startsWith(p + '/'));
 
   return (
     <>
@@ -29,7 +25,7 @@ export default function Theme1Shell({ children }) {
           and mobile bottom tab bar. */}
       <div className={`min-h-screen pt-16 lg:pl-[92px] ${isPlayRoute ? 'pb-0' : 'pb-20 lg:pb-0'}`}>
         {children}
-        {!isPlayRoute && <Footer showCta={showCta} />}
+        {!isPlayRoute && <Footer />}
       </div>
     </>
   );

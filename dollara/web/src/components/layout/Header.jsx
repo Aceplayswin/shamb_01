@@ -23,6 +23,7 @@ import {
   LifeBuoy,
   Settings,
   Search,
+  Download,
   Wallet,
   Plus,
   Sparkles,
@@ -215,6 +216,20 @@ export function Header() {
 
         <div className="ml-auto flex items-center gap-2.5">
           <ThemeToggleButton className="border-hairline/10 bg-panel/60" />
+
+          {/* App download — always available, signed in or not. Serves the APK
+              bundled in public/ directly, so the click downloads rather than
+              routing through the /app page. Icon-only on narrow screens so it
+              never crowds out the wallet pill. */}
+          <a
+            href="/dollara.apk"
+            download
+            title="Get the app"
+            className="inline-flex items-center gap-2 rounded-xl border border-hairline/10 px-2.5 py-2 text-xs font-bold text-app-fg transition hover:border-brand-400/50 hover:bg-panel sm:px-4"
+          >
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Get the app</span>
+          </a>
 
           {!token && (
             <button
