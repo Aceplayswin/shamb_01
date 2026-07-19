@@ -80,6 +80,27 @@ const STYLES = {
     iframe: 'h-[calc(100vh-8rem)] w-full border-0 lg:h-[calc(100vh-5rem)]',
     loading: 'mx-auto max-w-lg px-4 py-12 text-center text-[#5d7378]',
   },
+  theme5: {
+    page: 'mx-auto max-w-lg px-4 py-8',
+    card: 'rounded-xl border border-black/[0.06] bg-white p-8 text-center shadow-sm',
+    panel: 'mt-6 rounded-xl border border-black/[0.06] bg-white p-6 shadow-sm',
+    title: 'mt-4 font-display text-2xl font-black text-[#0f1b33]',
+    meta: 'text-[#64748b]',
+    fair: 'mt-2 text-sm text-[#15803d]',
+    label: 'text-sm text-[#64748b]',
+    input: 'mt-2 w-full rounded-lg border border-black/10 bg-white px-4 py-3 text-xl text-[#0f1b33] outline-none focus:border-[#1d4ed8]',
+    limits: 'mt-2 text-xs text-[#94a3b8]',
+    btn: 'mt-4 w-full rounded-lg bg-[#101c33] py-3 font-black uppercase tracking-wide text-white transition hover:bg-[#1b2a48] disabled:opacity-50',
+    btnLink: 'mt-4 block w-full rounded-lg bg-[#101c33] py-3 text-center font-black uppercase tracking-wide text-white transition hover:bg-[#1b2a48]',
+    error: 'mt-4 text-center text-sm text-[#f4547a]',
+    msg: 'mt-4 text-center text-sm text-[#1d4ed8]',
+    link: 'text-[#1d4ed8]',
+    iframeBar: 'flex items-center justify-between border-b border-black/[0.06] bg-white px-4 py-2',
+    iframeTitle: 'text-sm font-semibold text-[#0f1b33]',
+    exitBtn: 'rounded-lg border border-black/10 px-3 py-1 text-xs text-[#0f1b33] hover:border-[#1d4ed8]',
+    iframe: 'h-[calc(100vh-8rem)] w-full border-0 lg:h-[calc(100vh-5rem)]',
+    loading: 'mx-auto max-w-lg px-4 py-12 text-center text-[#64748b]',
+  },
 };
 
 export function GamePlayView({ slug, variant = 'theme1' }) {

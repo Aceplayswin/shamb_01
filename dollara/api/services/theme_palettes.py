@@ -46,6 +46,16 @@ DEFAULT_COLORS = {
         't4_lay': '#faa9ba',
         't4_live': '#e5342c',
     },
+    'theme5': {
+        't5_navy': '#101c33',
+        't5_blue': '#1d4ed8',
+        't5_gold': '#f5c518',
+        't5_bg': '#e8ebef',
+        't5_ink': '#0f1b33',
+        't5_muted': '#64748b',
+        't5_live': '#f4547a',
+        't5_green': '#22a34a',
+    },
 }
 
 DEFAULT_THEME = 'theme1'

@@ -65,6 +65,19 @@ THEME_PALETTES = {
             {'key': 't4_live', 'label': 'Live / Alert', 'group': 'Odds', 'default': '#e5342c'},
         ],
     },
+    # theme5 (Velplay) — light three-column portal, scoped .theme5-root vars.
+    'theme5': {
+        'colors': [
+            {'key': 't5_navy', 'label': 'Nav / Section Bars', 'group': 'Brand', 'default': '#101c33'},
+            {'key': 't5_blue', 'label': 'Accent Blue', 'group': 'Brand', 'default': '#1d4ed8'},
+            {'key': 't5_gold', 'label': 'Logo Gold', 'group': 'Brand', 'default': '#f5c518'},
+            {'key': 't5_bg', 'label': 'Page Background', 'group': 'Surfaces', 'default': '#e8ebef'},
+            {'key': 't5_ink', 'label': 'Primary Text', 'group': 'Surfaces', 'default': '#0f1b33'},
+            {'key': 't5_muted', 'label': 'Muted Text', 'group': 'Surfaces', 'default': '#64748b'},
+            {'key': 't5_live', 'label': 'Live Badge', 'group': 'Accents', 'default': '#f4547a'},
+            {'key': 't5_green', 'label': 'Success / Get App', 'group': 'Accents', 'default': '#22a34a'},
+        ],
+    },
 }
 
 

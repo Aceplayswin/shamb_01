@@ -195,6 +195,52 @@ body {
   clip-path: polygon(0 0, calc(100% - 34px) 0, 100% 50%, calc(100% - 34px) 100%, 0 100%);
 }
 
+/* ── Theme 5 (Velplay) ───────────────────────────────────────────────────────
+   A light three-column portal (Velplay365 reference): black news ticker, white
+   nav header on a blue rule, gray page surface, white cards, and navy angled
+   section tabs. Scoped to `.theme5-root` so the palette holds regardless of the
+   app-wide light/dark toggle (mirrors theme2/3/4 scoping). */
+.theme5-root {
+  /* Super Admin overrides (--sa-t5-*) fall back to theme5's own defaults. */
+  --t5-navy: var(--sa-t5-navy, #101c33); /* nav strip / section tabs */
+  --t5-blue: var(--sa-t5-blue, #1d4ed8); /* accent rule, links, active tab */
+  --t5-gold: var(--sa-t5-gold, #f5c518); /* logo mark */
+  --t5-bg: var(--sa-t5-bg, #e8ebef); /* page surface */
+  --t5-ink: var(--sa-t5-ink, #0f1b33);
+  --t5-muted: var(--sa-t5-muted, #64748b);
+  --t5-live: var(--sa-t5-live, #f4547a); /* LIVE pills */
+  --t5-green: var(--sa-t5-green, #22a34a); /* GET APP */
+
+  color: var(--t5-ink);
+  background: var(--t5-bg);
+  color-scheme: light;
+}
+
+/* Native form controls inside theme5 should render light. */
+.theme5-root input,
+.theme5-root select,
+.theme5-root textarea {
+  color-scheme: light;
+}
+
+/* Navy angled section tab ("LIVE SPORTS", "TRENDING GAMES", …): a dark bar whose
+   right edge is cut at an angle, sitting on the white section header strip. */
+.theme5-tab {
+  background: linear-gradient(90deg, var(--t5-navy) 0%, #1c2c4c 100%);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 18px) 100%, 0 100%);
+  padding-right: 32px;
+}
+
+/* Dark panel headers on the side rails (SPORTS / MY PROFILE / RECENT BIG WINS). */
+.theme5-panel-head {
+  background: linear-gradient(90deg, var(--t5-navy) 0%, #1b2a48 100%);
+}
+
+/* Blue underline under the active top-nav item. */
+.theme5-nav-active {
+  box-shadow: inset 0 -3px 0 0 var(--t5-blue);
+}
+
 /* Slim custom scrollbar for the page itself */
 ::-webkit-scrollbar {
   width: 10px;

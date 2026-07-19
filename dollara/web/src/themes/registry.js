@@ -73,6 +73,19 @@ import Theme4Support from './theme4/pages/Support';
 import Theme4Games from './theme4/pages/Games';
 import Theme4Play from './theme4/pages/Play';
 
+import Theme5Shell from './theme5/shell/ThemeShell';
+import Theme5Home from './theme5/pages/Home';
+import Theme5Login from './theme5/pages/Login';
+import Theme5Register from './theme5/pages/Register';
+import Theme5Deposit from './theme5/pages/Deposit';
+import Theme5Withdraw from './theme5/pages/Withdraw';
+import Theme5Wallet from './theme5/pages/Wallet';
+import Theme5Profile from './theme5/pages/Profile';
+import Theme5Onboarding from './theme5/pages/Onboarding';
+import Theme5Support from './theme5/pages/Support';
+import Theme5Games from './theme5/pages/Games';
+import Theme5Play from './theme5/pages/Play';
+
 export const DEFAULT_THEME = 'theme1';
 
 const THEMES = {
@@ -145,6 +158,22 @@ const THEMES = {
       support: Theme4Support,
       games: Theme4Games,
       play: Theme4Play,
+    },
+  },
+  theme5: {
+    Shell: Theme5Shell,
+    pages: {
+      home: Theme5Home,
+      login: Theme5Login,
+      register: Theme5Register,
+      deposit: Theme5Deposit,
+      withdraw: Theme5Withdraw,
+      wallet: Theme5Wallet,
+      profile: Theme5Profile,
+      onboarding: Theme5Onboarding,
+      support: Theme5Support,
+      games: Theme5Games,
+      play: Theme5Play,
     },
   },
 };

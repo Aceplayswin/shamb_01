@@ -63,6 +63,20 @@ const THEME_SPECS = {
       t4_live: ['--sa-t4-live', HEX],
     },
   },
+  theme5: {
+    primaryToken: null,
+    accentToken: null,
+    vars: {
+      t5_navy: ['--sa-t5-navy', HEX],
+      t5_blue: ['--sa-t5-blue', HEX],
+      t5_gold: ['--sa-t5-gold', HEX],
+      t5_bg: ['--sa-t5-bg', HEX],
+      t5_ink: ['--sa-t5-ink', HEX],
+      t5_muted: ['--sa-t5-muted', HEX],
+      t5_live: ['--sa-t5-live', HEX],
+      t5_green: ['--sa-t5-green', HEX],
+    },
+  },
 };
 
 function hexToRgb(hex) {
