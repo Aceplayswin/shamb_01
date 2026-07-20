@@ -178,10 +178,30 @@ export function Header() {
       </span> */}
 
       {/* ===== Top bar: starts after side rail on desktop ===== */}
-      <header className="fixed inset-x-0 top-0 z-30 flex h-16 items-center gap-3 border-b border-hairline/[0.06] bg-panel-strong/80 px-4 backdrop-blur-xl lg:left-[92px]">
-        {/* Centered on full viewport width (from screen left), not the header area */}
-        <div className="pointer-events-none fixed left-[45%] top-0 hidden h-16 w-[min(calc(100vw-2rem),28rem)] -translate-x-1/2 items-center sm:flex">
-          <div className="pointer-events-auto relative w-full">
+      <header className="fixed inset-x-0 top-0 z-30 flex h-16 items-center gap-2 border-b border-hairline/[0.06] bg-panel-strong/80 px-3 backdrop-blur-xl sm:gap-3 sm:px-4 lg:left-[92px]">
+        {/* Brand: logo + name on mobile; name only on desktop (logo lives in side rail) */}
+        <Link href="/" className="flex min-w-0 items-center gap-2 lg:hidden">
+          {branding.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={branding.logo_url} alt={brandName} className="h-9 w-9 shrink-0 rounded-xl object-contain" />
+          ) : (
+            <span
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-xl shadow-glow"
+              style={{ background: `linear-gradient(135deg, ${branding.theme_color}, ${branding.secondary_color})` }}
+            >
+              <Sparkles className="h-4 w-4 text-surface-950" strokeWidth={2.5} />
+            </span>
+          )}
+          <span className="truncate font-display text-base font-extrabold text-app-fg sm:text-lg">{brandName}</span>
+        </Link>
+        <Link href="/" className="hidden shrink-0 font-display text-lg font-extrabold text-app-fg lg:block">
+          {brandName}
+        </Link>
+
+        {/* Search — flows between brand and actions so it never overlaps them.
+            Shrinks with the viewport and drops out entirely on small screens. */}
+        <div className="mx-auto hidden min-w-0 max-w-md flex-1 md:block">
+          <div className="relative w-full">
             <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <input
               value={search}
@@ -195,26 +215,7 @@ export function Header() {
           </div>
         </div>
 
-        {/* Brand: logo + name on mobile; name only on desktop (logo lives in side rail) */}
-        <Link href="/" className="flex items-center gap-2 lg:hidden">
-          {branding.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={branding.logo_url} alt={brandName} className="h-9 w-9 rounded-xl object-contain" />
-          ) : (
-            <span
-              className="grid h-9 w-9 place-items-center rounded-xl shadow-glow"
-              style={{ background: `linear-gradient(135deg, ${branding.theme_color}, ${branding.secondary_color})` }}
-            >
-              <Sparkles className="h-4 w-4 text-surface-950" strokeWidth={2.5} />
-            </span>
-          )}
-          <span className="font-display text-lg font-extrabold text-app-fg">{brandName}</span>
-        </Link>
-        <Link href="/" className="hidden font-display text-lg font-extrabold text-app-fg lg:block">
-          {brandName}
-        </Link>
-
-        <div className="ml-auto flex items-center gap-2.5">
+        <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-2.5">
           <ThemeToggleButton className="border-hairline/10 bg-panel/60" />
 
           {/* App download — always available, signed in or not. Serves the APK
