@@ -82,8 +82,8 @@ export default function AdminBetHistoryPage() {
       label: 'Player',
       render: (r) => (
         <div>
-          <p className="font-medium text-white">{r.username}</p>
-          <p className="text-xs text-slate-500">#{r.user_id}</p>
+          <p className="font-medium text-white">{r.full_name || r.username}</p>
+          <p className="text-xs text-slate-500">{r.username}</p>
         </div>
       ),
     },

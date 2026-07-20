@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Gamepad2, Plus, Pencil, Star, Image as ImageIcon } from 'lucide-react';
 import { adminApi } from '@/services/adminApi';
 import {
@@ -19,6 +19,8 @@ import {
 } from '@/components/admin/AdminShell';
 
 const CATEGORIES = ['slots', 'live_casino', 'sports', 'lottery', 'ai_games', 'fantasy', 'virtual_sports'];
+
+const catLabel = (c) => c.replace(/_/g, ' ');
 
 const emptyGame = {
   name: '',
@@ -43,6 +45,35 @@ export default function AdminGamesPage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyGame);
   const [busy, setBusy] = useState(false);
+  // Category tab currently in view — 'all' shows the whole catalog.
+  const [activeCategory, setActiveCategory] = useState('all');
+
+  // Per-category counts drive the badge on each tab. Only categories that
+  // actually have games get a tab, so the bar stays relevant to the catalog.
+  const countByCategory = useMemo(() => {
+    const counts = {};
+    for (const g of games ?? []) {
+      counts[g.category] = (counts[g.category] ?? 0) + 1;
+    }
+    return counts;
+  }, [games]);
+
+  const tabs = useMemo(
+    () => [
+      { key: 'all', label: 'All', count: games?.length ?? 0 },
+      ...CATEGORIES.filter((c) => countByCategory[c]).map((c) => ({
+        key: c,
+        label: catLabel(c),
+        count: countByCategory[c],
+      })),
+    ],
+    [games, countByCategory],
+  );
+
+  const visibleGames = useMemo(
+    () => (activeCategory === 'all' ? games : (games ?? []).filter((g) => g.category === activeCategory)),
+    [games, activeCategory],
+  );
 
   const openCreate = () => {
     setForm(emptyGame);
@@ -145,9 +176,36 @@ export default function AdminGamesPage() {
       subtitle={`${games?.length ?? 0} games in catalog`}
       actions={<Button icon={Plus} onClick={openCreate}>Add game</Button>}
     >
+      <div className="mb-4 flex flex-wrap gap-1.5 border-b border-slate-800 pb-3">
+        {tabs.map((t) => {
+          const active = activeCategory === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setActiveCategory(t.key)}
+              className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium capitalize transition-colors ${
+                active
+                  ? 'bg-indigo-500/15 text-indigo-300 ring-1 ring-inset ring-indigo-500/30'
+                  : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+              }`}
+            >
+              {t.label}
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-xs font-semibold ${
+                  active ? 'bg-indigo-500/20 text-indigo-200' : 'bg-slate-800 text-slate-500'
+                }`}
+              >
+                {t.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       <DataTable
         columns={columns}
-        rows={games}
+        rows={visibleGames}
         loading={loading}
         searchable
         searchKeys={['name', 'slug', 'provider_name', 'category']}

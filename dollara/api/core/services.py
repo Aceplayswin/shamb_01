@@ -7,7 +7,9 @@ from decimal import Decimal
 import bcrypt
 from django.conf import settings
 from django.core.cache import cache
-from django.db.models import Count, F, Q, Sum
+from django.db import IntegrityError
+from django.db.models import BigIntegerField, Count, F, Q, Sum
+from django.db.models.functions import Cast
 from django.utils import timezone
 
 from core import bonus_services
@@ -154,6 +156,29 @@ def update_user_preferences(user_id: int, changes: dict) -> dict:
     return _serialize_preferences(user, prefs)
 
 
+# Player usernames are sequential 8-digit numbers starting here (10000000,
+# 10000001, ...). The column stays a CharField — we just store the number as a
+# string so the format is purely an API-layer concern.
+_USERNAME_START = 10000000
+
+
+def _next_sequential_username() -> str:
+    """Return the next sequential numeric username as a string.
+
+    Looks at existing all-digit usernames, takes the highest one and adds 1.
+    Falls back to the starting value when no sequential username exists yet.
+    """
+    last = (
+        User.objects.filter(username__regex=r'^\d+$')
+        .annotate(username_num=Cast('username', BigIntegerField()))
+        .order_by('-username_num')
+        .values_list('username_num', flat=True)
+        .first()
+    )
+    nxt = last + 1 if last is not None and last >= _USERNAME_START else _USERNAME_START
+    return str(nxt)
+
+
 def register_with_otp(
     full_name: str,
     phone: str,
@@ -165,19 +190,28 @@ def register_with_otp(
         raise ValueError('Phone number already registered')
     if not password or len(password) < 6:
         raise ValueError('Password must be at least 6 characters')
-    username = f'user_{phone[-6:]}_{secrets.token_hex(4)}'
     voice_id = f'AI_EXEC_{random.randint(1, 50):03d}'
     # Resolve who referred this player before the account exists, so the referral
     # bonus engine can pay the referrer.
     referred_by = bonus_services.resolve_referrer(referral_code)
-    user = User.objects.create(
-        username=username,
-        phone=phone,
-        full_name=full_name,
-        country_code=country_code,
-        role=User.Role.USER,
-        password_hash=_hash_password(password),
-    )
+    password_hash = _hash_password(password)
+    # Sequential usernames can collide if two players register at the same instant;
+    # the unique constraint then rejects the loser, so we recompute and retry.
+    for _attempt in range(5):
+        try:
+            user = User.objects.create(
+                username=_next_sequential_username(),
+                phone=phone,
+                full_name=full_name,
+                country_code=country_code,
+                role=User.Role.USER,
+                password_hash=password_hash,
+            )
+            break
+        except IntegrityError:
+            continue
+    else:
+        raise ValueError('Could not allocate a username, please try again')
     # Wallet starts empty — the joining bonus is now awarded by the controllable
     # bonus engine (see award_joining_bonus), not a hardcoded balance.
     Wallet.objects.create(user=user)

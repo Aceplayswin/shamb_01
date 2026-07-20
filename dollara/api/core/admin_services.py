@@ -11,7 +11,6 @@ from django.utils import timezone
 from core.models import (
     AiCallLog,
     Banner,
-    Bet,
     Bonus,
     BonusProvider,
     Game,
@@ -296,24 +295,36 @@ def update_provider(provider_id: int, data: dict) -> dict:
 
 
 def list_admin_bets(limit: int = 50, offset: int = 0, user_id: int | None = None) -> list[dict]:
-    qs = Bet.objects.select_related('user', 'game').order_by('-created_at')
+    """Individual wagers across all players. These are ``GameRound`` rows — the
+    real per-bet settlement events the aggregator reports (the same data the
+    bet-history drill-down shows), not the legacy ``Bet`` table, which the live
+    aggregator flow never populates."""
+    qs = GameRound.objects.select_related('user', 'game').order_by('-created_at')
     if user_id:
         qs = qs.filter(user_id=user_id)
-    return [
-        {
-            'id': b.id,
-            'user_id': b.user_id,
-            'username': b.user.username,
-            'game_id': b.game_id,
-            'game_name': b.game.name if b.game else None,
-            'bet_amount': float(b.bet_amount),
-            'odds': float(b.odds) if b.odds else None,
-            'payout': float(b.payout),
-            'status': b.status,
-            'created_at': b.created_at.isoformat(),
-        }
-        for b in qs[offset : offset + limit]
-    ]
+    rows = []
+    for r in qs[offset : offset + limit]:
+        net = r.win_amount - r.bet_amount
+        is_pending = r.settle_status == GameRound.SettleStatus.PENDING
+        rows.append({
+            'id': r.id,
+            'user_id': r.user_id,
+            'username': r.user.username,
+            'full_name': r.user.full_name,
+            'game_id': r.game_id,
+            # Prefer the round's denormalized name (the specific table/market
+            # actually played) and fall back to the catalog game.
+            'game_name': r.game_name or (r.game.name if r.game else None),
+            'game_category': r.game.category if r.game else None,
+            'bet_amount': float(r.bet_amount),
+            'payout': float(r.win_amount),
+            'profit_loss': float(net),
+            # Delayed-settlement stakes read Pending until the result arrives,
+            # instead of showing as a premature loss.
+            'status': 'pending' if is_pending else ('won' if net >= 0 else 'lost'),
+            'created_at': r.created_at.isoformat(),
+        })
+    return rows
 
 
 # Every controllable field on a Bonus, split by how its value is coerced.
@@ -842,8 +853,10 @@ def get_dashboard_charts(days: int = 7) -> dict:
             'signups': signups,
         })
 
+    # Bet volume by category comes from the real wager rounds (GameRound), not
+    # the legacy Bet table the live aggregator flow never writes to.
     category_rows = (
-        Bet.objects.values('game__category')
+        GameRound.objects.values('game__category')
         .annotate(count=Count('id'), volume=Sum('bet_amount'))
         .order_by('-count')
     )
@@ -1136,7 +1149,9 @@ def build_report(kind: str, date_from=None, date_to=None):
 def get_user_full_detail(user_id: int) -> dict:
     detail = get_user_detail(user_id)
     txs = Transaction.objects.filter(user_id=user_id).order_by('-created_at')[:20]
-    bets = Bet.objects.select_related('game').filter(user_id=user_id).order_by('-created_at')[:20]
+    # Recent wagers come from the real round events (GameRound), matching the
+    # Bets page — the legacy Bet table is never populated by the live flow.
+    bets = GameRound.objects.select_related('game').filter(user_id=user_id).order_by('-created_at')[:20]
     detail['transactions'] = [
         {
             'id': t.id,
@@ -1151,10 +1166,13 @@ def get_user_full_detail(user_id: int) -> dict:
     detail['bets'] = [
         {
             'id': b.id,
-            'game_name': b.game.name if b.game else None,
+            'game_name': b.game_name or (b.game.name if b.game else None),
             'bet_amount': float(b.bet_amount),
-            'payout': float(b.payout),
-            'status': b.status,
+            'payout': float(b.win_amount),
+            'status': (
+                'pending' if b.settle_status == GameRound.SettleStatus.PENDING
+                else ('won' if b.win_amount - b.bet_amount >= 0 else 'lost')
+            ),
             'created_at': b.created_at.isoformat(),
         }
         for b in bets
