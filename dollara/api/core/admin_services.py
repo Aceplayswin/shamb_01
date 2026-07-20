@@ -299,26 +299,43 @@ def list_admin_bets(limit: int = 50, offset: int = 0, user_id: int | None = None
     real per-bet settlement events the aggregator reports (the same data the
     bet-history drill-down shows), not the legacy ``Bet`` table, which the live
     aggregator flow never populates."""
-    qs = GameRound.objects.select_related('user', 'game').order_by('-created_at')
+    qs = GameRound.objects.select_related(
+        'user', 'game', 'session', 'session__game'
+    ).order_by('-created_at')
     if user_id:
         qs = qs.filter(user_id=user_id)
     rows = []
     for r in qs[offset : offset + limit]:
         net = r.win_amount - r.bet_amount
         is_pending = r.settle_status == GameRound.SettleStatus.PENDING
+        # For lobby games the settlement callback reports the inner game's uid,
+        # which isn't a catalog entry, so the round's own game FK is empty. Fall
+        # back to the game the player actually launched (the session's catalog
+        # game) so name and category still resolve.
+        session_game = r.session.game if r.session_id else None
+        game_name = (
+            r.game_name
+            or (r.game.name if r.game else None)
+            or (session_game.name if session_game else None)
+        )
+        game_category = (
+            (r.game.category if r.game else None)
+            or (session_game.category if session_game else None)
+        )
         rows.append({
             'id': r.id,
             'user_id': r.user_id,
             'username': r.user.username,
             'full_name': r.user.full_name,
             'game_id': r.game_id,
-            # Prefer the round's denormalized name (the specific table/market
-            # actually played) and fall back to the catalog game.
-            'game_name': r.game_name or (r.game.name if r.game else None),
-            'game_category': r.game.category if r.game else None,
+            'game_name': game_name,
+            'game_category': game_category,
             'bet_amount': float(r.bet_amount),
             'payout': float(r.win_amount),
             'profit_loss': float(net),
+            # Wallet balance recorded right after this round settled — the total
+            # the player had available at that point, so money can be tracked.
+            'wallet_balance': float(r.balance_after) if r.balance_after is not None else None,
             # Delayed-settlement stakes read Pending until the result arrives,
             # instead of showing as a premature loss.
             'status': 'pending' if is_pending else ('won' if net >= 0 else 'lost'),

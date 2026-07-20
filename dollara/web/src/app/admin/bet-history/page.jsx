@@ -102,6 +102,17 @@ export default function AdminBetHistoryPage() {
     },
     { key: 'total_bet', label: 'Staked', render: (r) => inr(r.total_bet) },
     { key: 'total_win', label: 'Won', render: (r) => inr(r.total_win) },
+    {
+      key: 'last_balance',
+      label: 'Total Amount',
+      // Wallet balance the player had available after this session's latest
+      // round, so money on each account can be tracked over time.
+      render: (r) => (
+        <span className="font-semibold text-white">
+          {r.last_balance != null ? inr(r.last_balance) : '—'}
+        </span>
+      ),
+    },
     { key: 'result', label: 'Result', render: (r) => <ResultBadge record={r} /> },
     {
       key: 'actions',

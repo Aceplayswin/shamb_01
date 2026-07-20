@@ -38,7 +38,7 @@ export default function Theme5Profile() {
     <T5FormPage title="Profile">
       <T5Card className="mt-4 space-y-1 p-6">
         <Row label="Name" value={user?.full_name} />
-        <Row label="Username" value={user?.username} />
+        <Row label="MemberId" value={user?.username} />
         <Row label="Phone" value={user?.phone} />
         <Row label="KYC" value={user?.kyc_status} />
         <Row label="Account" value={user?.account_status} />

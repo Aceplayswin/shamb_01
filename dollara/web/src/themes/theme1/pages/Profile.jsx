@@ -104,7 +104,7 @@ export default function Theme1Profile() {
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Account details</h2>
             <div className="mt-4 space-y-1">
               <Row label="Full name" value={user?.full_name} />
-              <Row label="Username" value={user?.username} />
+              <Row label="MemberId" value={user?.username} />
               <Row label="Phone" value={user?.phone} />
               <Row label="KYC status" value={user?.kyc_status} />
               <Row label="Account status" value={user?.account_status} last />

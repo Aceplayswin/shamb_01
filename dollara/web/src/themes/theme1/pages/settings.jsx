@@ -169,7 +169,7 @@ export default function Theme1Settings() {
             </h2>
             <div className="mt-4 space-y-1">
               <Row label="Full name" value={account?.full_name} />
-              <Row label="Username" value={account?.username} />
+              <Row label="MemberId" value={account?.username} />
               <Row label="Phone" value={account?.phone} />
               <Row label="Email" value={account?.email} />
               <Row label="KYC status" value={account?.kyc_status} badge />

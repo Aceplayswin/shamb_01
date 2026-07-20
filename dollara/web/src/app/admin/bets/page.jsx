@@ -36,10 +36,12 @@ export default function AdminBetsPage() {
   const tabs = useMemo(
     () => [
       { key: 'all', label: 'All', count: bets?.length ?? 0 },
-      ...CATEGORIES.filter((c) => countByCategory[c]).map((c) => ({
+      // Always list every category, even ones with no bets yet — a zero count
+      // just shows the tab as empty rather than hiding it.
+      ...CATEGORIES.map((c) => ({
         key: c,
         label: catLabel(c),
-        count: countByCategory[c],
+        count: countByCategory[c] ?? 0,
       })),
     ],
     [bets, countByCategory],
@@ -73,6 +75,17 @@ export default function AdminBetsPage() {
       key: 'payout',
       label: 'Won',
       render: (r) => <span className={r.payout > 0 ? 'font-semibold text-emerald-400' : 'text-slate-400'}>{inr(r.payout)}</span>,
+    },
+    {
+      key: 'wallet_balance',
+      label: 'Total Amount',
+      // Wallet balance the player had available right after this bet settled,
+      // so money on each account can be tracked over time.
+      render: (r) => (
+        <span className="font-semibold text-white">
+          {r.wallet_balance != null ? inr(r.wallet_balance) : '—'}
+        </span>
+      ),
     },
     { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} /> },
   ];
