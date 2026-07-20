@@ -5,24 +5,74 @@
 // rather than being reported as a loss.
 
 import { useEffect, useState } from 'react';
-import { Clock, Dices, Loader2 } from 'lucide-react';
+import { Clock, Dices } from 'lucide-react';
 import { adminApi } from '@/services/adminApi';
 import {
   AdminShell,
   Button,
-  Card,
   Field,
   Input,
   Modal,
   Select,
   StatCard,
   DataTable,
+  Pagination,
+  TxReference,
   toast,
   inr,
   fmtDate,
 } from '@/components/admin/AdminShell';
 
 const PAGE_SIZE = 50;
+
+// Columns for the per-session round breakdown shown in the detail modal.
+const ROUND_COLUMNS = [
+  {
+    key: 'game_round',
+    label: 'Round',
+    sortValue: (r) => r.serial_number ?? r.game_round,
+    render: (r) => (
+      <span className="font-mono text-xs text-slate-400">{r.game_round || r.serial_number}</span>
+    ),
+  },
+  { key: 'game_name', label: 'Game', render: (r) => r.game_name || '—' },
+  {
+    key: 'reference',
+    label: 'Reference',
+    sortable: false,
+    render: (r) => <TxReference reference={r.serial_number} />,
+  },
+  {
+    key: 'created_at',
+    label: 'Time',
+    render: (r) => <span className="text-slate-400">{fmtDate(r.created_at)}</span>,
+  },
+  { key: 'bet_amount', label: 'Stake', align: 'right', render: (r) => inr(r.bet_amount) },
+  { key: 'win_amount', label: 'Win', align: 'right', render: (r) => inr(r.win_amount) },
+  {
+    key: 'balance_after',
+    label: 'Balance after',
+    align: 'right',
+    render: (r) => (
+      <span className="text-slate-400">{r.balance_after == null ? '—' : inr(r.balance_after)}</span>
+    ),
+  },
+  {
+    key: 'result',
+    label: 'Result',
+    align: 'right',
+    sortValue: (r) => r.profit_loss,
+    render: (r) =>
+      r.result === 'pending' ? (
+        <span className="text-amber-400">Pending</span>
+      ) : (
+        <span className={r.profit_loss >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+          {r.profit_loss >= 0 ? '+' : '−'}
+          {inr(Math.abs(r.profit_loss))}
+        </span>
+      ),
+  },
+];
 
 export default function AdminBetHistoryPage() {
   const [filters, setFilters] = useState({ status: '', userId: '', from: '', to: '' });
@@ -65,18 +115,11 @@ export default function AdminBetHistoryPage() {
     }
   };
 
-  const search = (e) => {
-    e.preventDefault();
-    setPage(0);
-    setApplied(filters);
-  };
-
   const summary = data?.summary;
   const total = data?.total ?? 0;
   const pages = Math.ceil(total / PAGE_SIZE);
 
   const columns = [
-    { key: 'created_at', label: 'Date', render: (r) => fmtDate(r.last_played_at || r.created_at) },
     {
       key: 'username',
       label: 'Player',
@@ -100,11 +143,11 @@ export default function AdminBetHistoryPage() {
         </span>
       ),
     },
-    { key: 'total_bet', label: 'Staked', render: (r) => inr(r.total_bet) },
-    { key: 'total_win', label: 'Won', render: (r) => inr(r.total_win) },
+    { key: 'total_bet', label: 'Bet Amount', render: (r) => inr(r.total_bet) },
+    { key: 'result', label: 'Result', render: (r) => <ResultBadge record={r} /> },
     {
       key: 'last_balance',
-      label: 'Total Amount',
+      label: 'Wallet Amount',
       // Wallet balance the player had available after this session's latest
       // round, so money on each account can be tracked over time.
       render: (r) => (
@@ -113,7 +156,21 @@ export default function AdminBetHistoryPage() {
         </span>
       ),
     },
-    { key: 'result', label: 'Result', render: (r) => <ResultBadge record={r} /> },
+    {
+      key: 'created_at',
+      label: 'Date',
+      render: (r) => {
+        const d = r.last_played_at || r.created_at;
+        if (!d) return '—';
+        const dt = new Date(d);
+        return (
+          <div className="whitespace-nowrap">
+            <p className="text-slate-200">{dt.toLocaleDateString('en-IN', { dateStyle: 'medium' })}</p>
+            <p className="text-xs text-slate-500">{dt.toLocaleTimeString('en-IN', { timeStyle: 'short' })}</p>
+          </div>
+        );
+      },
+    },
     {
       key: 'actions',
       label: '',
@@ -141,58 +198,6 @@ export default function AdminBetHistoryPage() {
         </div>
       )}
 
-      <Card className="mb-5 p-4">
-        <form onSubmit={search} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <Field label="Result">
-            <Select
-              value={filters.status}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-            >
-              <option value="">All</option>
-              <option value="wait">Pending</option>
-              <option value="profit">Won</option>
-              <option value="loss">Lost</option>
-            </Select>
-          </Field>
-          <Field label="User ID">
-            <Input
-              value={filters.userId}
-              onChange={(e) => setFilters({ ...filters, userId: e.target.value })}
-              placeholder="e.g. 42"
-            />
-          </Field>
-          <Field label="From">
-            <Input
-              type="date"
-              value={filters.from}
-              onChange={(e) => setFilters({ ...filters, from: e.target.value })}
-            />
-          </Field>
-          <Field label="To">
-            <Input
-              type="date"
-              value={filters.to}
-              onChange={(e) => setFilters({ ...filters, to: e.target.value })}
-            />
-          </Field>
-          <div className="flex items-end gap-2">
-            <Button type="submit">Apply</Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                const cleared = { status: '', userId: '', from: '', to: '' };
-                setFilters(cleared);
-                setApplied(cleared);
-                setPage(0);
-              }}
-            >
-              Reset
-            </Button>
-          </div>
-        </form>
-      </Card>
-
       <DataTable
         columns={columns}
         rows={data?.records ?? []}
@@ -200,34 +205,70 @@ export default function AdminBetHistoryPage() {
         searchable
         searchKeys={['username', 'game_name']}
         searchPlaceholder="Search this page…"
+        paginate={false}
         emptyIcon={Dices}
         emptyMessage="No bet history yet"
         emptyHint="Sessions appear here once players place their first bets."
+        filterSubtitle="Filter sessions by result, player and date"
+        filterActive={!!(applied.status || applied.userId || applied.from || applied.to)}
+        onFilterApply={() => {
+          setPage(0);
+          setApplied(filters);
+        }}
+        onFilterClear={() => {
+          const cleared = { status: '', userId: '', from: '', to: '' };
+          setFilters(cleared);
+          setApplied(cleared);
+          setPage(0);
+        }}
+        filters={
+          <>
+            <Field label="Result">
+              <Select
+                value={filters.status}
+                onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+              >
+                <option value="">All</option>
+                <option value="wait">Pending</option>
+                <option value="profit">Won</option>
+                <option value="loss">Lost</option>
+              </Select>
+            </Field>
+            <Field label="User ID">
+              <Input
+                value={filters.userId}
+                onChange={(e) => setFilters({ ...filters, userId: e.target.value })}
+                placeholder="e.g. 42"
+              />
+            </Field>
+            <Field label="From">
+              <Input
+                type="date"
+                value={filters.from}
+                onChange={(e) => setFilters({ ...filters, from: e.target.value })}
+              />
+            </Field>
+            <Field label="To">
+              <Input
+                type="date"
+                value={filters.to}
+                onChange={(e) => setFilters({ ...filters, to: e.target.value })}
+              />
+            </Field>
+          </>
+        }
       />
 
-      {pages > 1 && (
-        <div className="mt-4 flex items-center justify-between text-sm text-slate-400">
-          <span>
-            Page {page + 1} of {pages} · {total.toLocaleString('en-IN')} sessions
-          </span>
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page === 0}
-              onClick={() => setPage((p) => p - 1)}
-            >
-              Prev
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page >= pages - 1}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </Button>
-          </div>
+      {total > 0 && (
+        <div className="mt-4">
+          <Pagination
+            page={page}
+            totalPages={pages}
+            onPage={setPage}
+            total={total}
+            perPage={PAGE_SIZE}
+            noun="session"
+          />
         </div>
       )}
 
@@ -237,59 +278,17 @@ export default function AdminBetHistoryPage() {
         title={`Rounds — ${detail?.session?.game_name ?? ''}`}
         size="xl"
       >
-        {detailLoading ? (
-          <p className="flex items-center gap-2 py-6 text-sm text-slate-400">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading rounds…
-          </p>
-        ) : !detail?.rounds?.length ? (
-          <p className="py-6 text-sm text-slate-400">No rounds recorded for this session.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-800 text-xs uppercase tracking-wider text-slate-500">
-                  <th className="px-2 py-2">Round</th>
-                  <th className="px-2 py-2">Game</th>
-                  <th className="px-2 py-2">Time</th>
-                  <th className="px-2 py-2 text-right">Stake</th>
-                  <th className="px-2 py-2 text-right">Win</th>
-                  <th className="px-2 py-2 text-right">Balance after</th>
-                  <th className="px-2 py-2 text-right">Result</th>
-                </tr>
-              </thead>
-              <tbody>
-                {detail.rounds.map((r) => (
-                  <tr key={r.id} className="border-b border-slate-800/70 last:border-0">
-                    <td className="px-2 py-2.5 font-mono text-xs text-slate-400">
-                      {r.game_round || r.serial_number}
-                    </td>
-                    <td className="px-2 py-2.5">{r.game_name || '—'}</td>
-                    <td className="px-2 py-2.5 text-slate-400">{fmtDate(r.created_at)}</td>
-                    <td className="px-2 py-2.5 text-right">{inr(r.bet_amount)}</td>
-                    <td className="px-2 py-2.5 text-right">{inr(r.win_amount)}</td>
-                    <td className="px-2 py-2.5 text-right text-slate-400">
-                      {r.balance_after == null ? '—' : inr(r.balance_after)}
-                    </td>
-                    <td className="px-2 py-2.5 text-right">
-                      {r.result === 'pending' ? (
-                        <span className="text-amber-400">Pending</span>
-                      ) : (
-                        <span
-                          className={
-                            r.profit_loss >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                          }
-                        >
-                          {r.profit_loss >= 0 ? '+' : '−'}
-                          {inr(Math.abs(r.profit_loss))}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <DataTable
+          columns={ROUND_COLUMNS}
+          rows={detail?.rounds ?? []}
+          loading={detailLoading}
+          searchable
+          searchKeys={['game_name', 'game_round']}
+          searchPlaceholder="Search rounds…"
+          noun="round"
+          emptyIcon={Dices}
+          emptyMessage="No rounds recorded for this session."
+        />
       </Modal>
     </AdminShell>
   );

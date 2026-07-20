@@ -69,7 +69,7 @@ export default function AdminDepositsPage() {
   };
 
   const columns = [
-    { key: 'created_at', label: 'Date', render: (r) => fmtDate(r.created_at) },
+    { key: 'created_at', label: 'Date', render: (r) => fmtDate(r.created_at), filter: 'date' },
     {
       key: 'username',
       label: 'User',
@@ -81,8 +81,14 @@ export default function AdminDepositsPage() {
       ),
     },
     { key: 'amount', label: 'Amount', render: (r) => <span className="font-semibold text-emerald-400">{inr(r.amount)}</span> },
-    { key: 'payment_method', label: 'Method', render: (r) => r.payment_method || '—' },
-    { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} /> },
+    {
+      key: 'payment_method',
+      label: 'Method',
+      render: (r) => r.payment_method || '—',
+      filter: 'select',
+      filterLabel: 'Payment method',
+    },
+    { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} />, filter: 'select' },
     {
       key: 'actions',
       label: '',
@@ -108,6 +114,7 @@ export default function AdminDepositsPage() {
         searchable
         searchKeys={['username', 'full_name']}
         searchPlaceholder="Search deposits…"
+        noun="deposit"
         pageSize={15}
         emptyIcon={ArrowDownToLine}
         emptyMessage="No pending deposits"

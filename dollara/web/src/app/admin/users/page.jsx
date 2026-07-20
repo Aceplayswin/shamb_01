@@ -20,10 +20,7 @@ import {
 } from '@/components/admin/AdminShell';
 
 export default function AdminUsersPage() {
-  const [statusFilter, setStatusFilter] = useState('');
-  const [kycFilter, setKycFilter] = useState('');
-  const query = `/api/v1/admin/users?limit=200${statusFilter ? `&status=${statusFilter}` : ''}${kycFilter ? `&kycStatus=${kycFilter}` : ''}`;
-  const { data: users, loading, reload } = useAdminData(query, [statusFilter, kycFilter]);
+  const { data: users, loading, reload } = useAdminData('/api/v1/admin/users?limit=200', []);
 
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -106,9 +103,33 @@ export default function AdminUsersPage() {
     },
     { key: 'main_balance', label: 'Balance', render: (r) => inr(r.main_balance) },
     { key: 'bonus_balance', label: 'Bonus', render: (r) => inr(r.bonus_balance) },
-    { key: 'kyc_status', label: 'KYC', render: (r) => <StatusBadge status={r.kyc_status} /> },
-    { key: 'account_status', label: 'Status', render: (r) => <StatusBadge status={r.account_status} /> },
-    { key: 'created_at', label: 'Joined', render: (r) => fmtDate(r.created_at) },
+    {
+      key: 'kyc_status',
+      label: 'KYC',
+      render: (r) => <StatusBadge status={r.kyc_status} />,
+      filter: 'select',
+      filterLabel: 'KYC status',
+      filterOptions: [
+        { value: 'verified', label: 'Verified' },
+        { value: 'pending', label: 'Pending' },
+        { value: 'rejected', label: 'Rejected' },
+        { value: 'none', label: 'None' },
+      ],
+    },
+    {
+      key: 'account_status',
+      label: 'Status',
+      render: (r) => <StatusBadge status={r.account_status} />,
+      filter: 'select',
+      filterLabel: 'Account status',
+      filterOptions: [
+        { value: 'active', label: 'Active' },
+        { value: 'suspended', label: 'Suspended' },
+        { value: 'blocked', label: 'Blocked' },
+        { value: 'inactive', label: 'Inactive' },
+      ],
+    },
+    { key: 'created_at', label: 'Joined', render: (r) => fmtDate(r.created_at), filter: 'date' },
     {
       key: 'actions',
       label: '',
@@ -127,23 +148,6 @@ export default function AdminUsersPage() {
 
   return (
     <AdminShell title="Users" subtitle={`${users?.length ?? 0} registered players`}>
-      <div className="mb-4 flex flex-wrap gap-3">
-        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="max-w-[180px]">
-          <option value="">All statuses</option>
-          <option value="active">Active</option>
-          <option value="suspended">Suspended</option>
-          <option value="blocked">Blocked</option>
-          <option value="inactive">Inactive</option>
-        </Select>
-        <Select value={kycFilter} onChange={(e) => setKycFilter(e.target.value)} className="max-w-[180px]">
-          <option value="">All KYC</option>
-          <option value="verified">Verified</option>
-          <option value="pending">Pending</option>
-          <option value="rejected">Rejected</option>
-          <option value="none">None</option>
-        </Select>
-      </div>
-
       <DataTable
         columns={columns}
         rows={users}
@@ -151,10 +155,12 @@ export default function AdminUsersPage() {
         searchable
         searchKeys={['username', 'full_name', 'phone', 'email']}
         searchPlaceholder="Search by name, phone, email…"
+        noun="user"
         pageSize={15}
         emptyIcon={Users}
         emptyMessage="No users yet"
         emptyHint="Registered players will appear here."
+        filterSubtitle="Combine any filters to narrow the list"
       />
 
       {/* Detail modal */}

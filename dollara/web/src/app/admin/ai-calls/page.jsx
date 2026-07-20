@@ -18,9 +18,14 @@ export default function AdminAiCallsPage() {
   const [transcript, setTranscript] = useState(null);
 
   const columns = [
-    { key: 'created_at', label: 'Date', render: (r) => fmtDate(r.created_at) },
+    { key: 'created_at', label: 'Date', render: (r) => fmtDate(r.created_at), filter: 'date' },
     { key: 'username', label: 'User', render: (r) => <span className="font-medium text-white">{r.username}</span> },
-    { key: 'voice_executive_id', label: 'Executive', render: (r) => r.voice_executive_id || '—' },
+    {
+      key: 'voice_executive_id',
+      label: 'Executive',
+      render: (r) => r.voice_executive_id || '—',
+      filter: 'select',
+    },
     { key: 'duration_seconds', label: 'Duration', render: (r) => (r.duration_seconds ? `${r.duration_seconds}s` : '—') },
     {
       key: 'deposit_intent',
@@ -31,8 +36,15 @@ export default function AdminAiCallsPage() {
         ) : (
           <span className="text-slate-500">No</span>
         ),
+      filter: 'select',
+      filterLabel: 'Deposit intent',
+      filterAccessor: (r) => (r.deposit_intent ? 'yes' : 'no'),
+      filterOptions: [
+        { value: 'yes', label: 'Yes' },
+        { value: 'no', label: 'No' },
+      ],
     },
-    { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} /> },
+    { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} />, filter: 'select' },
     {
       key: 'actions',
       label: '',
@@ -54,6 +66,7 @@ export default function AdminAiCallsPage() {
         searchable
         searchKeys={['username', 'voice_executive_id']}
         searchPlaceholder="Search calls…"
+        noun="call"
         pageSize={20}
         emptyIcon={PhoneCall}
         emptyMessage="No AI calls logged"

@@ -53,6 +53,7 @@ urlpatterns = [
     path('admin/users/<int:user_id>/status', views.admin_user_status),
     path('admin/users/<int:user_id>/wallet/adjust', views.admin_wallet_adjust),
     path('admin/transactions', views.admin_transactions),
+    path('admin/transactions/by-reference/<path:reference>', views.admin_transaction_by_reference),
     path('admin/deposits/pending', views.admin_deposits_pending),
     path('admin/deposits/<int:tx_id>/confirm', views.admin_deposit_confirm),
     path('admin/deposits/<int:tx_id>/reject', views.admin_deposit_reject),

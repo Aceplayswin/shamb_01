@@ -133,8 +133,19 @@ export default function AdminProvidersPage() {
         </div>
       ),
     },
-    { key: 'is_active', label: 'Status', render: (r) => <StatusBadge status={r.is_active ? 'active' : 'inactive'} /> },
-    { key: 'created_at', label: 'Added', render: (r) => fmtDate(r.created_at) },
+    {
+      key: 'is_active',
+      label: 'Status',
+      render: (r) => <StatusBadge status={r.is_active ? 'active' : 'inactive'} />,
+      filter: 'select',
+      filterLabel: 'Status',
+      filterAccessor: (r) => (r.is_active ? 'active' : 'inactive'),
+      filterOptions: [
+        { value: 'active', label: 'Active' },
+        { value: 'inactive', label: 'Inactive' },
+      ],
+    },
+    { key: 'created_at', label: 'Added', render: (r) => fmtDate(r.created_at), filter: 'date' },
     {
       key: 'actions',
       label: '',
@@ -184,6 +195,7 @@ export default function AdminProvidersPage() {
         searchable
         searchKeys={['name', 'slug']}
         searchPlaceholder="Search providers…"
+        noun="provider"
         emptyIcon={Building2}
         emptyMessage="No providers yet"
       />

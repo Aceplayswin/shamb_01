@@ -123,23 +123,38 @@ def list_admin_transactions(
         qs = qs.filter(status=status)
     if user_id:
         qs = qs.filter(user_id=user_id)
-    return [
-        {
-            'id': t.id,
-            'user_id': t.user_id,
-            'username': t.user.username,
-            'full_name': t.user.full_name,
-            'type': t.type,
-            'amount': float(t.amount),
-            'currency': t.currency,
-            'status': t.status,
-            'payment_method': t.payment_method,
-            'reference_number': t.reference_number,
-            'notes': t.notes,
-            'created_at': t.created_at.isoformat(),
-        }
-        for t in qs[offset : offset + limit]
-    ]
+    return [_serialize_transaction(t) for t in qs[offset : offset + limit]]
+
+
+def _serialize_transaction(t: Transaction) -> dict:
+    return {
+        'id': t.id,
+        'user_id': t.user_id,
+        'username': t.user.username,
+        'full_name': t.user.full_name,
+        'type': t.type,
+        'amount': float(t.amount),
+        'currency': t.currency,
+        'status': t.status,
+        'payment_method': t.payment_method,
+        'reference_number': t.reference_number,
+        'notes': t.notes,
+        'created_at': t.created_at.isoformat(),
+    }
+
+
+def get_transaction_by_reference(reference: str) -> dict | None:
+    """Look up a single transaction by its reference number — used to open the
+    settlement transaction behind a bet/round from its reference id."""
+    if not reference:
+        return None
+    t = (
+        Transaction.objects.select_related('user')
+        .filter(reference_number=reference)
+        .order_by('-created_at')
+        .first()
+    )
+    return _serialize_transaction(t) if t else None
 
 
 def list_pending_deposits(limit: int = 100) -> list[dict]:
@@ -330,6 +345,9 @@ def list_admin_bets(limit: int = 50, offset: int = 0, user_id: int | None = None
             'game_id': r.game_id,
             'game_name': game_name,
             'game_category': game_category,
+            # The round's unique id — this is what the bet-settlement transaction
+            # stores as its reference_number, so the panel can open that record.
+            'reference': r.serial_number,
             'bet_amount': float(r.bet_amount),
             'payout': float(r.win_amount),
             'profit_loss': float(net),

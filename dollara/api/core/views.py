@@ -766,6 +766,15 @@ def admin_transactions(request):
 
 @require_auth(['admin'])
 @require_http_methods(['GET'])
+def admin_transaction_by_reference(request, reference):
+    tx = admin_services.get_transaction_by_reference(reference)
+    if not tx:
+        return _error_response(ValueError('No transaction found for this reference'), 404)
+    return JsonResponse(tx)
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
 def admin_deposits_pending(request):
     return JsonResponse(admin_services.list_pending_deposits(), safe=False)
 

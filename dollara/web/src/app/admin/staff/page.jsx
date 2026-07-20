@@ -124,14 +124,18 @@ export default function AdminStaffPage() {
       render: (r) => (
         <span className="capitalize text-slate-300">{r.role.replace(/_/g, ' ')}</span>
       ),
+      filter: 'select',
     },
     {
       key: 'is_active',
       label: 'Status',
       render: (r) => <StatusBadge status={r.account_status} />,
+      filter: 'select',
+      filterLabel: 'Status',
+      filterAccessor: (r) => r.account_status,
     },
-    { key: 'last_login_at', label: 'Last login', render: (r) => fmtDate(r.last_login_at) },
-    { key: 'created_at', label: 'Created', render: (r) => fmtDate(r.created_at) },
+    { key: 'last_login_at', label: 'Last login', render: (r) => fmtDate(r.last_login_at), filter: 'date' },
+    { key: 'created_at', label: 'Created', render: (r) => fmtDate(r.created_at), filter: 'date' },
     {
       key: 'actions',
       label: '',
@@ -175,6 +179,7 @@ export default function AdminStaffPage() {
         searchable
         searchKeys={['username', 'email', 'role']}
         searchPlaceholder="Search staff…"
+        noun="admin"
         emptyIcon={ShieldCheck}
         emptyMessage="No staff accounts"
         emptyHint="Seed creates the default superadmin."

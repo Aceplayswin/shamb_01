@@ -7,7 +7,7 @@ import {
   AdminShell,
   DataTable,
   StatusBadge,
-  Select,
+  TxReference,
   Button,
   Modal,
   Field,
@@ -16,17 +16,16 @@ import {
   toast,
   useAdminData,
   inr,
-  fmtDate,
 } from '@/components/admin/AdminShell';
 
 const ACTIONABLE_TYPES = ['deposit', 'withdrawal'];
 const ACTIONABLE_STATUSES = ['pending', 'processing'];
 
 export default function AdminTransactionsPage() {
-  const [typeFilter, setTypeFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const query = `/api/v1/admin/transactions?limit=200${typeFilter ? `&type=${typeFilter}` : ''}${statusFilter ? `&status=${statusFilter}` : ''}`;
-  const { data: txs, loading, reload, setData } = useAdminData(query, [typeFilter, statusFilter]);
+  const { data: txs, loading, reload, setData } = useAdminData(
+    '/api/v1/admin/transactions?limit=200',
+    [],
+  );
 
   const [busyId, setBusyId] = useState(null);
   const [rejectRow, setRejectRow] = useState(null);
@@ -93,7 +92,6 @@ export default function AdminTransactionsPage() {
   };
 
   const columns = [
-    { key: 'created_at', label: 'Date', render: (r) => fmtDate(r.created_at) },
     {
       key: 'username',
       label: 'User',
@@ -108,7 +106,16 @@ export default function AdminTransactionsPage() {
       key: 'type',
       label: 'Type',
       render: (r) => <span className="capitalize text-slate-300">{r.type.replace(/_/g, ' ')}</span>,
+      filter: 'select',
+      filterOptions: [
+        { value: 'deposit', label: 'Deposit' },
+        { value: 'withdrawal', label: 'Withdrawal' },
+        { value: 'adjustment', label: 'Adjustment' },
+        { value: 'bonus_credit', label: 'Bonus credit' },
+        { value: 'bet_settlement', label: 'Bet settlement' },
+      ],
     },
+    { key: 'reference_number', label: 'Reference', sortable: false, render: (r) => <TxReference transaction={r} /> },
     {
       key: 'amount',
       label: 'Amount',
@@ -118,9 +125,41 @@ export default function AdminTransactionsPage() {
         </span>
       ),
     },
-    { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} /> },
-    { key: 'payment_method', label: 'Method', render: (r) => r.payment_method || '—' },
-    { key: 'reference_number', label: 'Reference', render: (r) => r.reference_number || '—' },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (r) => <StatusBadge status={r.status} />,
+      filter: 'select',
+      filterOptions: [
+        { value: 'pending', label: 'Pending' },
+        { value: 'processing', label: 'Processing' },
+        { value: 'completed', label: 'Completed' },
+        { value: 'rejected', label: 'Rejected' },
+        { value: 'failed', label: 'Failed' },
+      ],
+    },
+    {
+      key: 'payment_method',
+      label: 'Method',
+      render: (r) => r.payment_method || '—',
+      filter: 'select',
+      filterLabel: 'Payment method',
+    },
+    {
+      key: 'created_at',
+      label: 'Date',
+      filter: 'date',
+      render: (r) => {
+        if (!r.created_at) return '—';
+        const dt = new Date(r.created_at);
+        return (
+          <div className="whitespace-nowrap">
+            <p className="text-slate-200">{dt.toLocaleDateString('en-IN', { dateStyle: 'medium' })}</p>
+            <p className="text-xs text-slate-500">{dt.toLocaleTimeString('en-IN', { timeStyle: 'short' })}</p>
+          </div>
+        );
+      },
+    },
     {
       key: 'actions',
       label: '',
@@ -152,32 +191,15 @@ export default function AdminTransactionsPage() {
 
   return (
     <AdminShell title="Transactions" subtitle="All deposits, withdrawals and adjustments">
-      <div className="mb-4 flex flex-wrap gap-3">
-        <Select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="max-w-[180px]">
-          <option value="">All types</option>
-          <option value="deposit">Deposit</option>
-          <option value="withdrawal">Withdrawal</option>
-          <option value="adjustment">Adjustment</option>
-          <option value="bonus_credit">Bonus credit</option>
-          <option value="bet_settlement">Bet settlement</option>
-        </Select>
-        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="max-w-[180px]">
-          <option value="">All statuses</option>
-          <option value="pending">Pending</option>
-          <option value="processing">Processing</option>
-          <option value="completed">Completed</option>
-          <option value="rejected">Rejected</option>
-          <option value="failed">Failed</option>
-        </Select>
-      </div>
-
       <DataTable
         columns={columns}
         rows={txs}
         loading={loading}
         searchable
+        filterSubtitle="Combine any filters to narrow the list"
         searchKeys={['username', 'full_name', 'reference_number', 'payment_method']}
         searchPlaceholder="Search transactions…"
+        noun="transaction"
         pageSize={20}
         emptyIcon={Receipt}
         emptyMessage="No transactions"

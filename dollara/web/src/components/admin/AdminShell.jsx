@@ -26,6 +26,10 @@ import {
   Inbox,
   ChevronUp,
   ChevronDown,
+  ChevronsUpDown,
+  ChevronLeft,
+  ChevronRight,
+  SlidersHorizontal,
   Loader2,
   Image as ImageIcon,
   UploadCloud,
@@ -537,7 +541,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
   }, [open, onClose]);
 
   if (!open || !mounted) return null;
-  const widths = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' };
+  const widths = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-6xl' };
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={onClose} />
@@ -560,6 +564,84 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
           </div>
         )}
       </div>
+    </div>,
+    document.body,
+  );
+}
+
+// Right-hand slide-in drawer that houses a table's filters. Opens from the
+// Filters button in DataTable's toolbar; "Done" applies (when an onApply is
+// wired for server-side pages) and closes, "Clear all" resets.
+export function FilterDrawer({ open, onClose, title = 'Filters', subtitle, onClear, onApply, children }) {
+  const [mounted, setMounted] = useState(false);
+  const [render, setRender] = useState(false);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (open) {
+      setRender(true);
+      const id = requestAnimationFrame(() => setVisible(true));
+      return () => cancelAnimationFrame(id);
+    }
+    setVisible(false);
+    const t = setTimeout(() => setRender(false), 300);
+    return () => clearTimeout(t);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => e.key === 'Escape' && onClose?.();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
+  if (!render || !mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[70]">
+      <div
+        className={`absolute inset-0 bg-black/70 transition-opacity duration-200 ${
+          visible ? 'opacity-100' : 'opacity-0'
+        }`}
+        onClick={onClose}
+      />
+      <aside
+        className={`absolute inset-y-0 right-0 flex w-full max-w-sm flex-col border-l border-slate-800 bg-slate-900 shadow-2xl shadow-black/60 transition-transform duration-300 ease-out ${
+          visible ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        <div className="flex shrink-0 items-start gap-3 border-b border-slate-800 px-5 py-4">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-indigo-500/10 text-indigo-400 ring-1 ring-inset ring-indigo-500/20">
+            <SlidersHorizontal className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-display text-base font-bold text-white">{title}</h3>
+            {subtitle && <p className="truncate text-xs text-slate-500">{subtitle}</p>}
+          </div>
+          <button
+            onClick={onClose}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">{children}</div>
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-800 px-5 py-4">
+          <Button variant="secondary" onClick={onClear} disabled={!onClear}>
+            Clear all
+          </Button>
+          <Button
+            onClick={() => {
+              onApply?.();
+              onClose?.();
+            }}
+          >
+            Done
+          </Button>
+        </div>
+      </aside>
     </div>,
     document.body,
   );
@@ -607,6 +689,96 @@ export function StatusBadge({ status }) {
   );
 }
 
+/* ----------------------------- Transaction ref ----------------------------- */
+
+function TxDetailRow({ label, children }) {
+  return (
+    <div className="flex items-start justify-between gap-4 px-4 py-2.5 text-sm">
+      <dt className="shrink-0 text-slate-500">{label}</dt>
+      <dd className="text-right font-medium text-slate-200">{children}</dd>
+    </div>
+  );
+}
+
+// A clickable reference id that opens the settlement transaction behind a
+// bet/round. Fetches on first open and caches the result.
+export function TxReference({ reference, transaction }) {
+  const label = reference ?? transaction?.reference_number;
+  const [open, setOpen] = useState(false);
+  // When the full transaction is handed in (e.g. the Transactions list already
+  // has it), show it directly and skip the lookup.
+  const [tx, setTx] = useState(transaction ?? null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  if (!label) return <span className="text-slate-600">—</span>;
+
+  const openTx = async () => {
+    setOpen(true);
+    if (tx) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await adminApi(
+        `/api/v1/admin/transactions/by-reference/${encodeURIComponent(label)}`,
+      );
+      setTx(res);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={openTx}
+        title="View transaction"
+        className="inline-flex max-w-[180px] items-center gap-1 truncate font-mono text-xs text-indigo-300 transition hover:text-indigo-200 hover:underline"
+      >
+        <Receipt className="h-3 w-3 shrink-0" />
+        <span className="truncate">{label}</span>
+      </button>
+      <Modal open={open} onClose={() => setOpen(false)} title="Transaction" size="md">
+        {loading ? (
+          <p className="flex items-center gap-2 py-6 text-sm text-slate-400">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading transaction…
+          </p>
+        ) : error ? (
+          <p className="py-6 text-sm text-rose-400">{error}</p>
+        ) : tx ? (
+          <div className="space-y-3">
+            <dl className="divide-y divide-slate-800 rounded-lg border border-slate-800">
+              <TxDetailRow label="Reference">
+                <span className="font-mono text-xs">{tx.reference_number || '—'}</span>
+              </TxDetailRow>
+              <TxDetailRow label="User">
+                {tx.full_name ? `${tx.full_name} (${tx.username})` : tx.username}
+              </TxDetailRow>
+              <TxDetailRow label="Type">
+                <span className="capitalize">{String(tx.type).replace(/_/g, ' ')}</span>
+              </TxDetailRow>
+              <TxDetailRow label="Amount">{inr(tx.amount)}</TxDetailRow>
+              <TxDetailRow label="Status">
+                <StatusBadge status={tx.status} />
+              </TxDetailRow>
+              <TxDetailRow label="Method">{tx.payment_method || '—'}</TxDetailRow>
+              <TxDetailRow label="Date">{fmtDate(tx.created_at)}</TxDetailRow>
+            </dl>
+            {tx.notes && (
+              <div className="rounded-lg border border-slate-800 bg-slate-950/40 px-4 py-3 text-sm text-slate-400">
+                {tx.notes}
+              </div>
+            )}
+          </div>
+        ) : null}
+      </Modal>
+    </>
+  );
+}
+
 /* -------------------------------- DataTable -------------------------------- */
 
 function TableSkeleton({ cols }) {
@@ -629,6 +801,125 @@ function TableSkeleton({ cols }) {
   );
 }
 
+const PER_PAGE_OPTIONS = [10, 20, 50, 100];
+
+const plural = (noun, n) => {
+  if (n === 1) return noun;
+  if (/(?:s|x|z|ch|sh)$/i.test(noun)) return `${noun}es`;
+  if (/[^aeiou]y$/i.test(noun)) return `${noun.slice(0, -1)}ies`;
+  return `${noun}s`;
+};
+
+// Turn a raw cell value ("bonus_credit") into a human option label ("Bonus credit").
+const prettifyValue = (v) => {
+  const s = String(v).replace(/_/g, ' ').trim();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
+
+// Windowed list of page indices for the pager: always the first & last page,
+// the current one and its neighbours — `null` marks an elided gap (…).
+function pageWindow(page, totalPages) {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i);
+  const wanted = [0, totalPages - 1, page, page - 1, page + 1].filter(
+    (p) => p >= 0 && p < totalPages,
+  );
+  const sorted = [...new Set(wanted)].sort((a, b) => a - b);
+  const out = [];
+  let prev = -1;
+  for (const p of sorted) {
+    if (prev !== -1 && p - prev > 1) out.push(null);
+    out.push(p);
+    prev = p;
+  }
+  return out;
+}
+
+// Footer pager: "Showing …" on the left, numbered page buttons flanked by
+// prev/next arrows on the right, and an optional "N / page" size selector.
+// Reused by DataTable (client-side) and by pages that page server-side.
+export function Pagination({
+  page,
+  totalPages,
+  onPage,
+  total,
+  perPage,
+  perPageOptions = PER_PAGE_OPTIONS,
+  onPerPage,
+  noun = 'record',
+}) {
+  const single = totalPages <= 1;
+  const start = total === 0 ? 0 : page * perPage + 1;
+  const end = Math.min((page + 1) * perPage, total);
+  const fmt = (n) => n.toLocaleString('en-IN');
+  const label = single
+    ? `Showing all ${fmt(total)} ${plural(noun, total)}`
+    : `Showing ${fmt(start)}–${fmt(end)} of ${fmt(total)} ${plural(noun, total)}`;
+
+  const arrowCls =
+    'grid h-8 w-8 place-items-center rounded-lg border border-slate-700 text-slate-300 transition hover:border-slate-600 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-slate-700 disabled:hover:bg-transparent';
+
+  return (
+    <div className="flex flex-col gap-3 px-1 pt-1 text-sm text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+      <span>{label}</span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className={arrowCls}
+          disabled={page === 0}
+          onClick={() => onPage(page - 1)}
+          aria-label="Previous page"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        {pageWindow(page, totalPages).map((p, i) =>
+          p === null ? (
+            <span key={`gap-${i}`} className="px-1 text-slate-600">
+              …
+            </span>
+          ) : (
+            <button
+              key={p}
+              type="button"
+              onClick={() => onPage(p)}
+              className={`grid h-8 min-w-[2rem] place-items-center rounded-lg border px-2 text-sm font-semibold transition ${
+                p === page
+                  ? 'border-indigo-500 bg-indigo-600 text-white'
+                  : 'border-slate-700 text-slate-300 hover:border-slate-600 hover:bg-slate-800'
+              }`}
+            >
+              {p + 1}
+            </button>
+          ),
+        )}
+        <button
+          type="button"
+          className={arrowCls}
+          disabled={page >= totalPages - 1}
+          onClick={() => onPage(page + 1)}
+          aria-label="Next page"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+        {onPerPage && (
+          <select
+            value={perPage}
+            onChange={(e) => onPerPage(Number(e.target.value))}
+            className="ml-1 rounded-lg border border-slate-700 bg-slate-900 py-1.5 pl-3 pr-7 text-sm font-medium text-slate-200 transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+          >
+            {[...new Set([perPage, ...perPageOptions])]
+              .sort((a, b) => a - b)
+              .map((n) => (
+                <option key={n} value={n}>
+                  {n} / page
+                </option>
+              ))}
+          </select>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function DataTable({
   columns,
   rows,
@@ -639,53 +930,264 @@ export function DataTable({
   searchable = false,
   searchKeys,
   searchPlaceholder = 'Search…',
-  pageSize = 0,
+  filters,
+  filterTitle = 'Filters',
+  filterSubtitle,
+  onFilterClear,
+  onFilterApply,
+  filterActive = false,
+  serialNumber = true,
+  noun = 'record',
+  paginate = true,
+  pageSize = 10,
 }) {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(0);
+  const [perPage, setPerPage] = useState(pageSize > 0 ? pageSize : 10);
+  const [sort, setSort] = useState({ key: null, dir: 'asc' });
+  const [colFilters, setColFilters] = useState({});
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query), 300);
     return () => clearTimeout(t);
   }, [query]);
 
-  const filtered = useMemo(() => {
-    if (!rows) return [];
-    if (!searchable || !debouncedQuery.trim()) return rows;
-    const q = debouncedQuery.toLowerCase();
-    const keys = searchKeys ?? columns.map((c) => c.key);
-    return rows.filter((row) =>
-      keys.some((k) => String(row[k] ?? '').toLowerCase().includes(q))
-    );
-  }, [rows, debouncedQuery, searchable, searchKeys, columns]);
+  const isSortable = (col) => col.sortable !== false && !!col.label && col.key !== 'actions';
 
-  const totalPages = pageSize ? Math.ceil(filtered.length / pageSize) : 1;
-  const pageRows = pageSize ? filtered.slice(page * pageSize, page * pageSize + pageSize) : filtered;
+  const toggleSort = (col) => {
+    if (!isSortable(col)) return;
+    setPage(0);
+    setSort((s) => {
+      if (s.key !== col.key) return { key: col.key, dir: 'asc' };
+      if (s.dir === 'asc') return { key: col.key, dir: 'desc' };
+      return { key: null, dir: 'asc' }; // third click clears the sort
+    });
+  };
+
+  // Columns that opted into drawer filtering via a `filter` descriptor.
+  const filterableCols = useMemo(() => columns.filter((c) => c.filter), [columns]);
+
+  // Columns as rendered — a running "Sl. No." is prepended unless opted out.
+  const displayColumns = useMemo(
+    () =>
+      serialNumber
+        ? [
+            {
+              key: '__sl_no',
+              label: 'Sl. No.',
+              sortable: false,
+              render: (_r, i) => <span className="text-slate-400">{i + 1}</span>,
+            },
+            ...columns,
+          ]
+        : columns,
+    [serialNumber, columns],
+  );
+
+  const setColFilter = (key, value) => {
+    setPage(0);
+    setColFilters((f) => ({ ...f, [key]: value }));
+  };
+
+  const filterAccessor = (col) => col.filterAccessor ?? ((r) => r[col.key]);
+
+  // Distinct values for a select filter, unless the column supplies its own list.
+  const optionsFor = (col) => {
+    if (col.filterOptions) return col.filterOptions;
+    const acc = filterAccessor(col);
+    const set = new Set();
+    (rows ?? []).forEach((r) => {
+      const val = acc(r);
+      if (val != null && val !== '') set.add(val);
+    });
+    return [...set]
+      .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }))
+      .map((val) => ({ value: String(val), label: prettifyValue(val) }));
+  };
+
+  const activeColFilters = useMemo(
+    () =>
+      filterableCols.filter((c) => {
+        const v = colFilters[c.key];
+        if (c.filter === 'date') return v && (v.from || v.to);
+        return v != null && v !== '';
+      }),
+    [filterableCols, colFilters],
+  );
+
+  const filtered = useMemo(() => {
+    let out = rows ?? [];
+    if (searchable && debouncedQuery.trim()) {
+      const q = debouncedQuery.toLowerCase();
+      const keys = searchKeys ?? columns.map((c) => c.key);
+      out = out.filter((row) => keys.some((k) => String(row[k] ?? '').toLowerCase().includes(q)));
+    }
+    for (const col of activeColFilters) {
+      const acc = filterAccessor(col);
+      const v = colFilters[col.key];
+      if (col.filter === 'date') {
+        const from = v.from ? new Date(v.from) : null;
+        const to = v.to ? new Date(`${v.to}T23:59:59.999`) : null;
+        out = out.filter((row) => {
+          const raw = acc(row);
+          if (!raw) return false;
+          const d = new Date(raw);
+          if (Number.isNaN(d.getTime())) return false;
+          if (from && d < from) return false;
+          if (to && d > to) return false;
+          return true;
+        });
+      } else if (col.filter === 'text') {
+        const needle = String(v).toLowerCase();
+        out = out.filter((row) => String(acc(row) ?? '').toLowerCase().includes(needle));
+      } else {
+        out = out.filter((row) => String(acc(row) ?? '') === String(v));
+      }
+    }
+    return out;
+  }, [rows, searchable, debouncedQuery, searchKeys, columns, activeColFilters, colFilters]);
+
+  const sorted = useMemo(() => {
+    if (!sort.key) return filtered;
+    const col = columns.find((c) => c.key === sort.key);
+    if (!col) return filtered;
+    const value = (row) => (col.sortValue ? col.sortValue(row) : row[col.key]);
+    const arr = [...filtered].sort((a, b) => {
+      const av = value(a);
+      const bv = value(b);
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      const an = Number(av);
+      const bn = Number(bv);
+      const numeric =
+        av !== '' && bv !== '' && !Number.isNaN(an) && !Number.isNaN(bn);
+      if (numeric) return an - bn;
+      return String(av).localeCompare(String(bv), undefined, { numeric: true });
+    });
+    return sort.dir === 'desc' ? arr.reverse() : arr;
+  }, [filtered, sort, columns]);
+
+  const total = sorted.length;
+  const totalPages = paginate ? Math.max(1, Math.ceil(total / perPage)) : 1;
+  const safePage = Math.min(page, totalPages - 1);
+  const pageRows = paginate
+    ? sorted.slice(safePage * perPage, safePage * perPage + perPage)
+    : sorted;
+
+  const hasFilterUi = !!filters || filterableCols.length > 0;
+  const filterActiveResolved = filterActive || activeColFilters.length > 0;
+  const clearAll =
+    onFilterClear || filterableCols.length > 0
+      ? () => {
+          setColFilters({});
+          onFilterClear?.();
+        }
+      : undefined;
+
+  const filterBody = (
+    <>
+      {filters}
+      {filterableCols.map((col) => {
+        const label = col.filterLabel ?? col.label;
+        if (col.filter === 'date') {
+          const v = colFilters[col.key] ?? {};
+          return (
+            <Field key={col.key} label={label}>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  type="date"
+                  value={v.from ?? ''}
+                  onChange={(e) => setColFilter(col.key, { ...v, from: e.target.value })}
+                />
+                <Input
+                  type="date"
+                  value={v.to ?? ''}
+                  onChange={(e) => setColFilter(col.key, { ...v, to: e.target.value })}
+                />
+              </div>
+            </Field>
+          );
+        }
+        if (col.filter === 'text') {
+          return (
+            <Field key={col.key} label={label}>
+              <Input
+                value={colFilters[col.key] ?? ''}
+                onChange={(e) => setColFilter(col.key, e.target.value)}
+                placeholder={col.filterPlaceholder}
+              />
+            </Field>
+          );
+        }
+        return (
+          <Field key={col.key} label={label}>
+            <Select
+              value={colFilters[col.key] ?? ''}
+              onChange={(e) => setColFilter(col.key, e.target.value)}
+            >
+              <option value="">All</option>
+              {optionsFor(col).map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        );
+      })}
+    </>
+  );
 
   if (loading) {
     return (
       <div className="space-y-3">
-        {searchable && <div className="h-10 w-full max-w-sm animate-pulse rounded-lg bg-slate-800" />}
-        <TableSkeleton cols={columns.length} />
+        {(searchable || hasFilterUi) && (
+          <div className="h-14 w-full animate-pulse rounded-xl bg-slate-800" />
+        )}
+        <TableSkeleton cols={displayColumns.length} />
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      {searchable && (
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-          <input
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setPage(0);
-            }}
-            placeholder={searchPlaceholder}
-            className="w-full rounded-lg border border-slate-700 bg-slate-900 py-2.5 pl-10 pr-3 text-sm text-white placeholder-slate-500 transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-          />
+      {(searchable || hasFilterUi) && (
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-2">
+          <div className="flex items-center gap-2">
+            {searchable && (
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <input
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setPage(0);
+                  }}
+                  placeholder={searchPlaceholder}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 py-2.5 pl-10 pr-3 text-sm text-white placeholder-slate-500 transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                />
+              </div>
+            )}
+            {hasFilterUi && (
+              <button
+                type="button"
+                onClick={() => setShowFilters(true)}
+                className={`relative inline-flex shrink-0 items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition ${
+                  showFilters || filterActiveResolved
+                    ? 'border-indigo-500 bg-indigo-500/10 text-indigo-300'
+                    : 'border-slate-700 text-slate-200 hover:border-slate-600 hover:bg-slate-800'
+                }`}
+              >
+                <SlidersHorizontal className="h-4 w-4" /> Filters
+                {filterActiveResolved && (
+                  <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-indigo-400 ring-2 ring-slate-900" />
+                )}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -696,63 +1198,98 @@ export function DataTable({
           hint={emptyHint ?? (query ? 'Try a different search term.' : undefined)}
         />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900">
-          <table className="w-full border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-800 bg-slate-950/40">
-                {columns.map((col) => (
-                  <th
-                    key={col.key}
-                    className="whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500"
-                  >
-                    {col.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {pageRows.map((row, i) => (
-                <tr
-                  key={row.id ?? i}
-                  className="border-b border-slate-800/70 transition last:border-0 hover:bg-slate-800/40"
-                >
-                  {columns.map((col) => (
-                    <td key={col.key} className="px-4 py-3.5 align-middle text-slate-200">
-                      {col.render ? col.render(row) : row[col.key] ?? '—'}
-                    </td>
-                  ))}
+        <>
+          <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-800 bg-slate-950/40">
+                  {displayColumns.map((col) => {
+                    const sortable = isSortable(col);
+                    const active = sort.key === col.key;
+                    const alignCls =
+                      col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : '';
+                    return (
+                      <th
+                        key={col.key}
+                        onClick={sortable ? () => toggleSort(col) : undefined}
+                        className={`whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 ${alignCls} ${
+                          sortable ? 'cursor-pointer select-none transition hover:text-slate-300' : ''
+                        }`}
+                      >
+                        <span className="inline-flex items-center gap-1.5">
+                          {col.label}
+                          {sortable &&
+                            (active ? (
+                              sort.dir === 'asc' ? (
+                                <ChevronUp className="h-3.5 w-3.5 text-indigo-400" />
+                              ) : (
+                                <ChevronDown className="h-3.5 w-3.5 text-indigo-400" />
+                              )
+                            ) : (
+                              <ChevronsUpDown className="h-3.5 w-3.5 text-slate-600" />
+                            ))}
+                        </span>
+                      </th>
+                    );
+                  })}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {pageRows.map((row, i) => (
+                  <tr
+                    key={row.id ?? i}
+                    className="border-b border-slate-800/70 transition last:border-0 hover:bg-slate-800/40"
+                  >
+                    {displayColumns.map((col) => (
+                      <td
+                        key={col.key}
+                        className={`px-4 py-3.5 align-middle text-slate-200 ${
+                          col.align === 'right'
+                            ? 'text-right'
+                            : col.align === 'center'
+                              ? 'text-center'
+                              : ''
+                        }`}
+                      >
+                        {col.render
+                          ? col.render(row, safePage * perPage + i)
+                          : row[col.key] ?? '—'}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {paginate && (
+            <Pagination
+              page={safePage}
+              totalPages={totalPages}
+              onPage={setPage}
+              total={total}
+              perPage={perPage}
+              onPerPage={(n) => {
+                setPerPage(n);
+                setPage(0);
+              }}
+              noun={noun}
+            />
+          )}
+        </>
       )}
 
-      {pageSize > 0 && totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-slate-400">
-          <span>
-            {page * pageSize + 1}–{Math.min((page + 1) * pageSize, filtered.length)} of{' '}
-            {filtered.length}
-          </span>
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page === 0}
-              onClick={() => setPage((p) => p - 1)}
-            >
-              Prev
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page >= totalPages - 1}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
+      {hasFilterUi && (
+        <FilterDrawer
+          open={showFilters}
+          onClose={() => setShowFilters(false)}
+          title={filterTitle}
+          subtitle={filterSubtitle}
+          onClear={clearAll}
+          onApply={onFilterApply}
+        >
+          {filterBody}
+        </FilterDrawer>
       )}
     </div>
   );

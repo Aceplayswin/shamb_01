@@ -117,6 +117,7 @@ export default function AdminBannersPage() {
     {
       key: 'sort_order',
       label: 'Order',
+      sortable: false,
       render: (r) => {
         const index = ordered.findIndex((b) => b.id === r.id);
         const isBusy = reordering !== null;
@@ -186,7 +187,16 @@ export default function AdminBannersPage() {
           <span className="text-xs text-slate-500">Not clickable</span>
         ),
     },
-    { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} /> },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (r) => <StatusBadge status={r.status} />,
+      filter: 'select',
+      filterOptions: [
+        { value: 'active', label: 'Active' },
+        { value: 'draft', label: 'Draft' },
+      ],
+    },
     {
       key: 'actions',
       label: '',
@@ -230,6 +240,7 @@ export default function AdminBannersPage() {
         searchable
         searchKeys={['title', 'link_url']}
         searchPlaceholder="Search banners…"
+        noun="banner"
         emptyIcon={ImageIcon}
         emptyMessage="No banners yet. Add one to show it in the home carousel."
       />

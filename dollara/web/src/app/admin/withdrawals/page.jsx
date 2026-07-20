@@ -62,7 +62,7 @@ export default function AdminWithdrawalsPage() {
   };
 
   const columns = [
-    { key: 'created_at', label: 'Date', render: (r) => fmtDate(r.created_at) },
+    { key: 'created_at', label: 'Date', render: (r) => fmtDate(r.created_at), filter: 'date' },
     {
       key: 'username',
       label: 'User',
@@ -74,7 +74,7 @@ export default function AdminWithdrawalsPage() {
       ),
     },
     { key: 'amount', label: 'Amount', render: (r) => <span className="font-semibold text-rose-400">{inr(r.amount)}</span> },
-    { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} /> },
+    { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} />, filter: 'select' },
     {
       key: 'actions',
       label: '',
@@ -100,6 +100,7 @@ export default function AdminWithdrawalsPage() {
         searchable
         searchKeys={['username', 'full_name']}
         searchPlaceholder="Search withdrawals…"
+        noun="withdrawal"
         pageSize={15}
         emptyIcon={ArrowUpFromLine}
         emptyMessage="No pending withdrawals"

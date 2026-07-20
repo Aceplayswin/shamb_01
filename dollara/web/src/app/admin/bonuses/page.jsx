@@ -236,6 +236,9 @@ export default function AdminBonusesPage() {
       key: 'bonus_type',
       label: 'Type',
       render: (r) => <span className="text-slate-300">{typeMeta(r.bonus_type).label}</span>,
+      filter: 'select',
+      filterLabel: 'Type',
+      filterAccessor: (r) => typeMeta(r.bonus_type).label,
     },
     {
       key: 'value_amount',
@@ -271,7 +274,7 @@ export default function AdminBonusesPage() {
         </div>
       ),
     },
-    { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} /> },
+    { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} />, filter: 'select' },
     {
       key: 'actions',
       label: '',
@@ -307,7 +310,7 @@ export default function AdminBonusesPage() {
       </div>
     ) },
     { key: 'bonus', label: 'Bonus', render: (r) => <span className="text-slate-300">{r.bonus}</span> },
-    { key: 'source', label: 'Source', render: (r) => <span className="capitalize text-slate-400">{r.source}</span> },
+    { key: 'source', label: 'Source', render: (r) => <span className="capitalize text-slate-400">{r.source}</span>, filter: 'select' },
     { key: 'amount', label: 'Amount', render: (r) => <span className="font-medium text-white">{inr(r.amount)}</span> },
     {
       key: 'wagering',
@@ -321,8 +324,8 @@ export default function AdminBonusesPage() {
           <span className="text-xs text-slate-500">—</span>
         ),
     },
-    { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} /> },
-    { key: 'created_at', label: 'Granted', render: (r) => <span className="text-xs text-slate-500">{fmtDate(r.created_at)}</span> },
+    { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} />, filter: 'select' },
+    { key: 'created_at', label: 'Granted', render: (r) => <span className="text-xs text-slate-500">{fmtDate(r.created_at)}</span>, filter: 'date' },
     {
       key: 'actions',
       label: '',
@@ -378,6 +381,7 @@ export default function AdminBonusesPage() {
           searchable
           searchKeys={['name', 'display_title', 'bonus_type']}
           searchPlaceholder="Search bonuses…"
+          noun="bonus"
           emptyIcon={Gift}
           emptyMessage="No bonuses configured"
         />
@@ -389,6 +393,7 @@ export default function AdminBonusesPage() {
           searchable
           searchKeys={['username', 'bonus', 'source']}
           searchPlaceholder="Search issued bonuses…"
+          noun="issued bonus"
           emptyIcon={Wallet}
           emptyMessage="No bonuses have been awarded yet"
         />
