@@ -91,94 +91,105 @@ export default function Theme1Settings() {
   if (!token) return null;
 
   return (
-    <main className="mx-auto max-w-2xl flex-1 px-4 py-8">
+    <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
       <h1 className="text-2xl font-bold">Settings</h1>
       <p className="mt-1 text-sm text-slate-400">
         Manage your preferences and account.
       </p>
 
       {loading ? (
-        <div className="mt-8 space-y-4">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="card-glass h-24 animate-pulse opacity-60" />
+        <div className="mt-8 grid items-start gap-5 lg:grid-cols-2">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="card-glass h-52 animate-pulse opacity-60" />
           ))}
         </div>
       ) : (
         <>
-          {/* ---- Preferences ---- */}
-          <section className="mt-6 card-glass p-6">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-              Preferences
-            </h2>
-            <div className="mt-4 space-y-5">
-              <Field label="Website language" hint="Language used across the site">
-                <Select
-                  value={form.website_language}
-                  onChange={(v) => update('website_language', v)}
-                  options={LANGUAGES}
-                />
-              </Field>
+          {/* Two balanced columns on wide screens; single column on mobile. */}
+          <div className="mt-6 grid items-start gap-5 lg:grid-cols-2">
+            {/* ---- Left column ---- */}
+            <div className="space-y-5">
+              {/* Preferences */}
+              <section className="card-glass p-6">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+                  Preferences
+                </h2>
+                <div className="mt-4 grid gap-5 sm:grid-cols-2">
+                  <Field label="Website language" hint="Language used across the site">
+                    <Select
+                      value={form.website_language}
+                      onChange={(v) => update('website_language', v)}
+                      options={LANGUAGES}
+                    />
+                  </Field>
 
-              <Field
-                label="Communication language"
-                hint="Used for notifications & emails"
-              >
-                <Select
-                  value={form.communication_language}
-                  onChange={(v) => update('communication_language', v)}
-                  options={LANGUAGES}
-                />
-              </Field>
+                  <Field
+                    label="Communication language"
+                    hint="Used for notifications & emails"
+                  >
+                    <Select
+                      value={form.communication_language}
+                      onChange={(v) => update('communication_language', v)}
+                      options={LANGUAGES}
+                    />
+                  </Field>
 
-              <Field label="Currency" hint="Display currency for balances">
-                <Select
-                  value={form.currency}
-                  onChange={(v) => update('currency', v)}
-                  options={CURRENCIES}
-                />
-              </Field>
+                  <div className="sm:col-span-2">
+                    <Field label="Currency" hint="Display currency for balances">
+                      <Select
+                        value={form.currency}
+                        onChange={(v) => update('currency', v)}
+                        options={CURRENCIES}
+                      />
+                    </Field>
+                  </div>
+                </div>
+              </section>
+
+              {/* Notifications */}
+              <section className="card-glass p-6">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+                  Notifications
+                </h2>
+                <div className="mt-4 space-y-1">
+                  <Toggle
+                    label="Push & in-app notifications"
+                    hint="Bet results, deposits, withdrawals and account alerts"
+                    checked={form.notifications_enabled}
+                    onChange={(v) => update('notifications_enabled', v)}
+                  />
+                  <Toggle
+                    label="Promotional offers"
+                    hint="Bonuses, campaigns and marketing updates"
+                    checked={form.marketing_opt_in}
+                    onChange={(v) => update('marketing_opt_in', v)}
+                    last
+                  />
+                </div>
+              </section>
             </div>
-          </section>
 
-          {/* ---- Notifications ---- */}
-          <section className="mt-5 card-glass p-6">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-              Notifications
-            </h2>
-            <div className="mt-4 space-y-1">
-              <Toggle
-                label="Push & in-app notifications"
-                hint="Bet results, deposits, withdrawals and account alerts"
-                checked={form.notifications_enabled}
-                onChange={(v) => update('notifications_enabled', v)}
-              />
-              <Toggle
-                label="Promotional offers"
-                hint="Bonuses, campaigns and marketing updates"
-                checked={form.marketing_opt_in}
-                onChange={(v) => update('marketing_opt_in', v)}
-                last
-              />
+            {/* ---- Right column ---- */}
+            <div className="space-y-5">
+              {/* Account (read-only) */}
+              <section className="card-glass p-6">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+                  Account
+                </h2>
+                <div className="mt-4 space-y-1">
+                  <Row label="Full name" value={account?.full_name} />
+                  <Row label="MemberId" value={account?.username} />
+                  <Row label="Phone" value={account?.phone} />
+                  <Row label="Email" value={account?.email} />
+                  <Row label="KYC status" value={account?.kyc_status} badge />
+                  <Row label="Account status" value={account?.account_status} badge last />
+                </div>
+              </section>
+
+              {/* Security */}
+              <ChangePassword />
             </div>
-          </section>
-
-          {/* ---- Account (read-only) ---- */}
-          <section className="mt-5 card-glass p-6">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-              Account
-            </h2>
-            <div className="mt-4 space-y-1">
-              <Row label="Full name" value={account?.full_name} />
-              <Row label="MemberId" value={account?.username} />
-              <Row label="Phone" value={account?.phone} />
-              <Row label="Email" value={account?.email} />
-              <Row label="KYC status" value={account?.kyc_status} badge />
-              <Row label="Account status" value={account?.account_status} badge last />
-            </div>
-          </section>
-
-          {/* ---- Security ---- */}
-          <ChangePassword />
+          </div>
 
           {/* ---- Save bar ---- */}
           <div className="sticky bottom-4 z-10 mt-6">
@@ -191,23 +202,24 @@ export default function Theme1Settings() {
                 {status.text}
               </p>
             )}
-            <button
-              type="button"
-              onClick={save}
-              disabled={saving}
-              className="w-full rounded-xl bg-brand-500 py-4 font-semibold text-surface-900 shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 disabled:opacity-50"
-            >
-              {saving ? 'Saving…' : 'Save changes'}
-            </button>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={save}
+                disabled={saving}
+                className="flex-1 rounded-xl bg-brand-500 py-4 font-semibold text-surface-900 shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Save changes'}
+              </button>
+              <button
+                type="button"
+                onClick={logout}
+                className="rounded-xl border border-red-500/30 px-8 py-4 text-sm font-semibold text-red-400 transition hover:bg-red-500/10 sm:w-auto"
+              >
+                Logout
+              </button>
+            </div>
           </div>
-
-          <button
-            type="button"
-            onClick={logout}
-            className="mt-4 w-full rounded-xl border border-red-500/30 py-3 text-sm font-semibold text-red-400 transition hover:bg-red-500/10"
-          >
-            Logout
-          </button>
         </>
       )}
     </main>

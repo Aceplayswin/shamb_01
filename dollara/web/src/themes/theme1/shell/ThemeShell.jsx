@@ -23,9 +23,10 @@ export default function Theme1Shell({ children }) {
     <>
       <Header />
       {/* Global app shell offsets: top bar (h-16), desktop side rail (w-[92px]),
-          and mobile bottom tab bar. */}
-      <div className={`min-h-screen pt-16 lg:pl-[92px] ${isPlayRoute ? 'pb-0' : 'pb-20 lg:pb-0'}`}>
-        {children}
+          and mobile bottom tab bar. Flex column + flex-1 content keeps the footer
+          pinned to the bottom of the viewport even when a page is short. */}
+      <div className={`flex min-h-screen flex-col pt-16 lg:pl-[92px] ${isPlayRoute ? 'pb-0' : 'pb-20 lg:pb-0'}`}>
+        <div className="flex-1">{children}</div>
         {!isPlayRoute && <Footer />}
       </div>
       <Theme1AuthModals />
