@@ -19,6 +19,9 @@ import {
   useAdminData,
 } from '@/components/admin/AdminShell';
 
+// The player-facing app-download page lives in the separate web app.
+const WEB_URL = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
+
 const BLANK = {
   enabled: false,
   apk_url: '',
@@ -171,7 +174,7 @@ export default function AdminAppPage() {
             </div>
 
             <a
-              href="/app"
+              href={`${WEB_URL}/app`}
               target="_blank"
               rel="noreferrer"
               className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-400 hover:text-indigo-300"

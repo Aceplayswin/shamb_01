@@ -37,7 +37,7 @@ export async function adminApi(path, options = {}) {
   if (res.status === 401) {
     clearAdminToken();
     if (typeof window !== 'undefined') {
-      window.location.href = '/admin/login';
+      window.location.href = '/login';
     }
     throw new Error('Session expired');
   }
@@ -64,7 +64,7 @@ export async function adminUploadImage(file) {
   if (res.status === 401) {
     clearAdminToken();
     if (typeof window !== 'undefined') {
-      window.location.href = '/admin/login';
+      window.location.href = '/login';
     }
     throw new Error('Session expired');
   }

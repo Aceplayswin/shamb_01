@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Users, Eye, Wallet, Phone, Mail, ShieldAlert, PlusCircle, MinusCircle } from 'lucide-react';
+import { Users, Eye, Wallet, Phone, Mail, ShieldAlert, PlusCircle, MinusCircle, UserPlus } from 'lucide-react';
 import { adminApi } from '@/services/adminApi';
 import {
   AdminShell,
@@ -29,6 +29,51 @@ export default function AdminUsersPage() {
   const [adjustAmount, setAdjustAmount] = useState('');
   const [adjustNotes, setAdjustNotes] = useState('');
   const [busy, setBusy] = useState(false);
+
+  const emptyCreateForm = {
+    full_name: '',
+    phone: '',
+    email: '',
+    password: '',
+    country_code: 'IN',
+    initial_balance: '',
+  };
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createForm, setCreateForm] = useState(emptyCreateForm);
+  const [creating, setCreating] = useState(false);
+
+  const openCreate = () => {
+    setCreateForm(emptyCreateForm);
+    setCreateOpen(true);
+  };
+
+  const setCreateField = (key) => (e) =>
+    setCreateForm((f) => ({ ...f, [key]: e.target.value }));
+
+  const submitCreate = async (e) => {
+    e.preventDefault();
+    setCreating(true);
+    try {
+      await adminApi('/api/v1/admin/users/create', {
+        method: 'POST',
+        body: JSON.stringify({
+          full_name: createForm.full_name,
+          phone: createForm.phone,
+          email: createForm.email || undefined,
+          password: createForm.password,
+          country_code: createForm.country_code || 'IN',
+          initial_balance: parseFloat(createForm.initial_balance) || 0,
+        }),
+      });
+      toast.success('User created');
+      setCreateOpen(false);
+      reload();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const openAdjust = (user) => {
     setAdjustUser(user);
@@ -147,7 +192,15 @@ export default function AdminUsersPage() {
   ];
 
   return (
-    <AdminShell title="Users" subtitle={`${users?.length ?? 0} registered players`}>
+    <AdminShell
+      title="Users"
+      subtitle={`${users?.length ?? 0} registered players`}
+      actions={
+        <Button icon={UserPlus} onClick={openCreate}>
+          Create user
+        </Button>
+      }
+    >
       <DataTable
         columns={columns}
         rows={users}
@@ -162,6 +215,78 @@ export default function AdminUsersPage() {
         emptyHint="Registered players will appear here."
         filterSubtitle="Combine any filters to narrow the list"
       />
+
+      {/* Create user modal */}
+      <Modal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="Create user"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setCreateOpen(false)}>
+              Cancel
+            </Button>
+            <Button form="create-user-form" type="submit" disabled={creating}>
+              {creating ? 'Creating…' : 'Create user'}
+            </Button>
+          </>
+        }
+      >
+        <form id="create-user-form" onSubmit={submitCreate} className="space-y-4">
+          <Field label="Full name">
+            <Input
+              placeholder="e.g. Rahul Sharma"
+              value={createForm.full_name}
+              onChange={setCreateField('full_name')}
+              required
+            />
+          </Field>
+          <Field label="Phone">
+            <Input
+              placeholder="e.g. 9876543210"
+              value={createForm.phone}
+              onChange={setCreateField('phone')}
+              required
+            />
+          </Field>
+          <Field label="Email">
+            <Input
+              type="email"
+              placeholder="Optional"
+              value={createForm.email}
+              onChange={setCreateField('email')}
+            />
+          </Field>
+          <Field label="Password">
+            <Input
+              type="password"
+              placeholder="At least 6 characters"
+              value={createForm.password}
+              onChange={setCreateField('password')}
+              required
+            />
+          </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Country code">
+              <Input
+                placeholder="IN"
+                value={createForm.country_code}
+                onChange={setCreateField('country_code')}
+              />
+            </Field>
+            <Field label="Initial balance">
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0"
+                value={createForm.initial_balance}
+                onChange={setCreateField('initial_balance')}
+              />
+            </Field>
+          </div>
+        </form>
+      </Modal>
 
       {/* Detail modal */}
       <Modal open={!!detail} onClose={() => setDetail(null)} title="User profile" size="lg">

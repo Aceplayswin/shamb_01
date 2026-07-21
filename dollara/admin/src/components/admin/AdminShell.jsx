@@ -41,49 +41,52 @@ import Swal from 'sweetalert2';
 import { adminApi, adminUploadImage, clearAdminToken, getAdminRole, getAdminToken } from '@/services/adminApi';
 import { useBranding } from '@/hooks/useBranding';
 
+// The player-facing site lives in a separate app; "View site" links out to it.
+const WEB_URL = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
+
 const NAV_GROUPS = [
   {
     label: 'Overview',
-    items: [{ href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true }],
+    items: [{ href: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true }],
   },
   {
     label: 'Players',
     items: [
-      { href: '/admin/users', label: 'Users', icon: Users },
-      { href: '/admin/bet-history', label: 'Bet History', icon: History },
-      { href: '/admin/bets', label: 'Bets', icon: Dices },
+      { href: '/users', label: 'Users', icon: Users },
+      { href: '/bet-history', label: 'Bet History', icon: History },
+      { href: '/bets', label: 'Bets', icon: Dices },
     ],
   },
   {
     label: 'Finance',
     items: [
-      { href: '/admin/transactions', label: 'Transactions', icon: Receipt },
-      { href: '/admin/deposits', label: 'Deposits', icon: ArrowDownToLine },
-      { href: '/admin/withdrawals', label: 'Withdrawals', icon: ArrowUpFromLine },
-      { href: '/admin/bonuses', label: 'Bonuses', icon: Gift },
+      { href: '/transactions', label: 'Transactions', icon: Receipt },
+      { href: '/deposits', label: 'Deposits', icon: ArrowDownToLine },
+      { href: '/withdrawals', label: 'Withdrawals', icon: ArrowUpFromLine },
+      { href: '/bonuses', label: 'Bonuses', icon: Gift },
     ],
   },
   {
     label: 'Content',
     items: [
-      { href: '/admin/banners', label: 'Banners', icon: ImageIcon },
-      { href: '/admin/app', label: 'App Download', icon: Smartphone },
+      { href: '/banners', label: 'Banners', icon: ImageIcon },
+      { href: '/app', label: 'App Download', icon: Smartphone },
     ],
   },
   {
     label: 'Catalog',
     items: [
-      { href: '/admin/games', label: 'Games', icon: Gamepad2 },
-      { href: '/admin/providers', label: 'Providers', icon: Building2 },
+      { href: '/games', label: 'Games', icon: Gamepad2 },
+      { href: '/providers', label: 'Providers', icon: Building2 },
     ],
   },
   {
     label: 'System',
     items: [
-      { href: '/admin/reports', label: 'Reports', icon: FileSpreadsheet },
-      { href: '/admin/ai-calls', label: 'AI Calls', icon: PhoneCall },
-      { href: '/admin/settings', label: 'Settings', icon: Settings },
-      { href: '/admin/staff', label: 'Manage Admin', icon: ShieldCheck },
+      { href: '/reports', label: 'Reports', icon: FileSpreadsheet },
+      { href: '/ai-calls', label: 'AI Calls', icon: PhoneCall },
+      { href: '/settings', label: 'Settings', icon: Settings },
+      { href: '/staff', label: 'Manage Admin', icon: ShieldCheck },
     ],
   },
 ];
@@ -164,7 +167,7 @@ function SidebarContent({ onNavigate }) {
   return (
     <>
       <Link
-        href="/admin"
+        href="/"
         onClick={onNavigate}
         className="flex shrink-0 items-center gap-3 border-b border-slate-800 px-5 py-[1.15rem]"
       >
@@ -207,7 +210,7 @@ export function AdminShell({ children, title, subtitle, actions }) {
 
   useEffect(() => {
     if (!getAdminToken()) {
-      router.replace('/admin/login');
+      router.replace('/login');
       return;
     }
     setRole(getAdminRole() || 'admin');
@@ -222,7 +225,7 @@ export function AdminShell({ children, title, subtitle, actions }) {
     });
     if (!ok) return;
     clearAdminToken();
-    router.push('/admin/login');
+    router.push('/login');
   };
 
   if (!ready) {
@@ -279,7 +282,7 @@ export function AdminShell({ children, title, subtitle, actions }) {
           <div className="ml-auto flex items-center gap-2.5">
             {actions}
             <Link
-              href="/"
+              href={WEB_URL}
               target="_blank"
               className="hidden items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:border-slate-600 hover:bg-slate-800 hover:text-white sm:flex"
             >

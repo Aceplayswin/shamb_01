@@ -48,9 +48,9 @@ export default function AdminDashboardPage() {
 
   const queue = charts
     ? [
-        { label: 'Pending withdrawals', value: charts.pendingWithdrawals, href: '/admin/withdrawals', icon: ArrowUpFromLine },
-        { label: 'Pending deposits', value: charts.pendingDeposits, href: '/admin/deposits', icon: ArrowDownToLine },
-        { label: 'KYC pending', value: charts.kycPending, href: '/admin/users', icon: Clock },
+        { label: 'Pending withdrawals', value: charts.pendingWithdrawals, href: '/withdrawals', icon: ArrowUpFromLine },
+        { label: 'Pending deposits', value: charts.pendingDeposits, href: '/deposits', icon: ArrowDownToLine },
+        { label: 'KYC pending', value: charts.kycPending, href: '/users', icon: Clock },
       ]
     : [];
 
@@ -112,7 +112,7 @@ export default function AdminDashboardPage() {
         <Card className="overflow-hidden lg:col-span-2">
           <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
             <h2 className="font-display text-lg font-bold text-white">Recent activity</h2>
-            <Link href="/admin/transactions" className="text-xs font-semibold text-indigo-400 hover:text-indigo-300">
+            <Link href="/transactions" className="text-xs font-semibold text-indigo-400 hover:text-indigo-300">
               View all →
             </Link>
           </div>

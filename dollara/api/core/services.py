@@ -735,6 +735,67 @@ def get_dashboard_stats() -> dict:
     }
 
 
+def admin_create_user(
+    full_name: str,
+    phone: str,
+    password: str,
+    email: str | None = None,
+    country_code: str = 'IN',
+    initial_balance: float = 0,
+) -> dict:
+    full_name = (full_name or '').strip()
+    phone = (phone or '').strip()
+    email = (email or '').strip() or None
+    if not full_name:
+        raise ValueError('Full name is required')
+    if not phone:
+        raise ValueError('Phone number is required')
+    if not password or len(password) < 6:
+        raise ValueError('Password must be at least 6 characters')
+    if User.objects.filter(phone=phone, role=User.Role.USER).exists():
+        raise ValueError('Phone number already registered')
+
+    password_hash = _hash_password(password)
+    voice_id = f'AI_EXEC_{random.randint(1, 50):03d}'
+    for _attempt in range(5):
+        try:
+            user = User.objects.create(
+                username=_next_sequential_username(),
+                phone=phone,
+                email=email,
+                full_name=full_name,
+                country_code=country_code,
+                role=User.Role.USER,
+                password_hash=password_hash,
+            )
+            break
+        except IntegrityError:
+            continue
+    else:
+        raise ValueError('Could not allocate a username, please try again')
+
+    balance = Decimal(str(initial_balance or 0))
+    if balance < 0:
+        balance = Decimal('0')
+    Wallet.objects.create(user=user, main_balance=balance)
+    _create_user_settings(
+        user,
+        registration_path=UserSetting.RegistrationPath.OTP,
+        phone_verified=True,
+        ai_voice_executive_id=voice_id,
+        referral_code=bonus_services._generate_referral_code(),
+    )
+    return {
+        'id': user.id,
+        'username': user.username,
+        'full_name': user.full_name,
+        'phone': user.phone,
+        'email': user.email,
+        'account_status': user.account_status,
+        'main_balance': float(balance),
+    }
+
+
 def list_users(
     status: str | None = None,
     kyc_status: str | None = None,

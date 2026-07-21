@@ -4,9 +4,7 @@ from core import views
 
 urlpatterns = [
     # Auth
-    path('auth/otp/send', views.otp_send),
-    path('auth/otp/verify', views.otp_verify),
-    path('auth/register/otp', views.register_otp),
+    path('auth/register', views.register),
     path('auth/demo', views.demo_session),
     path('auth/login', views.login),
     path('auth/change-password', views.change_password),
@@ -49,6 +47,7 @@ urlpatterns = [
     path('admin/dashboard/charts', views.admin_dashboard_charts),
     path('admin/activity', views.admin_recent_activity),
     path('admin/users', views.admin_users),
+    path('admin/users/create', views.admin_user_create),
     path('admin/users/<int:user_id>', views.admin_user_detail),
     path('admin/users/<int:user_id>/status', views.admin_user_status),
     path('admin/users/<int:user_id>/wallet/adjust', views.admin_wallet_adjust),

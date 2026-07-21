@@ -248,36 +248,11 @@ def _error_response(exc: Exception, status: int = 400):
 # --- Auth ---
 @csrf_exempt
 @require_http_methods(['POST'])
-def otp_send(request):
+def register(request):
+    """Direct sign-up: full name + phone + password. No OTP verification."""
     try:
         body = _json_body(request)
-        return JsonResponse(services.send_otp(body['phone'], body.get('channel', 'sms')))
-    except (KeyError, json.JSONDecodeError) as e:
-        return _error_response(e)
-    except Exception as e:
-        return _error_response(e)
-
-
-@csrf_exempt
-@require_http_methods(['POST'])
-def otp_verify(request):
-    try:
-        body = _json_body(request)
-        services.verify_otp(body['phone'], body['otp'])
-        return JsonResponse({'verified': True})
-    except (KeyError, json.JSONDecodeError) as e:
-        return _error_response(e)
-    except ValueError as e:
-        return _error_response(e)
-
-
-@csrf_exempt
-@require_http_methods(['POST'])
-def register_otp(request):
-    try:
-        body = _json_body(request)
-        services.verify_otp(body['phone'], body['otp'])
-        result = services.register_with_otp(
+        result = services.register_user(
             body['fullName'],
             body['phone'],
             body['password'],
@@ -713,6 +688,29 @@ def admin_users(request):
         ),
         safe=False,
     )
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_user_create(request):
+    try:
+        body = _json_body(request)
+        return JsonResponse(
+            services.admin_create_user(
+                full_name=body.get('full_name', ''),
+                phone=body.get('phone', ''),
+                password=body.get('password', ''),
+                email=body.get('email'),
+                country_code=body.get('country_code', 'IN'),
+                initial_balance=body.get('initial_balance', 0),
+            ),
+            status=201,
+        )
+    except (KeyError, json.JSONDecodeError) as e:
+        return _error_response(e)
+    except ValueError as e:
+        return _error_response(e)
 
 
 @require_auth(['admin'])
