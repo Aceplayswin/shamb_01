@@ -17,6 +17,7 @@ from core.auth_jwt import sign_token
 from core.models import (
     Banner,
     Bet,
+    Faq,
     Game,
     GameSession,
     PlatformSetting,
@@ -641,6 +642,19 @@ def list_active_banners():
             'link_url': b.link_url,
         }
         for b in Banner.objects.filter(status='active').order_by('sort_order', 'id')
+    ]
+
+
+def list_active_faqs():
+    """Public home-page FAQs the product admin has set to active, in display
+    order. Returns [] when none are configured."""
+    return [
+        {
+            'id': f.id,
+            'question': f.question,
+            'answer': f.answer,
+        }
+        for f in Faq.objects.filter(status='active').order_by('sort_order', 'id')
     ]
 
 

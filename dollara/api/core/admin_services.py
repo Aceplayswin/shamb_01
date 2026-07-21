@@ -11,6 +11,7 @@ from django.utils import timezone
 from core.models import (
     AiCallLog,
     Banner,
+    Faq,
     Bonus,
     BonusProvider,
     Game,
@@ -676,6 +677,61 @@ def update_banner(banner_id: int, data: dict) -> dict:
 
 def delete_banner(banner_id: int) -> dict:
     Banner.objects.filter(id=banner_id).delete()
+    return {'deleted': True}
+
+
+def _serialize_faq(f: Faq) -> dict:
+    return {
+        'id': f.id,
+        'question': f.question,
+        'answer': f.answer,
+        'sort_order': f.sort_order,
+        'status': f.status,
+        'created_at': f.created_at.isoformat() if f.created_at else None,
+    }
+
+
+def list_admin_faqs() -> list[dict]:
+    return [
+        _serialize_faq(f)
+        for f in Faq.objects.order_by('sort_order', 'id')
+    ]
+
+
+def create_faq(data: dict) -> dict:
+    question = (data.get('question') or '').strip()
+    answer = (data.get('answer') or '').strip()
+    if not question:
+        raise ValueError('Question is required')
+    if not answer:
+        raise ValueError('Answer is required')
+    faq = Faq.objects.create(
+        question=question,
+        answer=answer,
+        sort_order=int(data.get('sort_order', 0) or 0),
+        status=data.get('status', 'active'),
+    )
+    return {'id': faq.id}
+
+
+def update_faq(faq_id: int, data: dict) -> dict:
+    allowed = {'question', 'answer', 'sort_order', 'status'}
+    updates = {k: v for k, v in data.items() if k in allowed}
+    for key in ('question', 'answer'):
+        if key in updates:
+            value = (updates[key] or '').strip()
+            if not value:
+                raise ValueError(f'{key.capitalize()} cannot be empty')
+            updates[key] = value
+    if 'sort_order' in updates:
+        updates['sort_order'] = int(updates['sort_order'] or 0)
+    if updates:
+        Faq.objects.filter(id=faq_id).update(**updates)
+    return {'updated': True}
+
+
+def delete_faq(faq_id: int) -> dict:
+    Faq.objects.filter(id=faq_id).delete()
     return {'deleted': True}
 
 

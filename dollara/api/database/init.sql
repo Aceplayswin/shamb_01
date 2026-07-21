@@ -479,6 +479,20 @@ CREATE TABLE IF NOT EXISTS banners (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Home-page FAQ entries shown in the "Frequently asked questions" accordion on
+-- every frontend theme. Managed by this product's own admin panel (/admin ->
+-- FAQs), not by Super Admin. Only rows with status='active' are served to the
+-- public frontends, ordered by sort_order.
+CREATE TABLE IF NOT EXISTS faqs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  question VARCHAR(300) NOT NULL,
+  answer TEXT NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  status ENUM('draft', 'active') DEFAULT 'active',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS login_history (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   user_id BIGINT UNSIGNED,
@@ -541,6 +555,14 @@ ON DUPLICATE KEY UPDATE name = name;
 INSERT INTO banners (id, title, image_url, link_url, sort_order, status, created_at, updated_at) VALUES
   (1, 'offer', 'https://api.ranamatch.com/media/uploads/6/c4c51c6e21414b3fb70ae4cc5f70c4b1.png', NULL, 1, 'active', '2026-07-16 11:41:26', '2026-07-18 09:03:33'),
   (2, 'Offer 2', 'https://api.ranamatch.com/media/uploads/6/b9e85682706c4f5288bb7e279be50f89.png', NULL, 0, 'active', '2026-07-16 11:42:15', '2026-07-18 09:03:03')
+ON DUPLICATE KEY UPDATE id = id;
+
+INSERT INTO faqs (id, question, answer, sort_order, status) VALUES
+  (1, 'Why is this one of the best betting sites in India?', 'A trusted, licensed platform built around fast payouts, fair games and 24/7 human support — without the clutter of typical betting sites.', 0, 'active'),
+  (2, 'Is online betting legal in India?', 'There are no federal laws explicitly prohibiting online betting across most of India. We recommend checking your local state regulations.', 1, 'active'),
+  (3, 'How do I withdraw my winnings?', 'Withdraw instantly to UPI or your bank account. Most cash-outs complete in under five minutes after a quick verification.', 2, 'active'),
+  (4, 'Can I actually win in an online casino?', 'Yes. Every game uses certified RNG and published RTP so outcomes are genuinely random and verifiable.', 3, 'active'),
+  (5, 'Are casino games skill or luck?', 'It depends. Slots and crash games are luck-based, while Poker and Blackjack reward skill and strategy.', 4, 'active')
 ON DUPLICATE KEY UPDATE id = id;
 
 INSERT INTO game_providers (id, name, slug, logo_url, is_active, created_at) VALUES

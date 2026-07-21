@@ -17,6 +17,7 @@ import {
 import { useGameCatalog } from '@/hooks/useGameCatalog';
 import { useBranding } from '@/hooks/useBranding';
 import { useBanners } from '@/hooks/useBanners';
+import { useFaqs } from '@/hooks/useFaqs';
 import BannerCarousel from '@/components/BannerCarousel';
 import { filterFeatured, filterByCategory, NAV_GAME_LINKS, playPath } from '@/lib/gameRoutes';
 import { useAuthModal } from '../shell/authModalContext';
@@ -43,29 +44,6 @@ const WHY = [
 ];
 
 const PAYMENTS = ['UPI', 'IMPS / NEFT', 'Bitcoin', 'USDT', 'PhonePe', 'Google Pay', 'Paytm'];
-
-const FAQS = [
-  {
-    q: 'Why is this one of the best online betting sites in India?',
-    a: 'A trusted betting platform offering fast transactions and secure gaming experiences for Indian players.',
-  },
-  {
-    q: 'Is online betting legal in India?',
-    a: 'Online betting laws vary by state. Please check your local regulations before playing and always play responsibly.',
-  },
-  {
-    q: 'How do I withdraw my winnings?',
-    a: 'Head to your wallet, choose Withdraw, pick a payout method, and confirm. Payouts are processed after quick verification.',
-  },
-  {
-    q: 'Can I ever win in an online casino?',
-    a: 'Yes — games are provably fair, but outcomes are random. Set limits, play for fun, and never chase losses.',
-  },
-  {
-    q: 'Is online casino a skill or luck?',
-    a: 'It depends on the game — some (like poker) reward skill, while slots and roulette are chance-based.',
-  },
-];
 
 /* ── pieces ── */
 function GameCard({ game, onPlay, wide = false }) {
@@ -147,6 +125,7 @@ export default function Theme3Home() {
   const { open } = useAuthModal();
   const { games, loading, error } = useGameCatalog();
   const { banners } = useBanners();
+  const { faqs } = useFaqs();
   const [openFaq, setOpenFaq] = useState(0);
 
   const liveSportsRef = useRef(null);
@@ -345,39 +324,41 @@ export default function Theme3Home() {
         </div>
       </section>
 
-      {/* ===== FAQ ===== */}
-      <section className="mt-12">
-        <p className="text-[0.6rem] font-black uppercase tracking-[0.2em] text-[#c79a3b]">Need Clarity?</p>
-        <div className="mt-1 flex items-center justify-between">
-          <h2 className="font-display text-3xl font-black text-[#1b1726] sm:text-4xl">Frequently Asked Questions</h2>
-          <span className="hidden rounded-full border border-black/10 bg-white px-4 py-1.5 text-xs font-black text-[#6b6579] shadow-sm sm:block">
-            {FAQS.length} Questions
-          </span>
-        </div>
-        <div className="mt-6 space-y-3">
-          {FAQS.map((f, i) => {
-            const isOpen = openFaq === i;
-            return (
-              <div key={f.q} className="overflow-hidden rounded-2xl border border-black/[0.06] bg-white shadow-sm">
-                <button
-                  onClick={() => setOpenFaq(isOpen ? -1 : i)}
-                  className="flex w-full items-center gap-3 px-4 py-4 text-left"
-                  aria-expanded={isOpen}
-                >
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-[#e9c56b] to-[#b8862f] text-xs font-black text-[#241b0e]">
-                    {String(i + 1).padStart(2, '0')}
-                  </span>
-                  <span className="flex-1 text-sm font-black uppercase tracking-wide text-[#1b1726]">{f.q}</span>
-                  <ChevronDown className={`h-4 w-4 shrink-0 text-[#9a94a8] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                </button>
-                {isOpen && (
-                  <p className="border-t border-black/[0.05] px-4 py-4 pl-[3.75rem] text-sm text-[#6b6579]">{f.a}</p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </section>
+      {/* ===== FAQ — managed from the product admin (/admin -> FAQs) ===== */}
+      {faqs.length > 0 && (
+        <section className="mt-12">
+          <p className="text-[0.6rem] font-black uppercase tracking-[0.2em] text-[#c79a3b]">Need Clarity?</p>
+          <div className="mt-1 flex items-center justify-between">
+            <h2 className="font-display text-3xl font-black text-[#1b1726] sm:text-4xl">Frequently Asked Questions</h2>
+            <span className="hidden rounded-full border border-black/10 bg-white px-4 py-1.5 text-xs font-black text-[#6b6579] shadow-sm sm:block">
+              {faqs.length} Questions
+            </span>
+          </div>
+          <div className="mt-6 space-y-3">
+            {faqs.map((f, i) => {
+              const isOpen = openFaq === i;
+              return (
+                <div key={f.id ?? i} className="overflow-hidden rounded-2xl border border-black/[0.06] bg-white shadow-sm">
+                  <button
+                    onClick={() => setOpenFaq(isOpen ? -1 : i)}
+                    className="flex w-full items-center gap-3 px-4 py-4 text-left"
+                    aria-expanded={isOpen}
+                  >
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-[#e9c56b] to-[#b8862f] text-xs font-black text-[#241b0e]">
+                      {String(i + 1).padStart(2, '0')}
+                    </span>
+                    <span className="flex-1 text-sm font-black uppercase tracking-wide text-[#1b1726]">{f.question}</span>
+                    <ChevronDown className={`h-4 w-4 shrink-0 text-[#9a94a8] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {isOpen && (
+                    <p className="border-t border-black/[0.05] px-4 py-4 pl-[3.75rem] text-sm text-[#6b6579]">{f.answer}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

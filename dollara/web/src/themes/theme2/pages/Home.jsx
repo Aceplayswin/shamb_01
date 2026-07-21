@@ -9,10 +9,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Dices, Sparkles, Tv, LayoutGrid, Rocket, Trophy, Gamepad2,
-  Flame, Circle, Gift, ChevronRight, Send, Info, Zap, ShieldCheck, Award, Play,
+  Flame, Circle, Gift, ChevronRight, ChevronDown, Send, Info, Zap, ShieldCheck, Award, Play, HelpCircle,
 } from 'lucide-react';
 import { useGameCatalog } from '@/hooks/useGameCatalog';
 import { useBanners } from '@/hooks/useBanners';
+import { useFaqs } from '@/hooks/useFaqs';
 import BannerCarousel from '@/components/BannerCarousel';
 import {
   filterByCategory,
@@ -142,6 +143,44 @@ function RowHeader({ Icon, title, color = 'text-amber-400', seeAllHref }) {
         </Link>
       ) : null}
     </div>
+  );
+}
+
+/* ── FAQ — managed from the product admin (/admin -> FAQs) ── */
+function Theme2Faq() {
+  const { faqs } = useFaqs();
+  const [open, setOpen] = useState(-1);
+
+  if (faqs.length === 0) return null;
+
+  return (
+    <section>
+      <RowHeader Icon={HelpCircle} title="Frequently Asked Questions" color="text-amber-400" />
+      <div className="space-y-2">
+        {faqs.map((f, i) => {
+          const isOpen = open === i;
+          return (
+            <div key={f.id ?? i} className="overflow-hidden rounded-xl border border-white/5 bg-[#0d1420]">
+              <button
+                type="button"
+                onClick={() => setOpen(isOpen ? -1 : i)}
+                aria-expanded={isOpen}
+                className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
+              >
+                <span className="grid h-6 w-6 shrink-0 place-items-center rounded bg-amber-500/10 text-[0.7rem] font-black text-amber-400">
+                  {i + 1}
+                </span>
+                <span className="min-w-0 flex-1 text-sm font-bold text-white">{f.question}</span>
+                <ChevronDown className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {isOpen && (
+                <p className="border-t border-white/5 px-4 py-3.5 text-sm leading-relaxed text-slate-400 sm:pl-14">{f.answer}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -322,6 +361,8 @@ export default function Theme2Home() {
             </div>
           ))}
         </section>
+
+        <Theme2Faq />
       </div>
 
       {/* ===== Right rail (chat / big wins / bet slip) — hidden on smaller screens ===== */}

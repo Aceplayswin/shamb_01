@@ -572,6 +572,22 @@ class Banner(models.Model):
         db_table = 'banners'
 
 
+class Faq(models.Model):
+    """Home-page FAQ entry, managed by this product's own admin. Only rows with
+    status='active' are served to the public frontends, ordered by sort_order."""
+
+    id = models.BigAutoField(primary_key=True)
+    question = models.CharField(max_length=300)
+    answer = models.TextField()
+    sort_order = models.IntegerField(default=0)
+    status = models.CharField(max_length=20, default='active')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'faqs'
+
+
 class AiCallLog(models.Model):
     id = models.BigAutoField(primary_key=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, db_column='user_id')

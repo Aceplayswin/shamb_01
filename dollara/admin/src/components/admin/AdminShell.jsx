@@ -36,6 +36,7 @@ import {
   History,
   Smartphone,
   FileSpreadsheet,
+  HelpCircle,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { adminApi, adminUploadImage, clearAdminToken, getAdminRole, getAdminToken } from '@/services/adminApi';
@@ -70,6 +71,7 @@ const NAV_GROUPS = [
     label: 'Content',
     items: [
       { href: '/banners', label: 'Banners', icon: ImageIcon },
+      { href: '/faqs', label: 'FAQs', icon: HelpCircle },
       { href: '/app', label: 'App Download', icon: Smartphone },
     ],
   },

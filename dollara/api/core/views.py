@@ -500,6 +500,12 @@ def banners_list(request):
     return JsonResponse(services.list_active_banners(), safe=False)
 
 
+@require_http_methods(['GET'])
+def faqs_list(request):
+    """Active home-page FAQs for this product's frontends. Keyless, like banners."""
+    return JsonResponse(services.list_active_faqs(), safe=False)
+
+
 @csrf_exempt
 @require_auth(['user'])
 @require_http_methods(['POST'])
@@ -1077,6 +1083,37 @@ def admin_banners_update(request, banner_id):
         if request.method == 'DELETE':
             return JsonResponse(admin_services.delete_banner(banner_id))
         return JsonResponse(admin_services.update_banner(banner_id, _json_body(request)))
+    except Exception as e:
+        return _error_response(e)
+
+
+# --- Admin: home-page FAQs ---
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_faqs(request):
+    return JsonResponse(admin_services.list_admin_faqs(), safe=False)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_faqs_create(request):
+    try:
+        return JsonResponse(admin_services.create_faq(_json_body(request)), status=201)
+    except (KeyError, json.JSONDecodeError) as e:
+        return _error_response(e)
+    except Exception as e:
+        return _error_response(e)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['PATCH', 'DELETE'])
+def admin_faqs_update(request, faq_id):
+    try:
+        if request.method == 'DELETE':
+            return JsonResponse(admin_services.delete_faq(faq_id))
+        return JsonResponse(admin_services.update_faq(faq_id, _json_body(request)))
     except Exception as e:
         return _error_response(e)
 

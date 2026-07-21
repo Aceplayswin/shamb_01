@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useGameCatalog } from '@/hooks/useGameCatalog';
 import { useBanners } from '@/hooks/useBanners';
+import { useFaqs } from '@/hooks/useFaqs';
 import { usePromotions } from '@/hooks/usePromotions';
 import BannerCarousel from '@/components/BannerCarousel';
 import { useBranding } from '@/hooks/useBranding';
@@ -298,37 +299,17 @@ function WhyChoose({ name }) {
   );
 }
 
-/* ── FAQ ── */
-const FAQS = [
-  {
-    q: 'How do I create an account?',
-    a: 'Tap Sign Up, enter your name, mobile number, and a password. It takes under a minute and you can deposit straight away.',
-  },
-  {
-    q: 'Is online betting legal in India?',
-    a: 'Rules vary by state. Skill-based gaming is permitted in most of India, but a few states restrict online real-money play. Please check the law that applies where you live before playing.',
-  },
-  {
-    q: 'How do I withdraw my winnings?',
-    a: 'Open Withdraw, enter an amount above the minimum, and pick your payout method. Requests are reviewed by our team and paid to your verified UPI or bank account.',
-  },
-  {
-    q: 'Can I ever win in an online casino?',
-    a: 'Yes — every round is settled by the provider’s certified RNG or a live dealer, and payouts are credited to your wallet automatically. Outcomes are random, so never stake more than you can afford to lose.',
-  },
-  {
-    q: 'Is online casino a skill or luck?',
-    a: 'Both. Card games such as poker and rummy reward skill and judgement, while slots and roulette are pure chance. Knowing which is which is the best way to play sensibly.',
-  },
-];
-
+/* ── FAQ — managed from the product admin (/admin -> FAQs) ── */
 function Faq() {
+  const { faqs } = useFaqs();
   const [open, setOpen] = useState(null);
+
+  if (faqs.length === 0) return null;
 
   return (
     <section className="mt-4 space-y-2">
-      {FAQS.map((f, i) => (
-        <div key={f.q} className="overflow-hidden rounded-xl bg-white shadow-sm">
+      {faqs.map((f, i) => (
+        <div key={f.id ?? i} className="overflow-hidden rounded-xl bg-white shadow-sm">
           <button
             type="button"
             onClick={() => setOpen(open === i ? null : i)}
@@ -339,7 +320,7 @@ function Faq() {
               {i + 1}
             </span>
             <span className="min-w-0 flex-1 text-xs font-black uppercase tracking-wide text-[#0f1b33] sm:text-sm">
-              {f.q}
+              {f.question}
             </span>
             <ChevronDown
               className={`h-4 w-4 shrink-0 text-[#94a3b8] transition-transform ${open === i ? 'rotate-180' : ''}`}
@@ -347,7 +328,7 @@ function Faq() {
           </button>
           {open === i && (
             <p className="border-t border-black/[0.05] px-4 py-4 text-sm leading-relaxed text-[#475569] sm:pl-14">
-              {f.a}
+              {f.answer}
             </p>
           )}
         </div>

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useBranding } from '@/hooks/useBranding';
 import { useBanners } from '@/hooks/useBanners';
+import { useFaqs } from '@/hooks/useFaqs';
 import { useGameCatalog } from '@/hooks/useGameCatalog';
 import { useGameSearch } from '@/hooks/useGameSearch';
 import BannerCarousel from '@/components/BannerCarousel';
@@ -200,6 +201,7 @@ function Accordion({ question, answer, isOpen, onClick }) {
 export default function Theme1Home() {
   const branding = useBranding();
   const { banners } = useBanners();
+  const { faqs } = useFaqs();
   const router = useRouter();
   const searchParams = useSearchParams();
   const searchQuery = (searchParams.get('q') ?? '').trim();
@@ -496,34 +498,30 @@ export default function Theme1Home() {
                 </div>
               </section>
 
-              {/* FAQ */}
-              <section className="mx-auto max-w-3xl py-4">
-                <div className="mb-8 text-center">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-hairline/10 bg-panel/60 px-3 py-1 text-[0.65rem] font-bold uppercase tracking-widest text-brand-300">
-                    <Sparkles className="h-3 w-3" /> Knowledge base
-                  </span>
-                  <h2 className="mt-4 font-display text-3xl font-bold text-app-fg">
-                    Frequently asked <span className="text-gradient-gold">questions</span>
-                  </h2>
-                </div>
-                <div className="space-y-3">
-                  {[
-                    { q: `Why is ${branding.product_name} one of the best betting sites in India?`, a: 'A trusted, licensed platform built around fast payouts, fair games and 24/7 human support — without the clutter of typical betting sites.' },
-                    { q: 'Is online betting legal in India?', a: 'There are no federal laws explicitly prohibiting online betting across most of India. We recommend checking your local state regulations.' },
-                    { q: 'How do I withdraw my winnings?', a: 'Withdraw instantly to UPI or your bank account. Most cash-outs complete in under five minutes.' },
-                    { q: 'Can I actually win in an online casino?', a: 'Yes. Every game uses certified RNG and published RTP so outcomes are genuinely random and verifiable.' },
-                    { q: 'Are casino games skill or luck?', a: 'It depends. Slots and crash games are luck-based, while Poker and Blackjack reward skill and strategy.' },
-                  ].map((faq, idx) => (
-                    <Accordion
-                      key={idx}
-                      question={faq.q}
-                      answer={faq.a}
-                      isOpen={openFaq === idx}
-                      onClick={() => setOpenFaq(idx === openFaq ? -1 : idx)}
-                    />
-                  ))}
-                </div>
-              </section>
+              {/* FAQ — content managed from the product admin (/admin -> FAQs) */}
+              {faqs.length > 0 && (
+                <section className="mx-auto max-w-3xl py-4">
+                  <div className="mb-8 text-center">
+                    <span className="inline-flex items-center gap-2 rounded-full border border-hairline/10 bg-panel/60 px-3 py-1 text-[0.65rem] font-bold uppercase tracking-widest text-brand-300">
+                      <Sparkles className="h-3 w-3" /> Knowledge base
+                    </span>
+                    <h2 className="mt-4 font-display text-3xl font-bold text-app-fg">
+                      Frequently asked <span className="text-gradient-gold">questions</span>
+                    </h2>
+                  </div>
+                  <div className="space-y-3">
+                    {faqs.map((faq, idx) => (
+                      <Accordion
+                        key={faq.id ?? idx}
+                        question={faq.question}
+                        answer={faq.answer}
+                        isOpen={openFaq === idx}
+                        onClick={() => setOpenFaq(idx === openFaq ? -1 : idx)}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
             </>
           )}
         </div>

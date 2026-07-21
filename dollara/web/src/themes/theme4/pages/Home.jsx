@@ -11,9 +11,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Play, Tv, Dice5, Trophy, Cherry } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Play, Tv, Dice5, Trophy, Cherry } from 'lucide-react';
 import { useGameCatalog } from '@/hooks/useGameCatalog';
 import { useBanners } from '@/hooks/useBanners';
+import { useFaqs } from '@/hooks/useFaqs';
 import BannerCarousel from '@/components/BannerCarousel';
 import { useAuthStore } from '@/store/auth';
 import { filterFeatured, NAV_GAME_LINKS, playPath } from '@/lib/gameRoutes';
@@ -346,6 +347,44 @@ function OddsBoard({ board }) {
 }
 
 /* ── page ── */
+/* ── FAQ — managed from the product admin (/admin -> FAQs) ── */
+function Theme4Faq() {
+  const { faqs } = useFaqs();
+  const [open, setOpen] = useState(-1);
+
+  if (faqs.length === 0) return null;
+
+  return (
+    <section className="mt-4">
+      <T4SectionBar>Frequently Asked Questions</T4SectionBar>
+      <div className="mt-2 space-y-2">
+        {faqs.map((f, i) => {
+          const isOpen = open === i;
+          return (
+            <div key={f.id ?? i} className="overflow-hidden rounded border border-black/[0.08] bg-white">
+              <button
+                type="button"
+                onClick={() => setOpen(isOpen ? -1 : i)}
+                aria-expanded={isOpen}
+                className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
+              >
+                <span className="grid h-6 w-6 shrink-0 place-items-center rounded bg-[#eef6f7] text-[0.7rem] font-black text-[#0e7480]">
+                  {i + 1}
+                </span>
+                <span className="min-w-0 flex-1 text-xs font-bold text-[#13272b] sm:text-sm">{f.question}</span>
+                <ChevronDown className={`h-4 w-4 shrink-0 text-[#8aa0a4] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {isOpen && (
+                <p className="border-t border-black/[0.06] px-4 py-3.5 text-sm leading-relaxed text-[#5d7378] sm:pl-14">{f.answer}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export default function Theme4Home() {
   const router = useRouter();
   const { open } = useAuthModal();
@@ -379,6 +418,7 @@ export default function Theme4Home() {
         <CasinoBanners />
         <TopGames games={featured} loading={loading} error={error} onPlay={onPlay} />
         {BOARDS.map((b) => <OddsBoard key={b.title} board={b} />)}
+        <Theme4Faq />
       </div>
     </div>
   );
