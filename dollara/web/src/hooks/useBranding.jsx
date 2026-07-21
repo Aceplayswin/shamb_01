@@ -9,6 +9,7 @@ const DEFAULT_BRANDING = {
   product_name: '',
   logo_url: '',
   favicon_url: '',
+  app_icon_url: '',
   theme_color: '#F5C542',
   secondary_color: '#FFB800',
   colors: null,
@@ -39,16 +40,41 @@ function applyBranding(branding) {
   }
   if (branding.product_name) {
     document.title = `${branding.product_name} - Online Gaming Platform`;
+    // iOS home-screen label when the PWA is added from Safari.
+    upsertMeta('apple-mobile-web-app-title', branding.product_name);
   }
   if (branding.favicon_url) {
-    let link = document.querySelector("link[rel~='icon']");
-    if (!link) {
-      link = document.createElement('link');
-      link.rel = 'icon';
-      document.head.appendChild(link);
-    }
-    link.href = branding.favicon_url;
+    upsertLink("link[rel~='icon']", (l) => (l.rel = 'icon')).href = branding.favicon_url;
   }
+  // Brand the installed-app icon: iOS reads apple-touch-icon at "Add to Home
+  // Screen" time, so pointing it at the product's icon (like the favicon above)
+  // gives the home-screen icon the brand's mark. Android uses the manifest icons.
+  const appIcon = branding.app_icon_url || branding.logo_url;
+  if (appIcon) {
+    upsertLink("link[rel='apple-touch-icon']", (l) => (l.rel = 'apple-touch-icon')).href = appIcon;
+  }
+}
+
+// Find a <link> matching `selector`, or create one (initialised by `init`) and
+// append it to <head>. Returns the element so the caller can set href.
+function upsertLink(selector, init) {
+  let link = document.querySelector(selector);
+  if (!link) {
+    link = document.createElement('link');
+    init(link);
+    document.head.appendChild(link);
+  }
+  return link;
+}
+
+function upsertMeta(name, content) {
+  let meta = document.querySelector(`meta[name='${name}']`);
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.name = name;
+    document.head.appendChild(meta);
+  }
+  meta.content = content;
 }
 
 export function BrandProvider({ children }) {
