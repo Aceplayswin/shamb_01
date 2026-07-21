@@ -120,7 +120,6 @@ export default function Theme1Profile() {
               <ActionTile href="/bet-history" label="Bet History" icon="🎲" />
               <ActionTile href="/promotions" label="Promos" icon="🎁" />
               <ActionTile href="/refer" label="Refer" icon="👥" />
-              <ActionTile href="/support/chat" label="Support" icon="💬" />
             </div>
           </section>
 

@@ -33,7 +33,7 @@ const SECTIONS = [
     items: [
       'Any form of collusion, fraud or use of prohibited software is not allowed.',
       'Set deposit and session limits in Settings to play responsibly.',
-      'If gambling stops being fun, take a break or self-exclude via support.',
+      'If gambling stops being fun, take a break or self-exclude from your account settings.',
     ],
   },
 ];

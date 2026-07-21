@@ -20,7 +20,6 @@ import {
   Spade,
   Tv,
   HeartHandshake,
-  LifeBuoy,
   Settings,
   Search,
   Download,
@@ -166,7 +165,6 @@ export function Header() {
         </nav>
 
         <div className="shrink-0 space-y-1 border-t border-hairline/[0.06] px-2 py-3">
-          <RailItem item={{ label: 'Support', href: '/support/chat', icon: LifeBuoy }} />
           <RailItem item={{ label: 'Settings', href: token ? '/settings' : '/login', icon: Settings }} />
         </div>
       </aside>

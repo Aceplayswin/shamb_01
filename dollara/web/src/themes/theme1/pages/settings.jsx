@@ -121,7 +121,7 @@ export default function Theme1Settings() {
 
               <Field
                 label="Communication language"
-                hint="Used for notifications, emails & support"
+                hint="Used for notifications & emails"
               >
                 <Select
                   value={form.communication_language}

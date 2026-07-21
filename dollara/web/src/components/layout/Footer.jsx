@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ShieldCheck, Headset } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { useBranding } from '@/hooks/useBranding';
 import { useAuthStore } from '@/store/auth';
 
@@ -38,9 +38,6 @@ export function Footer() {
               <span className="text-xs text-muted">© 2026 {brandName}</span>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-muted">
-              <Link href="/support/chat" className="font-semibold text-app-fg transition hover:text-brand-400">
-                Support
-              </Link>
               <span className="rounded border border-hairline/10 px-1.5 py-0.5 text-red-400">18+</span>
               <span>Play responsibly</span>
             </div>
@@ -89,12 +86,6 @@ export function Footer() {
             <p className="max-w-xs text-xs leading-relaxed text-muted">
               The premier platform for live, uninterrupted betting across Cricket, Soccer, Aviator, Andar Bahar and 2,000+ games.
             </p>
-            <Link
-              href="/support/chat"
-              className="inline-flex items-center gap-2 rounded-xl border border-hairline/10 px-4 py-2 text-xs font-bold text-app-fg transition hover:border-emerald-400/50 hover:bg-panel"
-            >
-              <Headset className="h-4 w-4 text-emerald-400" /> 24/7 Live support
-            </Link>
           </div>
 
           {LINK_GROUPS.map((group) => (
@@ -124,16 +115,6 @@ export function Footer() {
           </p>
         </div>
       </div>
-
-      {/* Floating support button — sits above mobile bottom nav */}
-      <a
-        href="#"
-        className="fixed bottom-24 right-5 z-40 grid h-14 w-14 place-items-center rounded-full bg-[#25D366] shadow-[0_8px_30px_rgba(37,211,102,0.4)] transition-transform hover:scale-110 lg:bottom-6"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#fff" className="h-7 w-7">
-          <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.099.824z" />
-        </svg>
-      </a>
     </footer>
   );
 }

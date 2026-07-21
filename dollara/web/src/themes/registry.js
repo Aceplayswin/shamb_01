@@ -30,7 +30,6 @@ import Theme1AppDownload from './theme1/pages/AppDownload';
 import Theme1Refer from './theme1/pages/Refer';
 import Theme1Rules from './theme1/pages/Rules';
 import Theme1Onboarding from './theme1/pages/Onboarding';
-import Theme1Support from './theme1/pages/Support';
 import Theme1Games from './theme1/pages/Games';
 import Theme1Play from './theme1/pages/Play';
 
@@ -107,7 +106,6 @@ const THEMES = {
       refer: Theme1Refer,
       rules: Theme1Rules,
       onboarding: Theme1Onboarding,
-      support: Theme1Support,
       games: Theme1Games,
       play: Theme1Play,
     },
