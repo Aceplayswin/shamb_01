@@ -19,7 +19,6 @@ from core.models import (
     Bet,
     Game,
     GameSession,
-    OtpVerification,
     PlatformSetting,
     Transaction,
     User,
@@ -46,46 +45,6 @@ def _check_password(password: str, password_hash: str) -> bool:
 
 def _player_users():
     return User.objects.filter(role=User.Role.USER, usersetting__is_demo=False)
-
-
-def send_otp(phone: str, channel: str) -> dict:
-    otp = f'{random.randint(100000, 999999)}'
-    otp_hash = _hash_password(otp)
-    expires_at = timezone.now() + timedelta(minutes=settings.OTP_EXPIRY_MINUTES)
-    OtpVerification.objects.create(
-        phone=phone,
-        otp_hash=otp_hash,
-        channel=channel,
-        expires_at=expires_at,
-    )
-    cache.set(f'otp:{phone}', {'attempts': 0}, settings.OTP_EXPIRY_MINUTES * 60)
-    if settings.DEBUG:
-        print(f'[DEV OTP] {phone} via {channel}: {otp}')
-    result = {'sent': True, 'expiresIn': settings.OTP_EXPIRY_MINUTES * 60}
-    if settings.DEBUG:
-        result['otp'] = otp
-    return result
-
-
-def verify_otp(phone: str, otp: str) -> None:
-    record = (
-        OtpVerification.objects.filter(
-            phone=phone, verified=False, expires_at__gt=timezone.now()
-        )
-        .order_by('-created_at')
-        .first()
-    )
-    if not record:
-        raise ValueError('OTP expired or not found')
-    if record.attempts >= settings.OTP_MAX_ATTEMPTS:
-        raise ValueError('Max attempts exceeded')
-    if not _check_password(otp, record.otp_hash):
-        record.attempts += 1
-        record.save(update_fields=['attempts'])
-        raise ValueError('Invalid OTP')
-    record.verified = True
-    record.save(update_fields=['verified'])
-    cache.delete(f'otp:{phone}')
 
 
 def _create_user_settings(user: User, **kwargs) -> UserSetting:
@@ -179,13 +138,20 @@ def _next_sequential_username() -> str:
     return str(nxt)
 
 
-def register_with_otp(
+def register_user(
     full_name: str,
     phone: str,
     password: str,
     country_code: str = 'IN',
     referral_code: str | None = None,
 ) -> dict:
+    """Direct sign-up: full name + phone + password, no verification step."""
+    full_name = (full_name or '').strip()
+    phone = (phone or '').strip()
+    if not full_name:
+        raise ValueError('Full name is required')
+    if not phone:
+        raise ValueError('Phone number is required')
     if User.objects.filter(phone=phone, role=User.Role.USER).exists():
         raise ValueError('Phone number already registered')
     if not password or len(password) < 6:
@@ -217,7 +183,7 @@ def register_with_otp(
     Wallet.objects.create(user=user)
     _create_user_settings(
         user,
-        registration_path=UserSetting.RegistrationPath.OTP,
+        registration_path=UserSetting.RegistrationPath.DIRECT,
         phone_verified=True,
         ai_voice_executive_id=voice_id,
         referred_by=referred_by,
@@ -231,7 +197,7 @@ def register_with_otp(
     token = sign_token({'sub': user.id, 'role': User.Role.USER}, tenant=get_current_tenant_id())
     return {
         'userId': user.id,
-        'username': username,
+        'username': user.username,
         'token': token,
         'welcomeBonus': float(joining.amount) if joining else 0,
         'voiceId': voice_id,
@@ -780,7 +746,7 @@ def admin_create_user(
     Wallet.objects.create(user=user, main_balance=balance)
     _create_user_settings(
         user,
-        registration_path=UserSetting.RegistrationPath.OTP,
+        registration_path=UserSetting.RegistrationPath.DIRECT,
         phone_verified=True,
         ai_voice_executive_id=voice_id,
         referral_code=bonus_services._generate_referral_code(),

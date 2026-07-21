@@ -54,7 +54,7 @@ class UserSetting(models.Model):
         REJECTED = 'rejected', 'Rejected'
 
     class RegistrationPath(models.TextChoices):
-        OTP = 'otp', 'OTP'
+        DIRECT = 'direct', 'Direct'
         KYC = 'kyc', 'KYC'
 
     id = models.BigAutoField(primary_key=True)
@@ -82,7 +82,7 @@ class UserSetting(models.Model):
     communication_language = models.CharField(max_length=10, default='en')
     currency = models.CharField(max_length=10, default='INR')
     registration_path = models.CharField(
-        max_length=10, choices=RegistrationPath.choices, default=RegistrationPath.OTP
+        max_length=10, choices=RegistrationPath.choices, default=RegistrationPath.DIRECT
     )
     preferred_game_type = models.CharField(max_length=50, null=True, blank=True)
     typical_bet_range = models.CharField(max_length=20, null=True, blank=True)
@@ -114,26 +114,6 @@ class Wallet(models.Model):
 
     class Meta:
         db_table = 'wallets'
-
-
-class OtpVerification(models.Model):
-    class Channel(models.TextChoices):
-        SMS = 'sms', 'SMS'
-        WHATSAPP = 'whatsapp', 'WhatsApp'
-        TELEGRAM = 'telegram', 'Telegram'
-        VOICE = 'voice', 'Voice'
-
-    id = models.BigAutoField(primary_key=True)
-    phone = models.CharField(max_length=20, db_index=True)
-    otp_hash = models.CharField(max_length=255)
-    channel = models.CharField(max_length=20, choices=Channel.choices, default=Channel.SMS)
-    attempts = models.IntegerField(default=0)
-    expires_at = models.DateTimeField()
-    verified = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = 'otp_verifications'
 
 
 class Transaction(models.Model):

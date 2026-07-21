@@ -249,7 +249,7 @@ def _error_response(exc: Exception, status: int = 400):
 @csrf_exempt
 @require_http_methods(['POST'])
 def register(request):
-    """Direct sign-up: full name + phone + password. No OTP verification."""
+    """Direct sign-up: full name + phone + password. No verification step."""
     try:
         body = _json_body(request)
         result = services.register_user(

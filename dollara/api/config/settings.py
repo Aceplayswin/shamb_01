@@ -156,8 +156,6 @@ JWT_SECRET = os.getenv('JWT_SECRET', 'dev-secret-change-in-production')
 JWT_REFRESH_SECRET = os.getenv('JWT_REFRESH_SECRET', 'dev-refresh-secret')
 JWT_EXPIRY_DAYS = 7
 WELCOME_BONUS = float(os.getenv('WELCOME_BONUS', '100'))
-OTP_EXPIRY_MINUTES = 5
-OTP_MAX_ATTEMPTS = 3
 DEMO_SESSION_MINUTES = 30
 API_PORT = int(os.getenv('PORT', '5000'))
 

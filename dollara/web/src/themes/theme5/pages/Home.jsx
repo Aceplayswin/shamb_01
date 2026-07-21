@@ -302,7 +302,7 @@ function WhyChoose({ name }) {
 const FAQS = [
   {
     q: 'How do I create an account?',
-    a: 'Tap Sign Up, enter your mobile number, verify the OTP we send you, then set your name and password. It takes under a minute and you can deposit straight away.',
+    a: 'Tap Sign Up, enter your name, mobile number, and a password. It takes under a minute and you can deposit straight away.',
   },
   {
     q: 'Is online betting legal in India?',

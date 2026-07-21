@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
   website_language VARCHAR(10) DEFAULT 'en',
   communication_language VARCHAR(10) DEFAULT 'en',
   currency VARCHAR(10) DEFAULT 'INR',
-  registration_path ENUM('otp', 'kyc') DEFAULT 'otp',
+  registration_path ENUM('direct', 'kyc') DEFAULT 'direct',
   preferred_game_type VARCHAR(50),
   typical_bet_range VARCHAR(20),
   ai_voice_executive_id VARCHAR(50),
@@ -73,18 +73,6 @@ CREATE TABLE IF NOT EXISTS wallets (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_wallet_user (user_id),
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS otp_verifications (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  phone VARCHAR(20) NOT NULL,
-  otp_hash VARCHAR(255) NOT NULL,
-  channel ENUM('sms', 'whatsapp', 'telegram', 'voice') DEFAULT 'sms',
-  attempts INT DEFAULT 0,
-  expires_at DATETIME NOT NULL,
-  verified BOOLEAN DEFAULT FALSE,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_otp_phone (phone)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS kyc_documents (
@@ -535,7 +523,7 @@ ON DUPLICATE KEY UPDATE username = username;
 -- Columns are named explicitly rather than relying on positional VALUES: the
 -- export predates several schema additions, and naming them keeps this seed
 -- correct as the schema moves on. Player data (users, wallets, transactions,
--- OTPs, gameplay history) is deliberately NOT seeded here.
+-- gameplay history) is deliberately NOT seeded here.
 
 INSERT INTO platform_settings (id, setting_key, setting_value, updated_at) VALUES
   (1, 'site_name', '\"DOLLARA\"', '2026-06-26 06:58:40'),
