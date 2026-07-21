@@ -41,23 +41,23 @@ const PRIMARY = [
   { label: 'Casino', href: NAV_GAME_LINKS.casino, icon: Dices },
   { label: 'Slots', href: NAV_GAME_LINKS.slots, icon: Cherry },
   { label: 'Fantasy', href: NAV_GAME_LINKS.fantasy, icon: Gamepad2 },
-  { label: 'Promos', href: '/promotions', icon: Gift },
 ];
 
 // Specific table/live games map to their broad category route plus a name
 // filter (?q=), so the destination page shows that game rather than the whole
-// live-casino catalog.
+// live-casino catalog. Icons stay monochrome (no per-item color) so the whole
+// rail reads as one uniform set.
 const CATEGORIES = [
-  { label: 'Lottery', href: NAV_GAME_LINKS.lottery, icon: Ticket, color: 'text-pink-400' },
-  { label: 'Crash', href: NAV_GAME_LINKS.crash, icon: Rocket, color: 'text-brand-400' },
-  { label: 'Roulette', href: `${NAV_GAME_LINKS.liveCasino}?q=roulette`, icon: CircleDot, color: 'text-red-400' },
-  { label: 'Blackjack', href: `${NAV_GAME_LINKS.liveCasino}?q=blackjack`, icon: WalletCards, color: 'text-slate-200' },
-  { label: 'Baccarat', href: `${NAV_GAME_LINKS.liveCasino}?q=baccarat`, icon: Diamond, color: 'text-sky-400' },
-  { label: 'Dragon', href: `${NAV_GAME_LINKS.slots}?q=dragon`, icon: Crown, color: 'text-brand-300' },
-  { label: 'Teen Patti', href: `${NAV_GAME_LINKS.liveCasino}?q=teen`, icon: Coins, color: 'text-amber-400' },
-  { label: 'Poker', href: `${NAV_GAME_LINKS.liveCasino}?q=poker`, icon: Spade, color: 'text-brand-300' },
-  { label: 'Shows', href: `${NAV_GAME_LINKS.liveCasino}?q=show`, icon: Tv, color: 'text-emerald-400' },
-  { label: 'Andar', href: `${NAV_GAME_LINKS.liveCasino}?q=andar`, icon: HeartHandshake, color: 'text-rose-400' },
+  { label: 'Lottery', href: NAV_GAME_LINKS.lottery, icon: Ticket },
+  { label: 'Crash', href: NAV_GAME_LINKS.crash, icon: Rocket },
+  { label: 'Roulette', href: `${NAV_GAME_LINKS.liveCasino}?q=roulette`, icon: CircleDot },
+  { label: 'Blackjack', href: `${NAV_GAME_LINKS.liveCasino}?q=blackjack`, icon: WalletCards },
+  { label: 'Baccarat', href: `${NAV_GAME_LINKS.liveCasino}?q=baccarat`, icon: Diamond },
+  { label: 'Dragon', href: `${NAV_GAME_LINKS.slots}?q=dragon`, icon: Crown },
+  { label: 'Teen Patti', href: `${NAV_GAME_LINKS.liveCasino}?q=teen`, icon: Coins },
+  { label: 'Poker', href: `${NAV_GAME_LINKS.liveCasino}?q=poker`, icon: Spade },
+  { label: 'Shows', href: `${NAV_GAME_LINKS.liveCasino}?q=show`, icon: Tv },
+  { label: 'Andar', href: `${NAV_GAME_LINKS.liveCasino}?q=andar`, icon: HeartHandshake },
 ];
 
 const MOBILE_TABS_BASE = [
