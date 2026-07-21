@@ -3,6 +3,7 @@ import { AuthHydrate } from '@/components/AuthHydrate';
 import { ThemeHydrate, themeInitScript } from '@/components/ThemeHydrate';
 import { BrandProvider } from '@/hooks/useBranding';
 import { ProductThemeProvider } from '@/hooks/useProductTheme';
+import { AuthModalProvider } from '@/hooks/useAuthModal';
 import { ThemeShell } from '@/themes/ThemeShell';
 import './globals.css';
 
@@ -26,7 +27,9 @@ export default function RootLayout({ children }) {
           <BrandProvider>
             <ProductThemeProvider>
               <AuthHydrate>
-                <ThemeShell>{children}</ThemeShell>
+                <AuthModalProvider>
+                  <ThemeShell>{children}</ThemeShell>
+                </AuthModalProvider>
               </AuthHydrate>
             </ProductThemeProvider>
           </BrandProvider>

@@ -10,6 +10,7 @@ import { usePathname } from 'next/navigation';
 import { Theme2Sidebar } from './Sidebar';
 import { Theme2TopBar } from './TopBar';
 import { Theme2Footer } from './Footer';
+import { Theme2AuthModals } from './AuthModals';
 
 export default function Theme2Shell({ children }) {
   const pathname = usePathname();
@@ -33,6 +34,7 @@ export default function Theme2Shell({ children }) {
         <main className={isPlayRoute ? 'min-h-[calc(100vh-4rem)]' : 'min-h-[calc(100vh-4rem)]'}>{children}</main>
         {!isPlayRoute && <Theme2Footer />}
       </div>
+      <Theme2AuthModals />
     </div>
   );
 }

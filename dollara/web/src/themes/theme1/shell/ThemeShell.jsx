@@ -7,6 +7,7 @@
 import { usePathname } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
+import { Theme1AuthModals } from './AuthModals';
 
 export default function Theme1Shell({ children }) {
   const pathname = usePathname();
@@ -27,6 +28,7 @@ export default function Theme1Shell({ children }) {
         {children}
         {!isPlayRoute && <Footer />}
       </div>
+      <Theme1AuthModals />
     </>
   );
 }
