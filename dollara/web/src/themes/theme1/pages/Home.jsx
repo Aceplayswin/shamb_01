@@ -52,7 +52,7 @@ const ACCENT_TEXT = {
   rose: 'text-rose-400',
 };
 
-function SectionHeader({ title, kicker, Icon, seeAllHref, accent = 'brand', onPrev, onNext }) {
+function SectionHeader({ title, Icon, seeAllHref, accent = 'brand', onPrev, onNext }) {
   return (
     <div className="mb-5 flex items-end justify-between gap-4">
       <div className="flex items-center gap-3">
@@ -60,9 +60,6 @@ function SectionHeader({ title, kicker, Icon, seeAllHref, accent = 'brand', onPr
           <Icon className="h-5 w-5" />
         </span>
         <div>
-          {kicker && (
-            <p className="text-[0.6rem] font-bold uppercase tracking-[0.25em] text-muted/80">{kicker}</p>
-          )}
           <h2 className="font-display text-xl font-bold text-app-fg">{title}</h2>
         </div>
       </div>
@@ -153,7 +150,7 @@ function GameCard({ item, onPlay, theme = THEMES.casino, rank }) {
 
 // A titled row of game cards with working ◀ ▶ controls that scroll the
 // horizontal carousel by roughly one viewport of cards.
-function Section({ title, kicker, Icon, accent, seeAllHref, items, onPlay, theme, ranked }) {
+function Section({ title, Icon, accent, seeAllHref, items, onPlay, theme, ranked }) {
   const scrollRef = useRef(null);
   const scrollByPage = (dir) => {
     const el = scrollRef.current;
@@ -163,7 +160,6 @@ function Section({ title, kicker, Icon, accent, seeAllHref, items, onPlay, theme
     <section>
       <SectionHeader
         title={title}
-        kicker={kicker}
         Icon={Icon}
         accent={accent}
         seeAllHref={seeAllHref}
@@ -403,7 +399,6 @@ export default function Theme1Home() {
             <>
               <Section
                 title="Live Sports"
-                kicker="In play now"
                 Icon={Trophy}
                 accent="emerald"
                 seeAllHref={NAV_GAME_LINKS.sports}
@@ -414,7 +409,6 @@ export default function Theme1Home() {
 
               <Section
                 title="Casino Lobby"
-                kicker="Top providers"
                 Icon={Dices}
                 accent="brand"
                 seeAllHref={NAV_GAME_LINKS.casino}
@@ -425,7 +419,6 @@ export default function Theme1Home() {
 
               <Section
                 title="Trending Games"
-                kicker="Player favourites"
                 Icon={Flame}
                 accent="rose"
                 seeAllHref="/games/featured"
@@ -437,7 +430,6 @@ export default function Theme1Home() {
 
               <Section
                 title="Trending Slots"
-                kicker="Big multipliers"
                 Icon={Sparkles}
                 accent="brand"
                 seeAllHref={NAV_GAME_LINKS.slots}
