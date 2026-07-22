@@ -47,7 +47,7 @@ class Command(BaseCommand):
             defaults={
                 'email': 'admin@dollara.local',
                 'password_hash': password_hash,
-                'role': User.Role.SUPER_ADMIN,
+                'role': User.Role.ADMIN,
                 'account_status': User.AccountStatus.ACTIVE,
             },
         )

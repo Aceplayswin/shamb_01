@@ -795,8 +795,6 @@ def wallet_adjustment(user_id: int, amount: float, notes: str) -> dict:
 # Manage Admin — staff accounts
 # --------------------------------------------------------------------------- #
 
-STAFF_ROLES = (User.Role.ADMIN, User.Role.SUPER_ADMIN)
-
 
 def _serialize_staff(a: User) -> dict:
     return {
@@ -816,31 +814,32 @@ def _serialize_staff(a: User) -> dict:
 def list_admin_users_list() -> list[dict]:
     return [
         _serialize_staff(a)
-        for a in User.objects.filter(role__in=STAFF_ROLES).order_by('username')
+        for a in User.objects.filter(role=User.Role.ADMIN).order_by('username')
     ]
 
 
 def _get_staff(staff_id: int) -> User:
-    staff = User.objects.filter(id=staff_id, role__in=STAFF_ROLES).first()
+    staff = User.objects.filter(id=staff_id, role=User.Role.ADMIN).first()
     if not staff:
         raise ValueError('Admin account not found')
     return staff
 
 
-def create_staff(data: dict, actor_role: str) -> dict:
-    """Create an admin account. Only a super admin may mint another one."""
-    if actor_role != User.Role.SUPER_ADMIN:
-        raise PermissionError('Only a super admin can create admin accounts')
+def _check_role(role: str | None) -> None:
+    """A product has one kind of console account, so 'admin' is the only role."""
+    if role and role != User.Role.ADMIN:
+        raise ValueError('Role must be admin')
 
+
+def create_staff(data: dict) -> dict:
+    """Create an admin account. Every admin can manage the console accounts."""
     username = (data.get('username') or '').strip()
     password = data.get('password') or ''
-    role = data.get('role') or User.Role.ADMIN
     if not username:
         raise ValueError('Username is required')
     if len(password) < 8:
         raise ValueError('Password must be at least 8 characters')
-    if role not in STAFF_ROLES:
-        raise ValueError('Role must be admin or super_admin')
+    _check_role(data.get('role'))
     if User.objects.filter(username=username).exists():
         raise ValueError('That username is already taken')
     email = (data.get('email') or '').strip() or None
@@ -851,26 +850,18 @@ def create_staff(data: dict, actor_role: str) -> dict:
         username=username,
         email=email,
         full_name=(data.get('full_name') or '').strip() or None,
-        role=role,
+        role=User.Role.ADMIN,
         account_status=User.AccountStatus.ACTIVE,
         password_hash=hash_password(password),
     )
     return _serialize_staff(staff)
 
 
-def update_staff(staff_id: int, data: dict, actor_id: int, actor_role: str) -> dict:
-    """Change an admin's role/status/details, or reset their password."""
-    if actor_role != User.Role.SUPER_ADMIN:
-        raise PermissionError('Only a super admin can manage admin accounts')
+def update_staff(staff_id: int, data: dict, actor_id: int) -> dict:
+    """Change an admin's status/details, or reset their password."""
     staff = _get_staff(staff_id)
 
-    if 'role' in data and data['role']:
-        if data['role'] not in STAFF_ROLES:
-            raise ValueError('Role must be admin or super_admin')
-        # Never let the last super admin demote themselves out of the console.
-        if staff.id == actor_id and data['role'] != User.Role.SUPER_ADMIN:
-            raise ValueError('You cannot change your own role')
-        staff.role = data['role']
+    _check_role(data.get('role'))
     if 'account_status' in data and data['account_status']:
         if staff.id == actor_id and data['account_status'] != User.AccountStatus.ACTIVE:
             raise ValueError('You cannot deactivate your own account')
@@ -883,37 +874,33 @@ def update_staff(staff_id: int, data: dict, actor_id: int, actor_role: str) -> d
             raise ValueError('Password must be at least 8 characters')
         staff.password_hash = hash_password(data['password'])
 
-    _assert_super_admin_remains(staff)
+    _assert_admin_remains(staff)
     staff.save()
     return _serialize_staff(staff)
 
 
-def delete_staff(staff_id: int, actor_id: int, actor_role: str) -> dict:
-    if actor_role != User.Role.SUPER_ADMIN:
-        raise PermissionError('Only a super admin can remove admin accounts')
+def delete_staff(staff_id: int, actor_id: int) -> dict:
     if staff_id == actor_id:
         raise ValueError('You cannot delete your own account')
     staff = _get_staff(staff_id)
-    if staff.role == User.Role.SUPER_ADMIN and _active_super_admins().count() <= 1:
-        raise ValueError('The last super admin cannot be removed')
+    if _active_admins().count() <= 1:
+        raise ValueError('The last admin cannot be removed')
     staff.delete()
     return {'deleted': True}
 
 
-def _active_super_admins():
+def _active_admins():
     return User.objects.filter(
-        role=User.Role.SUPER_ADMIN, account_status=User.AccountStatus.ACTIVE
+        role=User.Role.ADMIN, account_status=User.AccountStatus.ACTIVE
     )
 
 
-def _assert_super_admin_remains(staff: User) -> None:
-    """Refuse an edit that would leave the product with no active super admin."""
-    demoted_or_disabled = (
-        staff.role != User.Role.SUPER_ADMIN
-        or staff.account_status != User.AccountStatus.ACTIVE
-    )
-    if demoted_or_disabled and not _active_super_admins().exclude(id=staff.id).exists():
-        raise ValueError('At least one active super admin must remain')
+def _assert_admin_remains(staff: User) -> None:
+    """Refuse an edit that would leave the product with no active admin."""
+    if staff.account_status != User.AccountStatus.ACTIVE and (
+        not _active_admins().exclude(id=staff.id).exists()
+    ):
+        raise ValueError('At least one active admin must remain')
 
 
 def get_dashboard_charts(days: int = 7) -> dict:

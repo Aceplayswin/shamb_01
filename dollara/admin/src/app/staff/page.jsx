@@ -1,12 +1,12 @@
 'use client';
 
 // Manage Admin — create, edit, suspend and remove console accounts.
-// Writes are super-admin only; the API enforces that and also refuses any edit
-// that would leave the product with no active super admin.
+// Every admin can manage the others; the API refuses any edit that would leave
+// the product with no active admin.
 
 import { useState } from 'react';
 import { KeyRound, Pencil, Plus, ShieldCheck, Trash2 } from 'lucide-react';
-import { adminApi, getAdminRole } from '@/services/adminApi';
+import { adminApi } from '@/services/adminApi';
 import {
   AdminShell,
   Button,
@@ -26,7 +26,6 @@ const BLANK = {
   username: '',
   full_name: '',
   email: '',
-  role: 'admin',
   password: '',
   account_status: 'active',
 };
@@ -36,8 +35,6 @@ export default function AdminStaffPage() {
   const [editing, setEditing] = useState(null); // null | 'new' | row
   const [form, setForm] = useState(BLANK);
   const [saving, setSaving] = useState(false);
-
-  const isSuperAdmin = getAdminRole() === 'super_admin';
 
   const openCreate = () => {
     setForm(BLANK);
@@ -49,7 +46,6 @@ export default function AdminStaffPage() {
       username: row.username ?? '',
       full_name: row.full_name ?? '',
       email: row.email ?? '',
-      role: row.role,
       password: '',
       account_status: row.account_status,
     });
@@ -119,14 +115,6 @@ export default function AdminStaffPage() {
       ),
     },
     {
-      key: 'role',
-      label: 'Role',
-      render: (r) => (
-        <span className="capitalize text-slate-300">{r.role.replace(/_/g, ' ')}</span>
-      ),
-      filter: 'select',
-    },
-    {
       key: 'is_active',
       label: 'Status',
       render: (r) => <StatusBadge status={r.account_status} />,
@@ -139,17 +127,16 @@ export default function AdminStaffPage() {
     {
       key: 'actions',
       label: '',
-      render: (r) =>
-        isSuperAdmin ? (
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" size="sm" icon={Pencil} onClick={() => openEdit(r)}>
-              Edit
-            </Button>
-            <Button variant="danger" size="sm" icon={Trash2} onClick={() => remove(r)}>
-              Remove
-            </Button>
-          </div>
-        ) : null,
+      render: (r) => (
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" size="sm" icon={Pencil} onClick={() => openEdit(r)}>
+            Edit
+          </Button>
+          <Button variant="danger" size="sm" icon={Trash2} onClick={() => remove(r)}>
+            Remove
+          </Button>
+        </div>
+      ),
     },
   ];
 
@@ -158,31 +145,22 @@ export default function AdminStaffPage() {
       title="Manage Admin"
       subtitle="Console accounts, roles and access"
       actions={
-        isSuperAdmin ? (
-          <Button icon={Plus} onClick={openCreate}>
-            New admin
-          </Button>
-        ) : null
+        <Button icon={Plus} onClick={openCreate}>
+          New admin
+        </Button>
       }
     >
-      {!isSuperAdmin && (
-        <p className="mb-4 rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-400">
-          You are signed in as an admin. Only a super admin can create or modify
-          console accounts.
-        </p>
-      )}
-
       <DataTable
         columns={columns}
         rows={staff}
         loading={loading}
         searchable
-        searchKeys={['username', 'email', 'role']}
+        searchKeys={['username', 'email']}
         searchPlaceholder="Search staff…"
         noun="admin"
         emptyIcon={ShieldCheck}
         emptyMessage="No staff accounts"
-        emptyHint="Seed creates the default superadmin."
+        emptyHint="Seed creates the default admin."
       />
 
       <Modal
@@ -225,15 +203,6 @@ export default function AdminStaffPage() {
               onChange={(e) => setForm({ ...form, email: e.target.value })}
               placeholder="Optional"
             />
-          </Field>
-          <Field label="Role">
-            <Select
-              value={form.role}
-              onChange={(e) => setForm({ ...form, role: e.target.value })}
-            >
-              <option value="admin">Admin</option>
-              <option value="super_admin">Super admin</option>
-            </Select>
           </Field>
           {editing !== 'new' && (
             <Field label="Status">

@@ -5,7 +5,6 @@ class User(models.Model):
     class Role(models.TextChoices):
         USER = 'user', 'User'
         ADMIN = 'admin', 'Admin'
-        SUPER_ADMIN = 'super_admin', 'Super Admin'
 
     class AccountStatus(models.TextChoices):
         ACTIVE = 'active', 'Active'
@@ -35,7 +34,7 @@ class User(models.Model):
 
     @property
     def is_staff(self) -> bool:
-        return self.role in (self.Role.ADMIN, self.Role.SUPER_ADMIN)
+        return self.role == self.Role.ADMIN
 
 
 class UserSetting(models.Model):

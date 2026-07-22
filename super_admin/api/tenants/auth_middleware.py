@@ -2,19 +2,11 @@ from django.http import JsonResponse
 
 from tenants.auth_jwt import AuthUser, decode_token
 
-STAFF_ROLES = frozenset({'admin', 'super_admin'})
-
-
 def role_is_allowed(auth_role: str, allowed: list[str] | None) -> bool:
+    # Tenant tokens carry two roles: 'user' (players) and 'admin' (console staff).
     if not allowed:
         return True
-    expanded: set[str] = set()
-    for role in allowed:
-        if role == 'admin':
-            expanded |= STAFF_ROLES
-        else:
-            expanded.add(role)
-    return auth_role in expanded
+    return auth_role in set(allowed)
 
 
 class JWTAuthenticationMiddleware:

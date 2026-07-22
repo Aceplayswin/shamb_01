@@ -526,7 +526,7 @@ CREATE TABLE IF NOT EXISTS admin_audit_logs (
 INSERT INTO users (id, username, email, password_hash, full_name, role, account_status)
 VALUES (
   1, 'superadmin', 'admin@dollara.local',
-  '$2b$12$C9ZVRYJkjISgdOHdF/wTIeoWNhC80WWiYrvlJenWGI9pAxSjFqcxm', 'Platform Admin', 'super_admin', 'active'
+  '$2b$12$C9ZVRYJkjISgdOHdF/wTIeoWNhC80WWiYrvlJenWGI9pAxSjFqcxm', 'Platform Admin', 'admin', 'active'
 )
 ON DUPLICATE KEY UPDATE username = username;
 

@@ -162,39 +162,45 @@ def register_user(
     # bonus engine can pay the referrer.
     referred_by = bonus_services.resolve_referrer(referral_code)
     password_hash = _hash_password(password)
-    # Sequential usernames can collide if two players register at the same instant;
-    # the unique constraint then rejects the loser, so we recompute and retry.
-    for _attempt in range(5):
-        try:
-            user = User.objects.create(
-                username=_next_sequential_username(),
-                phone=phone,
-                full_name=full_name,
-                country_code=country_code,
-                role=User.Role.USER,
-                password_hash=password_hash,
-            )
-            break
-        except IntegrityError:
-            continue
-    else:
-        raise ValueError('Could not allocate a username, please try again')
-    # Wallet starts empty — the joining bonus is now awarded by the controllable
-    # bonus engine (see award_joining_bonus), not a hardcoded balance.
-    Wallet.objects.create(user=user)
-    _create_user_settings(
-        user,
-        registration_path=UserSetting.RegistrationPath.DIRECT,
-        phone_verified=True,
-        ai_voice_executive_id=voice_id,
-        referred_by=referred_by,
-        referral_code=bonus_services._generate_referral_code(),
-    )
-    # Fire the money-based welcome + referral bonuses (each is a no-op if the
-    # admin hasn't configured/activated one).
-    joining = bonus_services.award_joining_bonus(user.id)
-    if referred_by:
-        bonus_services.award_referral_bonus(user.id, event='register')
+    # One transaction for the whole account: a failure part-way through (settings,
+    # wallet, bonuses) must not leave a signed-up user the player can't log into.
+    with tenant_atomic():
+        # Sequential usernames can collide if two players register at the same instant;
+        # the unique constraint then rejects the loser, so we recompute and retry.
+        # The inner block is a savepoint — swallowing IntegrityError without one
+        # would leave the outer transaction unusable.
+        for _attempt in range(5):
+            try:
+                with tenant_atomic():
+                    user = User.objects.create(
+                        username=_next_sequential_username(),
+                        phone=phone,
+                        full_name=full_name,
+                        country_code=country_code,
+                        role=User.Role.USER,
+                        password_hash=password_hash,
+                    )
+                break
+            except IntegrityError:
+                continue
+        else:
+            raise ValueError('Could not allocate a username, please try again')
+        # Wallet starts empty — the joining bonus is now awarded by the controllable
+        # bonus engine (see award_joining_bonus), not a hardcoded balance.
+        Wallet.objects.create(user=user)
+        _create_user_settings(
+            user,
+            registration_path=UserSetting.RegistrationPath.DIRECT,
+            phone_verified=True,
+            ai_voice_executive_id=voice_id,
+            referred_by=referred_by,
+            referral_code=bonus_services._generate_referral_code(),
+        )
+        # Fire the money-based welcome + referral bonuses (each is a no-op if the
+        # admin hasn't configured/activated one).
+        joining = bonus_services.award_joining_bonus(user.id)
+        if referred_by:
+            bonus_services.award_referral_bonus(user.id, event='register')
     token = sign_token({'sub': user.id, 'role': User.Role.USER}, tenant=get_current_tenant_id())
     return {
         'userId': user.id,
@@ -255,7 +261,7 @@ def login_user(phone: str, password: str) -> dict:
 def login_admin(username: str, password: str) -> dict:
     admin = User.objects.filter(
         username=username,
-        role__in=[User.Role.ADMIN, User.Role.SUPER_ADMIN],
+        role=User.Role.ADMIN,
         account_status=User.AccountStatus.ACTIVE,
     ).first()
     if not admin or not admin.password_hash or not _check_password(password, admin.password_hash):
@@ -737,34 +743,38 @@ def admin_create_user(
 
     password_hash = _hash_password(password)
     voice_id = f'AI_EXEC_{random.randint(1, 50):03d}'
-    for _attempt in range(5):
-        try:
-            user = User.objects.create(
-                username=_next_sequential_username(),
-                phone=phone,
-                email=email,
-                full_name=full_name,
-                country_code=country_code,
-                role=User.Role.USER,
-                password_hash=password_hash,
-            )
-            break
-        except IntegrityError:
-            continue
-    else:
-        raise ValueError('Could not allocate a username, please try again')
+    # Same all-or-nothing rule as the player sign-up in register_user: the admin
+    # either gets a complete account or none at all.
+    with tenant_atomic():
+        for _attempt in range(5):
+            try:
+                with tenant_atomic():
+                    user = User.objects.create(
+                        username=_next_sequential_username(),
+                        phone=phone,
+                        email=email,
+                        full_name=full_name,
+                        country_code=country_code,
+                        role=User.Role.USER,
+                        password_hash=password_hash,
+                    )
+                break
+            except IntegrityError:
+                continue
+        else:
+            raise ValueError('Could not allocate a username, please try again')
 
-    balance = Decimal(str(initial_balance or 0))
-    if balance < 0:
-        balance = Decimal('0')
-    Wallet.objects.create(user=user, main_balance=balance)
-    _create_user_settings(
-        user,
-        registration_path=UserSetting.RegistrationPath.DIRECT,
-        phone_verified=True,
-        ai_voice_executive_id=voice_id,
-        referral_code=bonus_services._generate_referral_code(),
-    )
+        balance = Decimal(str(initial_balance or 0))
+        if balance < 0:
+            balance = Decimal('0')
+        Wallet.objects.create(user=user, main_balance=balance)
+        _create_user_settings(
+            user,
+            registration_path=UserSetting.RegistrationPath.DIRECT,
+            phone_verified=True,
+            ai_voice_executive_id=voice_id,
+            referral_code=bonus_services._generate_referral_code(),
+        )
     return {
         'id': user.id,
         'username': user.username,

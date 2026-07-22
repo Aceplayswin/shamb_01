@@ -1,4 +1,5 @@
 import json
+import logging
 
 from django.conf import settings
 import csv
@@ -27,6 +28,8 @@ from core.geo import detect_geo_from_ip
 from core.middleware import require_auth
 from core.models import AiCallLog, Transaction, User, UserSetting, Wallet
 from services.branding import get_branding
+
+logger = logging.getLogger(__name__)
 
 # Game launch error codes -> HTTP status. Mirrors the legacy status_code set so
 # the existing frontend game flow keeps working unchanged.
@@ -264,6 +267,12 @@ def register(request):
         return _error_response(e)
     except ValueError as e:
         return _error_response(e)
+    except Exception:
+        # Anything unexpected (schema drift, DB down) must still reach the
+        # sign-up form as JSON — otherwise the browser gets an HTML error page
+        # and the player sees a raw failure. Details stay in the log.
+        logger.exception('register failed')
+        return JsonResponse({'error': 'Registration failed, please try again'}, status=500)
 
 
 @csrf_exempt
@@ -1232,11 +1241,9 @@ def admin_staff(request):
 def admin_staff_create(request):
     try:
         return JsonResponse(
-            admin_services.create_staff(_json_body(request), request.auth.role),
+            admin_services.create_staff(_json_body(request)),
             status=201,
         )
-    except PermissionError as e:
-        return _error_response(e, 403)
     except (json.JSONDecodeError, ValueError) as e:
         return _error_response(e)
 
@@ -1247,14 +1254,10 @@ def admin_staff_create(request):
 def admin_staff_update(request, staff_id):
     try:
         if request.method == 'DELETE':
-            return JsonResponse(admin_services.delete_staff(
-                staff_id, request.auth.sub, request.auth.role
-            ))
+            return JsonResponse(admin_services.delete_staff(staff_id, request.auth.sub))
         return JsonResponse(admin_services.update_staff(
-            staff_id, _json_body(request), request.auth.sub, request.auth.role
+            staff_id, _json_body(request), request.auth.sub
         ))
-    except PermissionError as e:
-        return _error_response(e, 403)
     except (json.JSONDecodeError, ValueError) as e:
         return _error_response(e)
 
