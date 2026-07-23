@@ -131,7 +131,10 @@ function deriveBrandRamp(hex) {
 // isn't set, so the CSS var() default holds.
 export function applyThemeColors(themeKey, colors) {
   if (typeof document === 'undefined' || !colors) return;
-  const spec = THEME_SPECS[themeKey] || THEME_SPECS.theme1;
+  // Specs are plain data keyed by theme name, so every build carries all of them
+  // (harmless) — and an unknown key falls back to the glass spec rather than
+  // assuming theme1 is bundled.
+  const spec = THEME_SPECS[themeKey] || GLASS_SPEC;
   const root = document.documentElement;
 
   Object.entries(spec.vars).forEach(([token, [cssVar, format]]) => {
