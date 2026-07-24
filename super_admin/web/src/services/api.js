@@ -100,6 +100,35 @@ export const updateBranding = (id, payload) =>
     method: 'PUT',
     body: JSON.stringify(payload),
   });
+
+// Upload a branding asset (logo/favicon/splash/app icon). Sends multipart form
+// data — no JSON Content-Type header so the browser sets the multipart boundary.
+// Returns { url } for the stored file.
+export async function uploadBrandingAsset(file) {
+  const token = getSuperAdminToken();
+  const body = new FormData();
+  body.append('file', file);
+
+  const res = await fetch(`${API_URL}/api/v1/super-admin/branding/upload`, {
+    method: 'POST',
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body,
+  });
+
+  if (res.status === 401) {
+    clearSuperAdminToken();
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
+    throw new Error('Session expired');
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error ?? 'Upload failed');
+  }
+  return res.json();
+}
 export const testConnection = (payload) =>
   superAdminApi('/api/v1/super-admin/test-connection', {
     method: 'POST',

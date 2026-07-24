@@ -1,3 +1,23 @@
+-- Super Admin Platform - Master / Control-Plane MySQL Schema + seed data.
+-- Single source of truth: this file is the whole schema, applied by importing it
+-- directly. There are no incremental migration files -- change this file, then
+-- re-import it.
+--
+-- WARNING: every table below is DROP TABLE IF EXISTS'd before being recreated.
+-- Importing this destroys and replaces the target database's contents.
+--   mysql -h <host> -u <user> -p <database> < master.sql
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!50503 SET NAMES utf8mb4 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+/*M!100616 SET @OLD_NOTE_VERBOSITY=@@NOTE_VERBOSITY, NOTE_VERBOSITY=0 */;
 
 --
 -- Table structure for table `branding`
@@ -25,7 +45,8 @@ CREATE TABLE `branding` (
   `extra` json DEFAULT NULL,
   `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `product_id` (`product_id`),
+  -- Branding is one row per (product, theme). A UNIQUE index on product_id alone
+  -- would reject every theme after the first; uniqueness is the composite below.
   UNIQUE KEY `uq_branding_product_theme` (`product_id`,`theme_key`),
   CONSTRAINT `fk_branding_product` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -39,7 +60,7 @@ LOCK TABLES `branding` WRITE;
 /*!40000 ALTER TABLE `branding` DISABLE KEYS */;
 set autocommit=0;
 INSERT INTO `branding` VALUES
-(1,1,'theme1','Rana Match','https://static.vecteezy.com/system/resources/thumbnails/011/883/284/small/colorful-star-logo-good-for-technology-logo-vintech-logo-company-logo-browser-logo-dummy-logo-bussiness-logo-free-vector.jpg','https://static.vecteezy.com/system/resources/thumbnails/011/883/284/small/colorful-star-logo-good-for-technology-logo-vintech-logo-company-logo-browser-logo-dummy-logo-bussiness-logo-free-vector.jpg','#f09d28','#5c5c61','{\"rail\": \"#0B0F14\", \"muted\": \"#9CA3AF\", \"panel\": \"#151A21\", \"accent\": \"#5c5c61\", \"app_bg\": \"#0B0F14\", \"app_fg\": \"#FFFFFF\", \"primary\": \"#f09d28\", \"hairline\": \"#FFFFFF\", \"panel_strong\": \"#0B0F14\"}','','','','','','',NULL,'2026-07-20 07:29:23'),
+(1,1,'theme1','Rana Match','https://static.vecteezy.com/system/resources/thumbnails/011/883/284/small/colorful-star-logo-good-for-technology-logo-vintech-logo-company-logo-browser-logo-dummy-logo-bussiness-logo-free-vector.jpg','https://static.vecteezy.com/system/resources/thumbnails/011/883/284/small/colorful-star-logo-good-for-technology-logo-vintech-logo-company-logo-browser-logo-dummy-logo-bussiness-logo-free-vector.jpg','#f09d28','#5c5c61','{\"rail\": \"#0B0F14\", \"muted\": \"#9CA3AF\", \"panel\": \"#151A21\", \"accent\": \"#5c5c61\", \"app_bg\": \"#0B0F14\", \"app_fg\": \"#FFFFFF\", \"primary\": \"#f09d28\", \"hairline\": \"#FFFFFF\", \"panel_strong\": \"#0B0F14\"}','','','','','','',NULL,'2026-07-20 07:29:23');
 /*!40000 ALTER TABLE `branding` ENABLE KEYS */;
 UNLOCK TABLES;
 commit;
@@ -114,7 +135,7 @@ LOCK TABLES `product_credentials` WRITE;
 /*!40000 ALTER TABLE `product_credentials` DISABLE KEYS */;
 set autocommit=0;
 INSERT INTO `product_credentials` VALUES
-(1,1,'sak_401fb01252b926a5d8a4534129cd3465','-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDVUVE89sRlKLCQ\nPfJhnEW8rHAhhAhKgF+GxFd3c5FpD/27AYMTkHN/vFPty/+TJtlbu7LkhZbTJ98d\nKs6k2CxbW7YPEJflQWMQKBORxIV1mVX3B+2m63C41CbjLyVIYMwlvfP5FCV+1qqg\nAOB2SxwHrEnEq5uXqx416pRDHnLHMsWGct+XIiEHez6scAkv4oWFlmN7wVl2ErWU\nEI5Di+c1iaJxG5iHCoJmA3utSRpi7sdfZzjEY3JMwi3yBr5y5GgzecxZc05tXYAo\nhlFUKf8fzqNetYZ0c076xNdL181EsksKgikM/KlU4eFxr6K/273I9ZNTaJD8ccUC\nlcmHCcfxAgMBAAECggEAB0xOarcIlhYTywOLi4JfXRVLNXerxEdrEpRyEktOZ26d\ndYHs5u+eEU8zUeM/qFxVEGSLZMfF7A3PqNL3meqEGKYPxFPYK9xA/uMCybhpq9HQ\nqpscqtrK6E/oeq+jZ2avEAAqh37Zyjf0Q3V0OH0uWtGD/pSzxeHGrqfgEFcg1ybE\ntAHJasq4Cs1SkYPZ1jD6YKtehGuHN/loVVz+ehyQ/0IUFp7GwxE+w4fMzrYvPjMi\nO/FdyuPHDkb5xDqCoHzulS6dpWhsmQN56U2zPuteuS0k1MaoyH7lZgX9thZk8+Gr\nCrt1VnkYeFNk6kIq4w2yYT1qxfmAXC808GIvnPQQjwKBgQDuRwzcBYRUUZ+2cgAU\nO714KePDy3/GBdcw5fztEM4LExtTYtGDaZ3ezyUmmgvWlVHxtBNtthlY+sn9DXSA\n6y3I6lbIieIOoHFvPoWIe1EILAJs0pjsVg/J9ad0FujwmSxK1PUJbd2uIRzdYTmS\nfIXnwHPMGYAc2JHd7pWhWt+2hwKBgQDlLwP3DsGJU1b4bIzqzml0TvVDBXHbMoGf\n9LuZiVHRkwSjWgDGwF7mcg8HDdX/nZ2y0WmOBNfL8O+ak6pd6wUlzyfn7iiH4+am\nvLhHEr19PHdmJgVmDl1dwLyFZK8vh57cmQ4TlXsW0pV48X3A9kuk3nTf+f7es5g5\ne7vN64ozxwKBgQCHibTf5ud6CyAdaMVwvPauxq0/r58T5jidIQX5V8jMdebiTOC+\nrrJVjmEkjxXSzwdYxMUUcDQE8Es7fY7a0mwt0FbjJcOH7G36CIduti7Gxjnu6vB/\n5wh+KhVBrNJ+IbMXMgHchjlGFqHTr71O/TQyOr/jxlGglvSKWG+W5BlDOwKBgDEs\ny18BbYl3tluLfxkKvRnVr054Jpvv1Fxr+KzTCBk9wGsEbtI2iKZNpufOkjJMsX+i\n61ErvNnnkqHKOW35dZtNPbTIJy4xOlZge/HUFZB/nubuFY52WpY5OroshmJeaTnQ\nJXMSSdz1xlizCFaVAloX2WANliBWzLzYzc07UuYVAoGBALheRDwTV4IZ9gr18oze\nKLbR/j3Xb+kdvYhREOa9TlGzNzaZeYG2b7hhyZngO9SFXZcxle/EtCbhsUnWGJyr\nQ2ddRaGXix5b8ZtJV0AKHOj35gfWEMcBG8TIIbz3BBn6C8qLrUVaO/6KUNHNmwds\njplyI0mV1n9Ka2EGbpp/HiCM\n-----END PRIVATE KEY-----\n','-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1VFRPPbEZSiwkD3yYZxF\nvKxwIYQISoBfhsRXd3ORaQ/9uwGDE5Bzf7xT7cv/kybZW7uy5IWW0yffHSrOpNgs\nW1u2DxCX5UFjECgTkcSFdZlV9wftputwuNQm4y8lSGDMJb3z+RQlftaqoADgdksc\nB6xJxKubl6seNeqUQx5yxzLFhnLflyIhB3s+rHAJL+KFhZZje8FZdhK1lBCOQ4vn\nNYmicRuYhwqCZgN7rUkaYu7HX2c4xGNyTMIt8ga+cuRoM3nMWXNObV2AKIZRVCn/\nH86jXrWGdHNO+sTXS9fNRLJLCoIpDPypVOHhca+iv9u9yPWTU2iQ/HHFApXJhwnH\n8QIDAQAB\n-----END PUBLIC KEY-----\n','5c98:363b:cc59:38ae',1,NULL,NULL,'2026-07-13 14:36:03',NULL),
+(1,1,'sak_401fb01252b926a5d8a4534129cd3465','-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDVUVE89sRlKLCQ\nPfJhnEW8rHAhhAhKgF+GxFd3c5FpD/27AYMTkHN/vFPty/+TJtlbu7LkhZbTJ98d\nKs6k2CxbW7YPEJflQWMQKBORxIV1mVX3B+2m63C41CbjLyVIYMwlvfP5FCV+1qqg\nAOB2SxwHrEnEq5uXqx416pRDHnLHMsWGct+XIiEHez6scAkv4oWFlmN7wVl2ErWU\nEI5Di+c1iaJxG5iHCoJmA3utSRpi7sdfZzjEY3JMwi3yBr5y5GgzecxZc05tXYAo\nhlFUKf8fzqNetYZ0c076xNdL181EsksKgikM/KlU4eFxr6K/273I9ZNTaJD8ccUC\nlcmHCcfxAgMBAAECggEAB0xOarcIlhYTywOLi4JfXRVLNXerxEdrEpRyEktOZ26d\ndYHs5u+eEU8zUeM/qFxVEGSLZMfF7A3PqNL3meqEGKYPxFPYK9xA/uMCybhpq9HQ\nqpscqtrK6E/oeq+jZ2avEAAqh37Zyjf0Q3V0OH0uWtGD/pSzxeHGrqfgEFcg1ybE\ntAHJasq4Cs1SkYPZ1jD6YKtehGuHN/loVVz+ehyQ/0IUFp7GwxE+w4fMzrYvPjMi\nO/FdyuPHDkb5xDqCoHzulS6dpWhsmQN56U2zPuteuS0k1MaoyH7lZgX9thZk8+Gr\nCrt1VnkYeFNk6kIq4w2yYT1qxfmAXC808GIvnPQQjwKBgQDuRwzcBYRUUZ+2cgAU\nO714KePDy3/GBdcw5fztEM4LExtTYtGDaZ3ezyUmmgvWlVHxtBNtthlY+sn9DXSA\n6y3I6lbIieIOoHFvPoWIe1EILAJs0pjsVg/J9ad0FujwmSxK1PUJbd2uIRzdYTmS\nfIXnwHPMGYAc2JHd7pWhWt+2hwKBgQDlLwP3DsGJU1b4bIzqzml0TvVDBXHbMoGf\n9LuZiVHRkwSjWgDGwF7mcg8HDdX/nZ2y0WmOBNfL8O+ak6pd6wUlzyfn7iiH4+am\nvLhHEr19PHdmJgVmDl1dwLyFZK8vh57cmQ4TlXsW0pV48X3A9kuk3nTf+f7es5g5\ne7vN64ozxwKBgQCHibTf5ud6CyAdaMVwvPauxq0/r58T5jidIQX5V8jMdebiTOC+\nrrJVjmEkjxXSzwdYxMUUcDQE8Es7fY7a0mwt0FbjJcOH7G36CIduti7Gxjnu6vB/\n5wh+KhVBrNJ+IbMXMgHchjlGFqHTr71O/TQyOr/jxlGglvSKWG+W5BlDOwKBgDEs\ny18BbYl3tluLfxkKvRnVr054Jpvv1Fxr+KzTCBk9wGsEbtI2iKZNpufOkjJMsX+i\n61ErvNnnkqHKOW35dZtNPbTIJy4xOlZge/HUFZB/nubuFY52WpY5OroshmJeaTnQ\nJXMSSdz1xlizCFaVAloX2WANliBWzLzYzc07UuYVAoGBALheRDwTV4IZ9gr18oze\nKLbR/j3Xb+kdvYhREOa9TlGzNzaZeYG2b7hhyZngO9SFXZcxle/EtCbhsUnWGJyr\nQ2ddRaGXix5b8ZtJV0AKHOj35gfWEMcBG8TIIbz3BBn6C8qLrUVaO/6KUNHNmwds\njplyI0mV1n9Ka2EGbpp/HiCM\n-----END PRIVATE KEY-----\n','-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1VFRPPbEZSiwkD3yYZxF\nvKxwIYQISoBfhsRXd3ORaQ/9uwGDE5Bzf7xT7cv/kybZW7uy5IWW0yffHSrOpNgs\nW1u2DxCX5UFjECgTkcSFdZlV9wftputwuNQm4y8lSGDMJb3z+RQlftaqoADgdksc\nB6xJxKubl6seNeqUQx5yxzLFhnLflyIhB3s+rHAJL+KFhZZje8FZdhK1lBCOQ4vn\nNYmicRuYhwqCZgN7rUkaYu7HX2c4xGNyTMIt8ga+cuRoM3nMWXNObV2AKIZRVCn/\nH86jXrWGdHNO+sTXS9fNRLJLCoIpDPypVOHhca+iv9u9yPWTU2iQ/HHFApXJhwnH\n8QIDAQAB\n-----END PUBLIC KEY-----\n','5c98:363b:cc59:38ae',1,NULL,NULL,'2026-07-13 14:36:03',NULL);
 /*!40000 ALTER TABLE `product_credentials` ENABLE KEYS */;
 UNLOCK TABLES;
 commit;
@@ -153,7 +174,7 @@ INSERT INTO `product_themes` VALUES
 (2,1,'theme2',0,1,'2026-07-13 14:36:03','2026-07-20 07:22:47'),
 (3,1,'theme3',0,1,'2026-07-13 14:36:03','2026-07-20 07:24:01'),
 (4,1,'theme4',0,1,'2026-07-13 14:36:03','2026-07-20 07:24:58'),
-(5,1,'theme5',0,1,'2026-07-19 13:23:45','2026-07-23 08:38:43'),
+(5,1,'theme5',0,1,'2026-07-19 13:23:45','2026-07-23 08:38:43');
 /*!40000 ALTER TABLE `product_themes` ENABLE KEYS */;
 UNLOCK TABLES;
 commit;
@@ -166,15 +187,15 @@ DROP TABLE IF EXISTS `products`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `products` (
+  -- Products are identified by `id` (Super Admin console) and `api_key` (the
+  -- product's own config pull). There is no slug.
   `id` int NOT NULL AUTO_INCREMENT,
-  `slug` varchar(63) DEFAULT NULL,
   `name` varchar(150) NOT NULL,
   `api_key` varchar(64) DEFAULT NULL,
   `status` enum('active','disabled') NOT NULL DEFAULT 'active',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `slug` (`slug`),
   UNIQUE KEY `api_key` (`api_key`),
   KEY `idx_products_status` (`status`)
 ) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -187,8 +208,8 @@ CREATE TABLE `products` (
 LOCK TABLES `products` WRITE;
 /*!40000 ALTER TABLE `products` DISABLE KEYS */;
 set autocommit=0;
-INSERT INTO `products` VALUES
-(1,'ranamatch','Ranamatch','pk_a945fd8c6ae803dabeab492ea9cad9de1ff8b35f318d1f60','active','2026-07-13 14:36:03','2026-07-13 14:36:03'),
+INSERT INTO `products` (`id`,`name`,`api_key`,`status`,`created_at`,`updated_at`) VALUES
+(1,'Ranamatch','pk_a945fd8c6ae803dabeab492ea9cad9de1ff8b35f318d1f60','active','2026-07-13 14:36:03','2026-07-13 14:36:03');
 /*!40000 ALTER TABLE `products` ENABLE KEYS */;
 UNLOCK TABLES;
 commit;

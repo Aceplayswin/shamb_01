@@ -6,13 +6,13 @@ import Swal from 'sweetalert2';
 import {
   Box, CheckCircle2, Database, Eye, EyeOff, Globe, Loader2,
   MinusCircle, Palette, Pencil, Plus, Power, Server, Trash2, Wifi, X, XCircle,
-  Check, Circle, Paintbrush, BarChart3, KeyRound, Copy, RefreshCw,
+  Check, Circle, Paintbrush, BarChart3, KeyRound, Copy, RefreshCw, Upload,
 } from 'lucide-react';
 import {
   listProducts, disableProduct, updateProduct, deleteProduct,
   updateUrls, updateDatabase, testConnection,
   getProductThemes, activateProductTheme, setProductThemeEnabled,
-  getBranding, updateBranding, generateApiKey, listThemes,
+  getBranding, updateBranding, generateApiKey, listThemes, uploadBrandingAsset,
 } from '@/services/api';
 import { useTheme } from '../providers';
 import DashboardLayout, { useDashboard } from '../components/DashboardLayout';
@@ -307,6 +307,7 @@ function BrandingModal({ product, onClose, onSaved, theme }) {
   const [colors, setColors] = useState({}); // { token: hex } for the selected theme
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingKey, setUploadingKey] = useState(null); // asset field mid-upload
 
   // The color-token schema (key/label/group/default) for the selected theme.
   const colorSchema =
@@ -361,6 +362,22 @@ function BrandingModal({ product, onClose, onSaved, theme }) {
   const setColor = (token) => (e) =>
     setColors((c) => ({ ...c, [token]: e.target.value }));
 
+  // Upload an image for an asset field and drop its URL straight into the form.
+  const handleUpload = (key) => async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // let the same file be re-picked after an error
+    if (!file) return;
+    setUploadingKey(key);
+    try {
+      const { url } = await uploadBrandingAsset(file);
+      setForm((f) => ({ ...f, [key]: url }));
+    } catch (err) {
+      swal({ icon: 'error', title: 'Upload failed', text: err.message });
+    } finally {
+      setUploadingKey(null);
+    }
+  };
+
   // Convenience: primary/accent for the header preview (glass themes use these).
   const previewPrimary = colors.primary || colors.t3_gold || colors.t4_teal || '#ff9800';
   const previewAccent = colors.accent || colors.t4_teal_bright || previewPrimary;
@@ -395,10 +412,10 @@ function BrandingModal({ product, onClose, onSaved, theme }) {
 
   const fields = [
     { key: 'product_name', label: 'Display Name', placeholder: 'Dollara', type: 'text', span: true },
-    { key: 'logo_url', label: 'Logo URL', placeholder: 'https://cdn.example.com/logo.png', type: 'url', span: true },
-    { key: 'favicon_url', label: 'Favicon URL', placeholder: 'https://cdn.example.com/favicon.ico', type: 'url', span: true },
-    { key: 'splash_url', label: 'Splash Image URL', placeholder: 'https://cdn.example.com/splash.png', type: 'url', span: true },
-    { key: 'app_icon_url', label: 'App Icon URL', placeholder: 'https://cdn.example.com/icon.png', type: 'url', span: true },
+    { key: 'logo_url', label: 'Logo URL', placeholder: 'https://cdn.example.com/logo.png', type: 'url', span: true, upload: true },
+    { key: 'favicon_url', label: 'Favicon URL', placeholder: 'https://cdn.example.com/favicon.ico', type: 'url', span: true, upload: true },
+    { key: 'splash_url', label: 'Splash Image URL', placeholder: 'https://cdn.example.com/splash.png', type: 'url', span: true, upload: true },
+    { key: 'app_icon_url', label: 'App Icon URL', placeholder: 'https://cdn.example.com/icon.png', type: 'url', span: true, upload: true },
     { key: 'support_email', label: 'Support Email', placeholder: 'support@example.com', type: 'email', span: false },
     { key: 'support_phone', label: 'Support Phone', placeholder: '+91 98765 43210', type: 'text', span: false },
     { key: 'terms_url', label: 'Terms URL', placeholder: 'https://example.com/terms', type: 'url', span: true },
@@ -483,17 +500,39 @@ function BrandingModal({ product, onClose, onSaved, theme }) {
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                {fields.map(({ key, label, placeholder, type, span }) => (
+                {fields.map(({ key, label, placeholder, type, span, upload }) => (
                   <div key={key} className={`${span ? 'sm:col-span-2' : ''} text-sm`}>
                     <label htmlFor={`b-${key}`} className={labelCls}>{label}</label>
-                    <input
-                      id={`b-${key}`}
-                      type={type === 'url' ? 'url' : type}
-                      value={form[key]}
-                      onChange={set(key)}
-                      placeholder={placeholder}
-                      className={inputCls}
-                    />
+                    <div className={upload ? 'flex items-center gap-2' : ''}>
+                      <input
+                        id={`b-${key}`}
+                        type={type === 'url' ? 'url' : type}
+                        value={form[key]}
+                        onChange={set(key)}
+                        placeholder={placeholder}
+                        className={inputCls}
+                      />
+                      {upload && (
+                        <label
+                          className={`flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-700 ${uploadingKey ? 'pointer-events-none opacity-60' : ''}`}
+                          title="Upload an image (PNG, JPG, SVG, GIF, WEBP, ICO — max 5MB)"
+                        >
+                          {uploadingKey === key ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Upload className="h-3.5 w-3.5" />
+                          )}
+                          Upload
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/x-icon,.ico"
+                            onChange={handleUpload(key)}
+                            disabled={!!uploadingKey}
+                            className="hidden"
+                          />
+                        </label>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

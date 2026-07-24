@@ -32,6 +32,7 @@ from services.product_credentials import (
 )
 from services.tenant_provisioning import new_api_key, provision_product
 from services.tenant_resolver import invalidate_tenant_cache
+from services.uploads import save_branding_asset
 from services.webhook_client import WebhookError, call_product
 from tenants.models import (
     Database, Product, ProductCredential, ProductTheme, Url, User,
@@ -392,6 +393,25 @@ def product_branding(request, product_id):
 
     invalidate_tenant_cache(product.id)
     return JsonResponse(get_branding_for_product(product, theme_key))
+
+
+@csrf_exempt
+@require_auth(['super_admin'])
+@require_http_methods(['POST'])
+def branding_asset_upload(request):
+    """Upload a branding image (logo/favicon/splash/app icon).
+
+    Accepts a multipart ``file`` and returns ``{"url": <absolute URL>}`` that the
+    branding editor drops straight into the matching asset URL field.
+    """
+    file = request.FILES.get('file')
+    if not file:
+        return _error('No file uploaded')
+    try:
+        url = save_branding_asset(file)
+    except ValueError as e:
+        return _error(e)
+    return JsonResponse({'url': request.build_absolute_uri(url)}, status=201)
 
 
 # --- Themes ---

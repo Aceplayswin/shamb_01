@@ -21,6 +21,8 @@ urlpatterns = [
     path('super-admin/products/<int:product_id>/urls', views.product_urls),
     # Branding
     path('super-admin/products/<int:product_id>/branding', views.product_branding),
+    # Upload a branding asset (logo/favicon/splash/app icon) -> returns its URL.
+    path('super-admin/branding/upload', views.branding_asset_upload),
     # Themes
     path('super-admin/themes', views.themes_catalog),
     path('super-admin/products/<int:product_id>/themes', views.product_themes),

@@ -48,6 +48,12 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 STATIC_URL = 'static/'
+# Admin-uploaded branding assets (logos, favicons, splash/app icons). Served
+# locally by Django — no object storage in this stack yet; swap to S3/Cloudinary
+# later by pointing the default storage backend at it, the upload view already
+# goes through django.core.files.storage.default_storage.
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MIGRATION_MODULES = {'core': None, 'tenants': None}
