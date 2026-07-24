@@ -8,9 +8,11 @@ import {
   ArrowLeft, Box, Loader2, Search, Database, Users, Wallet, ArrowLeftRight,
   Dice5, Gamepad2, Boxes, Gift, PhoneCall, Settings2, ChevronLeft,
   ChevronRight, Eye, X, RefreshCw, Wallet2, Coins, Lock, Power, PowerOff,
+  Activity, CheckCircle2, XCircle, Clock, ChevronDown,
 } from 'lucide-react';
 import {
-  getProductDataSummary, getProductDataset, updateProductGameActive,
+  getProductWebhookSummary, getProductWebhookDataset, getProductWebhookDeliveries,
+  updateProductGameActive,
 } from '@/services/api';
 import { useTheme } from '../../../providers';
 import DashboardLayout from '../../../components/DashboardLayout';
@@ -157,6 +159,102 @@ function RowDetail({ row, label, onClose }) {
   );
 }
 
+/* Relative "time ago" label for the webhook activity log. */
+function timeAgo(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const secs = Math.max(0, (Date.now() - d.getTime()) / 1000);
+  if (secs < 60) return `${Math.floor(secs)}s ago`;
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
+  return d.toLocaleString();
+}
+
+const DELIVERY_STATUS = {
+  success: { cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400', Icon: CheckCircle2 },
+  failed: { cls: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400', Icon: XCircle },
+  pending: { cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400', Icon: Clock },
+};
+
+/* Audit trail of signed webhook pulls Super Admin made to this product. Every
+   summary/dataset load appends a row here (the webhook_deliveries table). */
+function WebhookActivity({ deliveries, loading, open, onToggle, onRefresh }) {
+  const failed = deliveries.filter((d) => d.status === 'failed').length;
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
+        <button onClick={onToggle} className="flex items-center gap-2.5 text-left">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400">
+            <Activity className="h-4 w-4" />
+          </span>
+          <span>
+            <span className="flex items-center gap-1.5 font-display text-sm font-bold text-gray-900 dark:text-white">
+              Webhook Activity
+              <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+            </span>
+            <span className="text-xs text-gray-400">
+              {deliveries.length} recent {deliveries.length === 1 ? 'pull' : 'pulls'}
+              {failed > 0 && <span className="ml-1 font-semibold text-red-500">· {failed} failed</span>}
+            </span>
+          </span>
+        </button>
+        <button
+          onClick={onRefresh}
+          className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
+        </button>
+      </div>
+
+      {open && (loading && deliveries.length === 0 ? (
+        <div className="flex items-center gap-2 border-t border-gray-100 p-6 text-gray-400 dark:border-gray-700">
+          <Loader2 className="h-5 w-5 animate-spin" /> Loading activity…
+        </div>
+      ) : deliveries.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 border-t border-gray-100 p-8 text-center dark:border-gray-700">
+          <Activity className="h-6 w-6 text-gray-300 dark:text-gray-600" />
+          <p className="text-sm text-gray-400">No webhook pulls recorded yet.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto border-t border-gray-100 dark:border-gray-700">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-400">
+                <th className="whitespace-nowrap px-4 py-2.5">When</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Resource</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Status</th>
+                <th className="whitespace-nowrap px-4 py-2.5">HTTP</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Duration</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Error</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+              {deliveries.map((d) => {
+                const s = DELIVERY_STATUS[d.status] || DELIVERY_STATUS.pending;
+                return (
+                  <tr key={d.id} className="hover:bg-gray-50 dark:hover:bg-gray-900/40">
+                    <td className="whitespace-nowrap px-4 py-2.5 text-gray-500 dark:text-gray-400" title={d.created_at || ''}>{timeAgo(d.created_at)}</td>
+                    <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-gray-700 dark:text-gray-200">{d.resource}</td>
+                    <td className="px-4 py-2.5">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6rem] font-bold uppercase ${s.cls}`}>
+                        <s.Icon className="h-3 w-3" /> {d.status}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-gray-500 dark:text-gray-400">{d.http_status ?? '—'}</td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-gray-500 dark:text-gray-400">{d.duration_ms != null ? `${d.duration_ms} ms` : '—'}</td>
+                    <td className="max-w-[20rem] truncate px-4 py-2.5 text-red-500 dark:text-red-400" title={d.error || ''}>{d.error || '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function DataExplorer() {
   const { id } = useParams();
   const { theme } = useTheme();
@@ -174,11 +272,30 @@ function DataExplorer() {
   const [detailRow, setDetailRow] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
 
+  const [deliveries, setDeliveries] = useState([]);
+  const [deliveriesLoading, setDeliveriesLoading] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
+
+  /* Load the recent signed-webhook pulls (the webhook_deliveries audit trail). */
+  const loadDeliveries = useCallback(async () => {
+    setDeliveriesLoading(true);
+    try {
+      const data = await getProductWebhookDeliveries(id, { limit: 50 });
+      setDeliveries(data.deliveries || []);
+    } catch {
+      setDeliveries([]);
+    } finally {
+      setDeliveriesLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => { loadDeliveries(); }, [loadDeliveries]);
+
   /* Load summary (counts + aggregates) once. */
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true);
     try {
-      const data = await getProductDataSummary(id);
+      const data = await getProductWebhookSummary(id);
       setSummary(data);
       setActive((prev) => prev || data.datasets?.[0]?.key || null);
     } catch (e) {
@@ -205,13 +322,14 @@ function DataExplorer() {
     if (!active) return;
     setTableLoading(true);
     try {
-      const data = await getProductDataset(id, active, { page, pageSize: PAGE_SIZE, q: debounced });
+      const data = await getProductWebhookDataset(id, active, { page, pageSize: PAGE_SIZE, q: debounced });
       setTable(data);
     } catch (e) {
       setTable(null);
       swal({ icon: 'error', title: 'Failed to load dataset', text: e.message });
     } finally {
       setTableLoading(false);
+      loadDeliveries();  // every pull appends a webhook_deliveries row — keep the log fresh
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, active, page, debounced]);
@@ -292,7 +410,7 @@ function DataExplorer() {
             </div>
           </div>
           <button
-            onClick={() => { loadSummary(); loadTable(); }}
+            onClick={() => { loadSummary(); loadTable(); loadDeliveries(); }}
             className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors"
           >
             <RefreshCw className="h-3.5 w-3.5" /> Refresh
@@ -442,6 +560,15 @@ function DataExplorer() {
             </div>
           )}
         </div>
+
+        {/* Signed-webhook pull audit trail (rows written to the webhook_deliveries table) */}
+        <WebhookActivity
+          deliveries={deliveries}
+          loading={deliveriesLoading}
+          open={showActivity}
+          onToggle={() => setShowActivity((v) => !v)}
+          onRefresh={loadDeliveries}
+        />
       </div>
     </>
   );
