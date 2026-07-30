@@ -8,12 +8,15 @@
 // Guests get an account button that opens the shell's auth modal; signed-in
 // players get the ProfileMenu instead.
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Bell, User } from 'lucide-react';
+import { Bell, Download } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import { useBranding } from '@/hooks/useBranding';
+import { useDemoLogin } from '@/hooks/useDemoLogin';
 import { ProfileMenu } from '@/components/ProfileMenu';
+import { GetAppModal } from '@/components/GetAppModal';
 import { NAV_GAME_LINKS } from '@/lib/gameRoutes';
 import { useAuthModal } from './authModalContext';
 
@@ -125,6 +128,8 @@ export function Theme5TopBar() {
 
   const token = useAuthStore((s) => s.token);
   const isHydrated = useAuthStore((s) => s.isHydrated);
+  const { tryDemo, demoLoading } = useDemoLogin({ redirectTo: '/' });
+  const [getAppOpen, setGetAppOpen] = useState(false);
 
   const isActive = (href) => (href === '/' ? pathname === '/' : pathname?.startsWith(href));
 
@@ -158,6 +163,27 @@ export function Theme5TopBar() {
           </nav>
 
           <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setGetAppOpen(true)}
+              title="Get the app"
+              className="hidden items-center gap-2 rounded-lg border border-black/15 bg-white px-3 py-2 text-xs font-black uppercase tracking-wide text-[#0f1b33] transition hover:border-[#1d4ed8] hover:text-[#1d4ed8] sm:inline-flex"
+            >
+              <Download className="h-4 w-4" />
+              <span className="hidden md:inline">Get the app</span>
+            </button>
+
+            {isHydrated && !token && (
+              <button
+                type="button"
+                onClick={tryDemo}
+                disabled={demoLoading}
+                className="hidden rounded-lg border border-black/15 bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-[#0f1b33] transition hover:border-[#1d4ed8] hover:text-[#1d4ed8] disabled:opacity-60 lg:inline-flex"
+              >
+                {demoLoading ? 'Starting…' : 'Play Demo'}
+              </button>
+            )}
+
             {isHydrated && token ? (
               <>
                 <Link
@@ -197,14 +223,6 @@ export function Theme5TopBar() {
                 >
                   Log In
                 </button>
-                <button
-                  type="button"
-                  onClick={() => open('login')}
-                  aria-label="Account"
-                  className="grid h-9 w-9 place-items-center rounded-full border border-black/10 bg-white text-[#0f1b33] transition hover:border-[#1d4ed8] hover:text-[#1d4ed8]"
-                >
-                  <User className="h-4 w-4" />
-                </button>
               </>
             ) : (
               <span className="inline-block h-9 w-40" aria-hidden />
@@ -214,6 +232,8 @@ export function Theme5TopBar() {
       </div>
 
       <CategoryRail />
+
+      <GetAppModal open={getAppOpen} onClose={() => setGetAppOpen(false)} />
     </header>
   );
 }

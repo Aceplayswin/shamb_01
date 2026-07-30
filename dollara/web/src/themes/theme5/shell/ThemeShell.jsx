@@ -39,16 +39,16 @@ export default function Theme5Shell({ children }) {
 
   return (
     <Theme5AuthModalContext.Provider value={modalValue}>
-      <div className="theme5-root min-h-screen">
+      <div className="theme5-root flex min-h-screen flex-col">
         <Theme5TopBar />
 
         {isPlayRoute ? (
           <main className="min-h-[60vh]">{children}</main>
         ) : (
-          <div className="mx-auto flex max-w-[1500px] items-start gap-4 px-3 py-4">
+          <div className="mx-auto flex w-full max-w-[1500px] flex-1 gap-4 px-3 py-4">
             <Theme5Sidebar />
-            <main className="min-w-0 flex-1">
-              {children}
+            <main className="flex min-w-0 flex-1 flex-col">
+              <div className="flex-1">{children}</div>
               <Theme5Footer />
             </main>
             <Theme5RightRail />

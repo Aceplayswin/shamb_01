@@ -20,7 +20,7 @@ const iconLeft = 'pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate
 
 function LoginModal() {
   const { close, open } = useAuthModal();
-  const { identifier, setIdentifier, password, setPassword, loading, submit } = useUnifiedLogin();
+  const { identifier, setIdentifier, password, setPassword, loading, submit } = useUnifiedLogin({ onSuccess: close });
   const branding = useBranding();
   const brandName = branding.product_name || 'DOLLARA';
 

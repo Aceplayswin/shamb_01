@@ -73,11 +73,21 @@ function fetchFaqs() {
 // cached snapshot immediately, then revalidates in the background (and again
 // whenever the tab regains focus) so admin changes propagate to the live site.
 export function useFaqs() {
-  const [faqs, setFaqs] = useState(() => getCached() ?? []);
-  const [loading, setLoading] = useState(() => getCached() === null);
+  // Initial state must match the server render (no cache available there) to
+  // avoid a hydration mismatch. The cache is read inside the effect below,
+  // which only runs on the client after hydration.
+  const [faqs, setFaqs] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
+
+    const cached = getCached();
+    if (cached) {
+      setFaqs(cached);
+      setLoading(false);
+    }
+
     const onChange = (next) => {
       if (active) setFaqs(next);
     };

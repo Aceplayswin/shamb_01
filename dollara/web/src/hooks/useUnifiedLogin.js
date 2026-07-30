@@ -17,7 +17,7 @@ const SWAL_BASE = { confirmButtonColor: '#F5C542', background: '#0d1420', color:
  * console is now a separate app with its own login, so this UI is player-only
  * and the two apps never share a session.
  */
-export function useUnifiedLogin({ swal = {} } = {}) {
+export function useUnifiedLogin({ swal = {}, onSuccess } = {}) {
   const router = useRouter();
   const setAuth = useAuthStore((s) => s.setAuth);
 
@@ -38,6 +38,7 @@ export function useUnifiedLogin({ swal = {} } = {}) {
         body: JSON.stringify({ phone: identifier, password }),
       });
       setAuth({ token: result.token, userId: result.userId, isDemo: false });
+      onSuccess?.();
       await Swal.fire({
         title: 'Welcome back!',
         text: 'You have successfully logged in.',

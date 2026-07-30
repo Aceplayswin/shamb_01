@@ -75,11 +75,21 @@ function fetchBanners() {
 // background (and again whenever the tab regains focus) so admin changes to the
 // banner list — including reordering — propagate to the live site.
 export function useBanners() {
-  const [banners, setBanners] = useState(() => getCached() ?? []);
-  const [loading, setLoading] = useState(() => getCached() === null);
+  // Initial state must match the server render (no cache available there) to
+  // avoid a hydration mismatch. The cache is read inside the effect below,
+  // which only runs on the client after hydration.
+  const [banners, setBanners] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
+
+    const cached = getCached();
+    if (cached) {
+      setBanners(cached);
+      setLoading(false);
+    }
+
     const onChange = (next) => {
       if (active) setBanners(next);
     };

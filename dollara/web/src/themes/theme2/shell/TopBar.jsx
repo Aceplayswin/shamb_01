@@ -1,11 +1,14 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { Menu, Search, Bell, Wallet } from 'lucide-react';
+import { Menu, Search, Bell, Wallet, Download } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { useAuthStore } from '@/store/auth';
+import { useDemoLogin } from '@/hooks/useDemoLogin';
 import { ProfileMenu } from '@/components/ProfileMenu';
 import { UserAuthActions } from '@/components/UserAuthActions';
+import { GetAppModal } from '@/components/GetAppModal';
 
 const stub = (label, text) =>
   Swal.fire({ title: label, text, icon: 'info', timer: 1100, showConfirmButton: false, confirmButtonColor: '#F5C542' });
@@ -17,6 +20,8 @@ export function Theme2TopBar({ onMenu }) {
   // Real balance, not `available` — a pending withdrawal only holds funds, it
   // does not debit them, so netting the hold off made this read ₹0.00.
   const balance = wallet?.main ?? wallet?.real ?? 0;
+  const { tryDemo, demoLoading } = useDemoLogin({ redirectTo: '/' });
+  const [getAppOpen, setGetAppOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-white/5 bg-[#0d1420]/90 px-4 backdrop-blur-xl">
@@ -36,6 +41,27 @@ export function Theme2TopBar({ onMenu }) {
       </div>
 
       <div className="ml-auto flex items-center gap-2.5">
+        <button
+          type="button"
+          onClick={() => setGetAppOpen(true)}
+          title="Get the app"
+          className="hidden items-center gap-2 rounded-full border border-white/5 bg-[#0a101a] px-3 py-2 text-xs font-bold text-white transition hover:border-amber-400/50 sm:inline-flex"
+        >
+          <Download className="h-4 w-4" />
+          <span className="hidden md:inline">Get the app</span>
+        </button>
+
+        {isHydrated && !token && (
+          <button
+            type="button"
+            onClick={tryDemo}
+            disabled={demoLoading}
+            className="hidden rounded-full border border-white/10 px-4 py-2 text-xs font-bold text-white transition hover:border-amber-400/50 disabled:opacity-60 lg:inline-flex"
+          >
+            {demoLoading ? 'Starting…' : 'Play Demo'}
+          </button>
+        )}
+
         <div className="flex items-center gap-2 rounded-full border border-white/5 bg-[#0a101a] py-1 pl-3 pr-1">
           <Wallet className="h-4 w-4 text-amber-400" />
           <span className="text-sm font-bold text-white">
@@ -68,6 +94,8 @@ export function Theme2TopBar({ onMenu }) {
           <span className="inline-block h-9 w-9" aria-hidden />
         )}
       </div>
+
+      <GetAppModal open={getAppOpen} onClose={() => setGetAppOpen(false)} />
     </header>
   );
 }
