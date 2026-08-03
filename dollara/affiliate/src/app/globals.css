@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  font-size: 14px;
+}
+
+:root {
+  /* Premium Ice-Blue & Silver Light Theme */
+  --color-app-bg: 244 246 250; /* #F4F6FA */
+  --color-app-fg: 15 23 42; /* Slate 900 */
+  --color-rail: 255 255 255;
+  --color-panel: 255 255 255; /* Frosted White */
+  --color-panel-strong: 241 245 249;
+  --color-muted: 71 85 105; /* Slate 600 */
+  --color-hairline: 0 0 0;
+  
+  /* Multi-Tone Soft Ambient Glow Triplets */
+  --ambient-gold: rgba(245, 197, 66, 0.08);
+  --ambient-cyan: rgba(14, 165, 233, 0.08);
+  --ambient-violet: rgba(139, 92, 246, 0.06);
+  --ambient-emerald: rgba(16, 185, 129, 0.06);
+
+  --background: rgb(var(--color-app-bg));
+  --foreground: rgb(var(--color-app-fg));
+  color-scheme: light;
+}
+
+body {
+  color: var(--foreground);
+  background-color: #F4F6FA;
+  min-height: 100vh;
+  /* Clean light background with subtle dot grid only, no colorful meshes */
+  background-image: radial-gradient(rgba(15, 23, 42, 0.02) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-attachment: fixed;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-brand-600 via-brand-500 to-brand-700 bg-clip-text text-transparent;
+  }
+  .text-gradient-gold {
+    @apply bg-gradient-to-br from-brand-600 via-brand-500 to-amber-700 bg-clip-text text-transparent;
+  }
+  .text-gradient-cyan {
+    @apply bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-700 bg-clip-text text-transparent;
+  }
+  
+  /* Ultra-Premium Light Glassmorphism Cards */
+  .glass,
+  .card-glass {
+    @apply rounded-2xl border border-white/60 bg-white/70 backdrop-blur-xl shadow-lg shadow-slate-100 transition-all duration-300;
+  }
+  .glass:hover,
+  .card-glass:hover {
+    @apply border-brand-400/40 shadow-xl shadow-slate-200/80;
+  }
+  .glass-strong {
+    @apply rounded-2xl border border-white/80 bg-white/95 backdrop-blur-3xl;
+  }
+  .ring-grad {
+    position: relative;
+  }
+  .ring-grad::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1.5px;
+    background: linear-gradient(135deg, rgba(245, 197, 66, 0.7), rgba(14, 165, 233, 0.5), rgba(139, 92, 246, 0.3), transparent 75%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+}
