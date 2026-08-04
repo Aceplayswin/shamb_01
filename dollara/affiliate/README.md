@@ -79,11 +79,11 @@ dollara/affiliate/
 | `/login/2fa` | `src/app/login/2fa/page.js` | Built | 6-digit OTP verification screen |
 | `/login/forgot` | `src/app/login/forgot/page.js` | Built | Password recovery email form |
 | `/onboarding` | `src/app/onboarding/page.js` | Built | 4-step post-approval onboarding wizard |
-| `/dashboard` | not yet built | Planned | Main stats dashboard |
-| `/links` | not yet built | Planned | Tracking links + creative assets |
-| `/referrals` | not yet built | Planned | Referred player table |
-| `/network` | not yet built | Planned | Sub-affiliate tree view |
-| `/finance/earnings` | not yet built | Planned | Commission ledger |
+| `/dashboard` | `src/app/(dashboard)/dashboard/page.js` | Built | Main stats dashboard (implemented)
+| `/links` | `src/app/(dashboard)/links/page.js` | Built | Tracking links + creative assets (links directory + creative gallery)
+| `/referrals` | `src/app/(dashboard)/referrals/page.js` | Built | Referred player table (implemented)
+| `/network` | `src/app/(dashboard)/network/page.js` | Built | Sub-affiliate tree view (Sub-affiliates implemented)
+| `/finance/earnings` | `src/app/(dashboard)/finance/earnings/page.js` | Built | Commission ledger (earnings / statements implemented)
 | `/finance/payouts` | not yet built | Planned | Balance + payout requests |
 | `/reports` | not yet built | Planned | Custom date-range reports |
 | `/settings/profile` | not yet built | Planned | Company info, 2FA, password |
@@ -227,6 +227,16 @@ To add a new step: create a new `StepXxx.js` in `_components/`, add its state to
 | **Phase 3** | Add the Affiliates section to `dollara/admin` for staff-facing approval, commission overrides. |
 
 ---
+
+## Changelog — 2026-08-04
+
+Today's work (automatic summary from local commits):
+
+- `43785c1` — implement Sub-affiliates / Network and Earnings / Commission ledger
+- `76458e4` — implement affiliate panel dashboard, links directory, creative gallery, and referred players portal
+
+If you'd like, I can expand each item into a short summary with affected files and screenshots (if available).
+
 
 ## Key Conventions
 
