@@ -68,7 +68,7 @@ export default function TopLinksTable() {
 
           <thead>
 
-            <tr className="bg-slate-50 dark:bg-slate-950/40 border-b border-slate-200/40 dark:border-slate-800/60 text-slate-500 dark:text-slate-450 font-bold uppercase tracking-wider text-[10px]">
+            <tr className="bg-slate-50 dark:bg-slate-950/40 border-b border-slate-200/40 dark:border-slate-800/60 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
               <th className="p-4">Campaign Name</th>
               <th className="p-4">Clicks</th>
               <th className="p-4">Signups</th>
@@ -82,16 +82,16 @@ export default function TopLinksTable() {
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {mockTopLinks.map((link, idx) => (
 
-              <tr key={idx} className="hover:bg-slate-50/60 dark:hover:bg-slate-850/40 transition-colors">
+              <tr key={idx} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                 <td className="p-4">
                   <span className="font-bold text-slate-900 dark:text-slate-100 block">{link.name}</span>
                   <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono block mt-0.5">
                     sub={link.sub}
                   </span>
                 </td>
-                <td className="p-4 font-semibold text-slate-700 dark:text-slate-350">{link.clicks.toLocaleString()}</td>
-                <td className="p-4 font-semibold text-slate-700 dark:text-slate-350">{link.signups.toLocaleString()}</td>
-                <td className="p-4 font-semibold text-slate-700 dark:text-slate-350">{link.ftds.toLocaleString()}</td>
+                <td className="p-4 font-semibold text-slate-700 dark:text-slate-300">{link.clicks.toLocaleString()}</td>
+                <td className="p-4 font-semibold text-slate-700 dark:text-slate-300">{link.signups.toLocaleString()}</td>
+                <td className="p-4 font-semibold text-slate-700 dark:text-slate-300">{link.ftds.toLocaleString()}</td>
                 <td className="p-4 font-bold text-brand-600 font-display">${link.commission.toLocaleString()}</td>
                 <td className="p-4 text-right">
                   <div className="flex justify-end gap-1.5">

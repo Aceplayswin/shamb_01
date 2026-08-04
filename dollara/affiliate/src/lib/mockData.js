@@ -80,11 +80,97 @@ export const mockPlayerActivity = [
 
 // ── Earnings ledger (used by /finance/earnings page) ─────────────────────────
 export const mockEarnings = [
-  { period: 'Jul 21–27', type: 'Revenue Share', amount: 1840, status: 'paid' },
-  { period: 'Jul 14–20', type: 'CPA',           amount: 960,  status: 'paid' },
-  { period: 'Jul 07–13', type: 'Revenue Share', amount: 1240, status: 'paid' },
-  { period: 'Jun 30–Jul 6', type: 'Hybrid',     amount: 780,  status: 'paid' },
-  { period: 'Jul 28–Aug 3', type: 'Revenue Share', amount: 1240, status: 'pending' },
+  { id: 'TXN-901', period: '2026-08-01 to 2026-08-07', type: 'Revenue Share', base: 'NGR: $4,500',   rate: '40%', amount: 1800, status: 'pending' },
+  { id: 'TXN-902', period: '2026-08-01 to 2026-08-07', type: 'Override',      base: 'Network: $2,800',rate: '5%',  amount: 140,  status: 'pending' },
+  { id: 'TXN-903', period: '2026-07-25 to 2026-07-31', type: 'Revenue Share', base: 'NGR: $6,200',   rate: '45%', amount: 2790, status: 'approved' },
+  { id: 'TXN-904', period: '2026-07-25 to 2026-07-31', type: 'CPA',           base: '12 FTDs',         rate: '$100',amount: 1200, status: 'approved' },
+  { id: 'TXN-905', period: '2026-07-18 to 2026-07-24', type: 'Revenue Share', base: 'NGR: $3,800',   rate: '45%', amount: 1710, status: 'paid' },
+  { id: 'TXN-906', period: '2026-07-18 to 2026-07-24', type: 'Override',      base: 'Network: $4,100',rate: '5%',  amount: 205,  status: 'paid' },
+  { id: 'TXN-907', period: '2026-07-11 to 2026-07-17', type: 'CPA',           base: '8 FTDs',          rate: '$100',amount: 800,  status: 'paid' },
+  { id: 'TXN-908', period: '2026-07-04 to 2026-07-10', type: 'Revenue Share', base: 'NGR: $5,100',   rate: '45%', amount: 2295, status: 'paid' },
+  { id: 'TXN-909', period: '2026-06-27 to 2026-07-03', type: 'Revenue Share', base: 'NGR: $4,900',   rate: '45%', amount: 2205, status: 'paid' },
+  { id: 'TXN-910', period: '2026-06-20 to 2026-06-26', type: 'CPA',           base: 'Invalid Lead',    rate: '$100',amount: -200, status: 'clawed_back' },
+  { id: 'TXN-911', period: '2026-06-13 to 2026-06-19', type: 'Revenue Share', base: 'NGR: $3,200',   rate: '40%', amount: 1280, status: 'paid' },
+  { id: 'TXN-912', period: '2026-06-06 to 2026-06-12', type: 'Override',      base: 'Network: $1,900',rate: '5%',  amount: 95,   status: 'paid' },
+];
+
+// ── Sub-affiliates Network (used by /network page) ───────────────────────────
+export const mockSubAffiliates = [
+  {
+    id: 'SUB-A01',
+    name: 'Marcus Vance',
+    joinedDate: '2026-07-15',
+    status: 'active',
+    clicks: 1450,
+    signups: 198,
+    ftds: 62,
+    subCommission: 4850,
+    overrideRate: '5%',
+    overrideEarned: 242.50,
+    tier: 1,
+    children: [
+      { id: 'SUB-A01-C1', name: 'Elite Betting Blog', joinedDate: '2026-07-20', recruits: '18 Players' },
+      { id: 'SUB-A01-C2', name: 'Vance Telegram Tipster', joinedDate: '2026-07-22', recruits: '44 Players' }
+    ]
+  },
+  {
+    id: 'SUB-B02',
+    name: 'Helena Costa',
+    joinedDate: '2026-07-18',
+    status: 'active',
+    clicks: 980,
+    signups: 110,
+    ftds: 31,
+    subCommission: 2900,
+    overrideRate: '5%',
+    overrideEarned: 145.00,
+    tier: 1,
+    children: [
+      { id: 'SUB-B02-C1', name: 'Costa Instagram Affiliate', joinedDate: '2026-07-25', recruits: '31 Players' }
+    ]
+  },
+  {
+    id: 'SUB-C03',
+    name: 'Akira Tanaka',
+    joinedDate: '2026-07-22',
+    status: 'active',
+    clicks: 1210,
+    signups: 145,
+    ftds: 40,
+    subCommission: 3800,
+    overrideRate: '3%',
+    overrideEarned: 114.00,
+    tier: 1,
+    children: []
+  },
+  {
+    id: 'SUB-D04',
+    name: 'Dmitri Smirnov',
+    joinedDate: '2026-07-26',
+    status: 'dormant',
+    clicks: 120,
+    signups: 8,
+    ftds: 1,
+    subCommission: 120,
+    overrideRate: '5%',
+    overrideEarned: 6.00,
+    tier: 1,
+    children: []
+  },
+  {
+    id: 'SUB-E05',
+    name: 'Sarah Jenkins',
+    joinedDate: '2026-07-30',
+    status: 'active',
+    clicks: 640,
+    signups: 54,
+    ftds: 12,
+    subCommission: 1100,
+    overrideRate: '5%',
+    overrideEarned: 55.00,
+    tier: 1,
+    children: []
+  }
 ];
 
 // ── Tracking Links (used by /links page) ─────────────────────────────────────

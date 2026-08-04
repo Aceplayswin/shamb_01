@@ -25,7 +25,7 @@ export default function ChartPlaceholder() {
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Earnings distribution across the last 7 days</p>
 
           </div>
-          <span className="px-2 py-0.5 bg-brand-500/10 border border-brand-500/20 text-brand-700 dark:text-brand-450 text-[10px] font-bold uppercase rounded-full tracking-wider flex items-center gap-1">
+          <span className="px-2 py-0.5 bg-brand-500/10 border border-brand-500/20 text-brand-700 dark:text-brand-400 text-[10px] font-bold uppercase rounded-full tracking-wider flex items-center gap-1">
            
             <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
             Phase 1 Mock
@@ -150,7 +150,7 @@ export default function ChartPlaceholder() {
                 
                 {/* Horizontal Progress Bar */}
 
-                <div className="h-3.5 bg-slate-100 dark:bg-slate-850 rounded-lg overflow-hidden border border-slate-200/20 dark:border-slate-800/10">
+                <div className="h-3.5 bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden border border-slate-200/20 dark:border-slate-800/10">
                   <div 
                     className={`h-full rounded-lg transition-all duration-500 ${
                       idx === 0 

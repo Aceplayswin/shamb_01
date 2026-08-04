@@ -54,7 +54,7 @@ export default function StatCard({ title, value, icon: Icon, trend, isCurrency =
           <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-bold ${
             isZero 
 
-              ? 'bg-slate-100 dark:bg-slate-850 text-slate-500 dark:text-slate-400' 
+              ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400' 
 
               : isPositive 
 

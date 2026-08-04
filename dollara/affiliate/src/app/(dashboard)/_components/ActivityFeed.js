@@ -38,10 +38,10 @@ export default function ActivityFeed() {
 
           if (event.type === 'deposit') {
             Icon = CreditCard;
-            iconColor = 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/30 text-emerald-600 dark:text-emerald-450';
+            iconColor = 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/30 text-emerald-600 dark:text-emerald-400';
           } else if (event.type === 'payout') {
             Icon = Wallet;
-            iconColor = 'bg-amber-50 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900/30 text-amber-600 dark:text-amber-450';
+            iconColor = 'bg-amber-50 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900/30 text-amber-600 dark:text-amber-400';
           }
 
 
