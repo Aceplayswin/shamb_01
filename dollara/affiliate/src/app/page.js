@@ -2,10 +2,10 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { 
-  TrendingUp, 
-  DollarSign, 
-  Zap, 
+import {
+  TrendingUp,
+  DollarSign,
+  Zap,
   ArrowRight,
   Layers,
   Sparkles,
@@ -38,13 +38,13 @@ export default function LandingPage() {
 
 
 
-  const estimatedEarnings = dealType === 'revshare' 
-    ? Math.round(players * avgDeposit * 0.45) 
+  const estimatedEarnings = dealType === 'revshare'
+    ? Math.round(players * avgDeposit * 0.45)
     : players * 120;
 
 
 
-         // Which FAQ item is expanded — index into `faqs`, -1 means none open
+  // Which FAQ item is expanded — index into `faqs`, -1 means none open
 
 
 
@@ -81,12 +81,12 @@ export default function LandingPage() {
 
 
 
-            <img src="/logo/image.png" alt="Dollara" className="h-9 w-auto object-contain" 
-              onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }} />
+            <img src="/logo/image.png" alt="Dollara" className="h-9 w-auto object-contain"
+              onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
             <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-brand-600 to-brand-300 hidden items-center justify-center">
               <DollarSign className="w-5 h-5 text-black" />
 
-                     </div>
+            </div>
             <div>
 
 
@@ -94,7 +94,7 @@ export default function LandingPage() {
               <span className="text-[9px] font-bold text-brand-600 uppercase tracking-[0.2em] block -mt-0.5">Affiliate Network</span>
 
 
-                 </div>
+            </div>
           </Link>
 
           <div className="flex items-center space-x-3">
@@ -104,7 +104,7 @@ export default function LandingPage() {
 
             <Link href="/apply" className="px-5 py-2 text-sm font-bold text-black bg-gradient-to-r from-brand-400 to-brand-500 rounded-lg shadow-md hover:scale-[1.03] transition-all flex items-center space-x-1.5">
               <Sparkles className="w-3.5 h-3.5" />
-                  <span>Apply Now</span>
+              <span>Apply Now</span>
             </Link>
 
           </div>
@@ -121,7 +121,7 @@ export default function LandingPage() {
             <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
 
             <span className="text-[10px] font-bold text-brand-800 uppercase tracking-[0.15em]">Partner Portal — Now Accepting Applications</span>
-     </div>
+          </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold font-display tracking-tight text-slate-900 leading-[1.1] max-w-4xl mx-auto">
             Turn Gaming Traffic Into Weekly Commissions
@@ -129,17 +129,17 @@ export default function LandingPage() {
 
           <p className="mt-5 text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
             Up to <span className="text-slate-950 font-semibold">45% Revenue Share</span>
-             · Zero negative carryover · Weekly payouts every Monday
+            · Zero negative carryover · Weekly payouts every Monday
           </p>
 
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
             <Link href="/apply" className="px-7 py-3.5 text-sm font-bold text-black bg-gradient-to-r from-brand-400 to-brand-500 rounded-xl shadow-lg hover:scale-105 transition-all flex items-center space-x-2">
-            
+
               <span>Become a Partner</span>
 
               <ArrowRight className="w-4 h-4" />
 
-               </Link>
+            </Link>
 
 
             <Link href="/login" className="px-7 py-3.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all flex items-center space-x-2 shadow-sm">
@@ -149,7 +149,7 @@ export default function LandingPage() {
               <span>Partner Login</span>
 
             </Link>
-                    </div>
+          </div>
         </div>
 
       </section>
@@ -183,11 +183,11 @@ export default function LandingPage() {
                 <div key={i} className="py-2.5 px-3 rounded-lg bg-slate-50/80 text-center">
                   <div className="text-[9px] text-slate-500 uppercase tracking-wider font-medium">{s.label}</div>
                   <div className={`text-sm font-bold font-display mt-0.5 ${s.color}`}>{s.value}</div>
-                       </div>
-                  ))}
-               </div>
-           </div>
-       </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
 
 
       </section>
@@ -219,7 +219,7 @@ export default function LandingPage() {
               </p>
               <div>
                 <a
-                  href="https://dollara.com"
+                  href="https://deira365.com"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex px-6 py-3 text-sm font-bold text-black bg-gradient-to-r from-brand-400 to-brand-500 rounded-xl shadow-md hover:scale-[1.03] transition-all"
@@ -246,14 +246,14 @@ export default function LandingPage() {
 
 
               <div className="absolute inset-0 bg-gradient-to-tr from-brand-500/5 to-transparent blur-2xl rounded-full" />
-              
+
               {/* Backing Card: Main Platform Preview */}
 
 
               <div className="absolute w-[80%] aspect-[1.6] rounded-2xl border border-slate-200 bg-white/80 shadow-md p-1.5 overflow-hidden -rotate-6 translate-y-4 translate-x-[-10px] transition-transform hover:rotate-0 duration-300">
-                <img 
-                  src="/web/website_image.png" 
-                  alt="Dollara Platform Preview" 
+                <img
+                  src="/web/website_image.png"
+                  alt="Dollara Platform Preview"
                   className="w-full h-full object-cover rounded-xl"
                 />
               </div>
@@ -333,9 +333,9 @@ export default function LandingPage() {
 
 
                 <input type="range"
-                 min="10"
-                 max="1000" step="10" 
-                value={players}
+                  min="10"
+                  max="1000" step="10"
+                  value={players}
                   onChange={(e) => setPlayers(Number(e.target.value))}
                   className="w-full h-1.5 bg-slate-200 rounded-full appearance-none cursor-pointer accent-brand-500" />
               </div>
@@ -352,8 +352,8 @@ export default function LandingPage() {
                     <span className="font-bold text-brand-600 font-display">${avgDeposit}</span>
                   </div>
                   <input type="range" min="50"
-                   max="1000" step="25" 
-                   value={avgDeposit}
+                    max="1000" step="25"
+                    value={avgDeposit}
 
 
                     onChange={(e) => setAvgDeposit(Number(e.target.value))}
@@ -412,12 +412,11 @@ export default function LandingPage() {
 
 
             ].map((deal, idx) => (
-              <div key={idx} className={`relative p-6 rounded-2xl border transition-all duration-300 hover:scale-[1.02] ${
-                deal.featured 
-                  ? 'border-brand-300 bg-white shadow-xl shadow-slate-100/80' 
+              <div key={idx} className={`relative p-6 rounded-2xl border transition-all duration-300 hover:scale-[1.02] ${deal.featured
+                  ? 'border-brand-300 bg-white shadow-xl shadow-slate-100/80'
                   : 'border-slate-200 bg-white/60 hover:border-brand-400/40 shadow-md'
 
-              }`}>
+                }`}>
 
 
                 {deal.featured && (
@@ -584,7 +583,7 @@ export default function LandingPage() {
 
             <Link href="/login" className="hover:text-slate-900 transition-colors">Login</Link>
             <Link href="/apply" className="hover:text-slate-900 transition-colors">Apply</Link>
-            
+
           </div>
         </div>
       </footer>
