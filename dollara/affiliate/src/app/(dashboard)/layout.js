@@ -54,8 +54,6 @@ export default function DashboardLayout({ children }) {
          
          
           {/* Dynamic page content */}
-         
-         
           <main className="flex-1 overflow-y-auto p-6 bg-[#F4F6FA] dark:bg-slate-950 transition-colors duration-300">
           
             {children}

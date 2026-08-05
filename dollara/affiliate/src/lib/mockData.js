@@ -94,6 +94,24 @@ export const mockEarnings = [
   { id: 'TXN-912', period: '2026-06-06 to 2026-06-12', type: 'Override',      base: 'Network: $1,900',rate: '5%',  amount: 95,   status: 'paid' },
 ];
 
+export const mockPayoutInfo = {
+  availableBalance: 1600,
+  minimumThreshold: 1500,
+  nextPayoutCycle: 'Monday, 12 Aug 2026',
+};
+
+export const mockPayoutMethods = [
+  { id: 'bank-1', type: 'bank', label: 'Bank Transfer', details: 'ICICI Bank • ****1234', isPrimary: true },
+  { id: 'upi-1', type: 'upi', label: 'UPI', details: 'dollara@upi', isPrimary: false },
+  { id: 'crypto-1', type: 'crypto', label: 'Crypto Wallet', details: 'USDT TRC-20 • 0x3a...f9C2', isPrimary: false },
+];
+
+export const mockPayoutHistory = [
+  { id: 'P-1001', amount: 1600, method: 'Bank Transfer', requestedAt: '2026-08-01', processedAt: '2026-08-03', status: 'approved' },
+  { id: 'P-0998', amount: 800, method: 'UPI', requestedAt: '2026-07-20', processedAt: '2026-07-22', status: 'paid' },
+  { id: 'P-0985', amount: 450, method: 'Crypto Wallet', requestedAt: '2026-07-05', processedAt: '2026-07-07', status: 'rejected' },
+];
+
 // ── Sub-affiliates Network (used by /network page) ───────────────────────────
 export const mockSubAffiliates = [
   {
@@ -203,4 +221,45 @@ export const mockCreatives = [
   { id: 'cr-006', name: 'VIP Lounge Card',        size: '300x250',   label: 'Medium Rectangle',  color: 'from-amber-500 to-yellow-500' },
   { id: 'cr-007', name: 'Sports Bet Tower',       size: '160x600',   label: 'Skyscraper',        color: 'from-brand-500 to-orange-500' },
   { id: 'cr-008', name: 'Live Casino Social',     size: '1080x1080', label: 'Social',            color: 'from-violet-500 to-fuchsia-500' },
+];
+
+// ── In-app notifications (for Settings / Notifications feed) ───────────────
+export const mockNotifications = [
+  { id: 'N-001', type: 'referral', time: '2026-08-05 11:02', title: 'New referral',
+    message: 'Player #Z9123 signed up via your Homepage Banner Q3.', read: false },
+  { id: 'N-002', type: 'deposit', time: '2026-08-05 09:47', title: 'First deposit',
+    message: 'Player #A8821 made their first deposit of $250 — commission credited.', read: false },
+  { id: 'N-003', type: 'commission', time: '2026-08-04 18:15', title: 'Commission approved',
+    message: 'Your commission for 2026-08-01 to 2026-08-07 has been approved.', read: true },
+  { id: 'N-004', type: 'payout', time: '2026-08-03 14:22', title: 'Payout sent',
+    message: 'Payout P-0998 of $800 has been sent via UPI.', read: true },
+  { id: 'N-005', type: 'payout', time: '2026-07-05 08:30', title: 'Payout rejected',
+    message: 'Payout P-0985 was rejected — update your payout details.', read: false },
+  { id: 'N-006', type: 'key-rotation', time: '2026-06-20 07:12', title: 'Key rotation reminder',
+    message: 'Your API key will rotate in 3 days. Please prepare to update integrations.', read: false },
+];
+
+// ── Affiliate profile (mock) ───────────────────────────────────────────────
+export const mockAffiliateProfile = {
+  companyName: 'Vance Media LLC',
+  contactName: 'Marcus Vance',
+  contactEmail: 'marcus@vancemedia.example',
+  contactPhone: '+44 20 7946 0958',
+  timezone: 'UTC',
+  currency: 'USD',
+  twoFactorEnabled: true,
+  notificationPreferences: {
+    referrals: true,
+    deposits: true,
+    commission: true,
+    payouts: true,
+    keyRotation: true,
+  },
+};
+
+// ── Support tickets (mock) ─────────────────────────────────────────────────
+export const mockSupportTickets = [
+  { id: 'T-1001', subject: 'Unable to verify bank details', status: 'open', createdAt: '2026-07-30', source: 'affiliate', message: 'I uploaded my bank statement but it still shows pending.' },
+  { id: 'T-1002', subject: 'Commission discrepancy', status: 'closed', createdAt: '2026-07-25', source: 'affiliate', message: 'My commission total differs from the ledger.' },
+  { id: 'T-1003', subject: 'API key rotation', status: 'open', createdAt: '2026-06-18', source: 'affiliate', message: 'Please confirm upcoming key rotation window.' },
 ];

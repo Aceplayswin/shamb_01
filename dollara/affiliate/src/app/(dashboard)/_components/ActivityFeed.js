@@ -8,6 +8,7 @@ import React from 'react';
 import { mockActivity } from '../../../lib/mockData';
 
 import { UserPlus, Wallet, CreditCard, Activity } from 'lucide-react';
+import styles from './ActivityFeed.module.css';
 
 
 
@@ -31,17 +32,17 @@ export default function ActivityFeed() {
 
 
 
-      <div className="flex-1 overflow-y-auto max-h-[350px] p-5 divide-y divide-slate-100 dark:divide-slate-800">
+      <div className={`${styles.niceScroll} flex-1 overflow-y-auto max-h-[350px] p-5 divide-y divide-slate-100 dark:divide-slate-800`}>
         {mockActivity.map((event, idx) => {
           let Icon = UserPlus;
-          let iconColor = 'bg-sky-50 dark:bg-sky-950/20 border-sky-100 dark:border-sky-900/30 text-sky-600 dark:text-sky-450';
+          let badgeClass = 'bg-gradient-to-tr from-sky-400 to-blue-600 text-white';
 
           if (event.type === 'deposit') {
             Icon = CreditCard;
-            iconColor = 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/30 text-emerald-600 dark:text-emerald-400';
+            badgeClass = 'bg-gradient-to-tr from-emerald-400 to-emerald-600 text-white';
           } else if (event.type === 'payout') {
             Icon = Wallet;
-            iconColor = 'bg-amber-50 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900/30 text-amber-600 dark:text-amber-400';
+            badgeClass = 'bg-gradient-to-tr from-amber-400 to-amber-600 text-white';
           }
 
 
@@ -50,10 +51,8 @@ export default function ActivityFeed() {
           return (
             <div key={idx} className="flex items-start justify-between py-3.5 first:pt-0 last:pb-0 gap-3">
               <div className="flex items-start space-x-3">
-                <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 mt-0.5 ${iconColor}`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${badgeClass} shadow-md ring-1 ring-white/10 ${idx === 0 ? 'animate-pulse' : ''}`}>
                   <Icon className="w-4 h-4" />
-
-
                 </div>
                 <div>
 
