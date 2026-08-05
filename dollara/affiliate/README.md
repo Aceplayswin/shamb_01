@@ -91,6 +91,13 @@ dollara/affiliate/
 | `/notifications` | not yet built | Planned | In-app activity feed |
 | `/support` | not yet built | Planned | Support ticket list + new ticket |
 
+| `/finance/payouts` | `src/app/(dashboard)/finance/payouts/page.js` | Built | Balance card, request modal, manage methods modal |
+| `/reports` | `src/app/(dashboard)/reports/page.js` | Built | Custom date-range reports + CSV export (client mock) |
+| `/settings/profile` | `src/app/(dashboard)/settings/profile/page.js` | Built | Company info, contact, password, 2FA toggle, notification prefs |
+| `/settings/api` | `src/app/(dashboard)/settings/api/page.js` | Built | API keypair UI, rotate/revoke controls, webhook config (mock) |
+| `/notifications` | `src/app/(dashboard)/notifications/page.js` | Built | In-app notifications feed with read/clear actions |
+| `/support` | `src/app/(dashboard)/support/page.js` | Built | Support ticket list + new-ticket form (mock) |
+
 ---
 
 ## Design System
@@ -234,6 +241,10 @@ Today's work (automatic summary from local commits):
 
 - `43785c1` — implement Sub-affiliates / Network and Earnings / Commission ledger
 - `76458e4` — implement affiliate panel dashboard, links directory, creative gallery, and referred players portal
+
+Additional work (2026-08-05):
+
+- Implemented Reports page, API & Integration UI, Notifications feed, Profile/Settings, and Support pages (client-side mocks and UI components).
 
 If you'd like, I can expand each item into a short summary with affected files and screenshots (if available).
 
