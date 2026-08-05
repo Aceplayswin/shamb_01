@@ -42,29 +42,56 @@ dollara/affiliate/
 │   ├── web/website_image.png  # platform screenshot used in landing page brand section
 │   └── payment/               # bhmi.png, imps.png, upi.png — payment method logos
 └── src/
-    └── app/
-        ├── globals.css        # Ice-Blue light theme, glass utility, grid background
-        ├── layout.js          # root layout (font loading, html/body)
-        ├── page.js            # PUBLIC — Landing page
-        ├── apply/
-        │   └── page.js        # PUBLIC — 3-step application wizard
-        ├── login/
-        │   ├── page.js        # AUTH — Email + password form
-        │   ├── 2fa/
-        │   │   └── page.js    # AUTH — 6-digit OTP verification
-        │   ├── forgot/
-        │   │   └── page.js    # AUTH — Password reset / send recovery link
-        │   └── _components/
-        │       └── AuthShell.js   # Shared: page wrapper + CSS token exports
-        └── onboarding/
-            ├── page.js            # POST-APPROVAL — Orchestrator (state only)
-            └── _components/
-                ├── tokens.js          # Shared: CSS class strings + Spinner
-                ├── OnboardingShell.js # Shared: top-bar, glass card, step dots, progress bar
-                ├── StepTerms.js       # Step 1: scrollable T&C + agree checkbox
-                ├── StepPayout.js      # Step 2: UPI / Crypto / Bank Wire inputs
-                ├── StepKYC.js         # Step 3: drag-and-drop document upload
-                └── StepTrackingLink.js # Step 4: referral link, copy button, summary
+  └── app/
+    ├── globals.css        # Ice-Blue light theme, glass utility, grid background
+    ├── layout.js          # root layout (font loading, html/body)
+    ├── page.js            # PUBLIC — Landing page
+    ├── apply/
+    │   └── page.js        # PUBLIC — 3-step application wizard
+    ├── login/
+    │   ├── page.js        # AUTH — Email + password form
+    │   ├── 2fa/
+    │   │   └── page.js    # AUTH — 6-digit OTP verification
+    │   ├── forgot/
+    │   │   └── page.js    # AUTH — Password reset / send recovery link
+    │   └── _components/
+    │       └── AuthShell.js   # Shared: page wrapper + CSS token exports
+    ├── onboarding/
+    │   ├── page.js            # POST-APPROVAL — Orchestrator (state only)
+    │   └── _components/
+    │       ├── tokens.js          # Shared: CSS class strings + Spinner
+    │       ├── OnboardingShell.js # Shared: top-bar, glass card, step dots, progress bar
+    │       ├── StepTerms.js       # Step 1: scrollable T&C + agree checkbox
+    │       ├── StepPayout.js      # Step 2: UPI / Crypto / Bank Wire inputs
+    │       ├── StepKYC.js         # Step 3: drag-and-drop document upload
+    │       └── StepTrackingLink.js # Step 4: referral link, copy button, summary
+    └── (dashboard)/
+      ├── dashboard/page.js         # Main stats dashboard
+      ├── _components/              # Shared dashboard components
+      │   ├── ActivityFeed.js
+      │   ├── ActivityFeed.module.css
+      │   ├── ChartPlaceholder.js
+      │   ├── StatCard.js
+      │   └── Sidebar.js
+      ├── links/
+      │   └── page.js                # Tracking links + creative gallery
+      ├── referrals/
+      │   ├── page.js                # Referred players table
+      │   └── _components/           # referral helpers
+      ├── network/
+      │   └── page.js                # Sub-affiliates tree view
+      ├── finance/
+      │   ├── earnings/page.js       # Commission ledger and statements
+      │   └── payouts/page.js        # Balance, request modal, manage methods
+      ├── reports/
+      │   └── page.js                # Custom date-range reports + CSV export (mock)
+      ├── settings/
+      │   ├── profile/page.js        # Company, contact, password, 2FA, notifications
+      │   └── api/page.js            # API keypair UI, webhook config (mock)
+      ├── notifications/
+      │   └── page.js                # In-app notifications feed
+      └── support/
+        └── page.js                # Support ticket list + new ticket form (mock)
 ```
 
 ---
