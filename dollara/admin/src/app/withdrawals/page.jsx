@@ -74,6 +74,17 @@ export default function AdminWithdrawalsPage() {
       ),
     },
     { key: 'amount', label: 'Amount', render: (r) => <span className="font-semibold text-rose-400">{inr(r.amount)}</span> },
+    {
+      key: 'reference_number',
+      label: 'UTR',
+      sortable: false,
+      render: (r) =>
+        r.reference_number ? (
+          <span className="font-mono text-xs text-slate-300">{r.reference_number}</span>
+        ) : (
+          <span className="text-slate-600">—</span>
+        ),
+    },
     { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} />, filter: 'select' },
     {
       key: 'actions',
@@ -98,7 +109,7 @@ export default function AdminWithdrawalsPage() {
         rows={items}
         loading={loading}
         searchable
-        searchKeys={['username', 'full_name']}
+        searchKeys={['username', 'full_name', 'reference_number']}
         searchPlaceholder="Search withdrawals…"
         noun="withdrawal"
         pageSize={15}
