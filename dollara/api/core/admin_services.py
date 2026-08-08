@@ -529,19 +529,41 @@ def duplicate_bonus(bonus_id: int) -> dict:
     return {'id': src.id}
 
 
-def grant_bonus_to_user(bonus_id: int, user_id: int, admin_id: int, amount=None, notes: str = '') -> dict:
+def _resolve_player_id(member_or_id) -> int:
+    """Resolve an admin-facing Member ID (username) or internal pk to a player id.
+
+    The Users panel shows ``username`` as Member ID (e.g. 10000011). Admins paste
+    that into grant forms; looking up only by pk would miss them. Prefer username,
+    then fall back to the numeric primary key.
+    """
+    raw = str(member_or_id).strip()
+    if not raw:
+        raise ValueError('Player account not found')
+    player = User.objects.filter(username=raw, role=User.Role.USER).only('id').first()
+    if player:
+        return player.id
+    try:
+        uid = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError('Player account not found') from exc
+    if User.objects.filter(id=uid, role=User.Role.USER).exists():
+        return uid
+    raise ValueError('Player account not found')
+
+
+def grant_bonus_to_user(bonus_id: int, user_id, admin_id: int, amount=None, notes: str = '') -> dict:
     """Manual grant: issue a bonus to a player from the panel.
 
     Like every other award this lands as a pending reward carrying the bonus's
     wagering requirement — it reaches the player's withdrawable balance once
     they clear it, not on grant. ``amount`` overrides the configured value (for
-    one-off goodwill credits)."""
+    one-off goodwill credits). ``user_id`` accepts Member ID (username) or pk.
+    """
     bonus = Bonus.objects.get(id=bonus_id)
-    if not User.objects.filter(id=user_id, role=User.Role.USER).exists():
-        raise ValueError('Player account not found')
+    resolved_user_id = _resolve_player_id(user_id)
     credited = Decimal(str(amount)) if amount not in (None, '') else bonus.value_amount
     awarded = bonus_services._award_bonus(
-        user_id=user_id,
+        user_id=resolved_user_id,
         bonus=bonus,
         amount=credited,
         source=UserBonus.Source.MANUAL,
@@ -550,7 +572,7 @@ def grant_bonus_to_user(bonus_id: int, user_id: int, admin_id: int, amount=None,
     )
     if not awarded:
         raise ValueError('Amount must be greater than zero')
-    return {'granted': True, 'amount': float(awarded.amount)}
+    return {'granted': True, 'amount': float(awarded.amount), 'user_id': resolved_user_id}
 
 
 def set_bonus_provider_multipliers(bonus_id: int, rules: list[dict]) -> dict:

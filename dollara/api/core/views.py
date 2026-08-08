@@ -1017,7 +1017,7 @@ def admin_bonuses_grant(request, bonus_id):
         body = _json_body(request)
         return JsonResponse(admin_services.grant_bonus_to_user(
             bonus_id,
-            int(body['userId']),
+            body['userId'],
             request.auth.sub,
             amount=body.get('amount'),
             notes=body.get('notes', ''),

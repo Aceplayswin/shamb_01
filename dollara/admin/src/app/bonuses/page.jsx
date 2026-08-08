@@ -165,7 +165,7 @@ export default function AdminBonusesPage() {
   const submitGrant = async (e) => {
     e.preventDefault();
     if (!grant.userId) {
-      toast.error('Enter a player user ID');
+      toast.error('Enter a player Member ID');
       return;
     }
     setBusy(true);
@@ -555,8 +555,8 @@ export default function AdminBonusesPage() {
           <p className="text-sm text-slate-400">
             Pushes this bonus straight to a player's wallet, honoring its credit target and wagering rules.
           </p>
-          <Field label="Player user ID">
-            <Input type="number" value={grant.userId} onChange={(e) => setGrant({ ...grant, userId: e.target.value })} placeholder="e.g. 42" required />
+          <Field label="Member ID">
+            <Input type="text" inputMode="numeric" value={grant.userId} onChange={(e) => setGrant({ ...grant, userId: e.target.value })} placeholder="e.g. 10000011" required />
           </Field>
           <Field label="Amount override (₹, blank = the bonus's configured value)">
             <Input type="number" step="0.01" value={grant.amount} onChange={(e) => setGrant({ ...grant, amount: e.target.value })} placeholder={granting ? String(granting.value_amount) : ''} />
