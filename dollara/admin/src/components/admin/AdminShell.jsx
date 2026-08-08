@@ -37,6 +37,7 @@ import {
   Smartphone,
   FileSpreadsheet,
   HelpCircle,
+  CreditCard,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { adminApi, adminUploadImage, clearAdminToken, getAdminRole, getAdminToken } from '@/services/adminApi';
@@ -80,6 +81,16 @@ const NAV_GROUPS = [
     items: [
       { href: '/games', label: 'Games', icon: Gamepad2 },
       { href: '/providers', label: 'Providers', icon: Building2 },
+    ],
+  },
+  {
+    label: 'Affiliates',
+    items: [
+      { href: '/affiliates/applications', label: 'Applications', icon: Inbox },
+      { href: '/affiliates', label: 'Affiliate List', icon: Users, exact: true },
+      { href: '/affiliates/payouts', label: 'Payout Approvals', icon: CreditCard },
+      { href: '/affiliates/settings', label: 'Global Settings', icon: SlidersHorizontal },
+      { href: '/affiliates/audit', label: 'Fraud/Audit', icon: ShieldCheck },
     ],
   },
   {

@@ -1,0 +1,265 @@
+// src/lib/mockData.js
+// All static/mock data used across dashboard pages.
+// In Phase 2, replace these with real API fetch calls.
+
+// ── Stat cards ──────────────────────────────────────────────────────────────
+export const mockStats = {
+  clicks:         12480,
+  signups:        834,
+  ftds:           312,
+  activePlayers:  278,
+  commission:     4820,   // USD
+  pendingPayout:  1240,   // USD
+};
+
+// ── Commission over time (last 7 days) ──────────────────────────────────────
+export const mockCommissionChart = [
+  { day: 'Mon', amount: 520 },
+  { day: 'Tue', amount: 780 },
+  { day: 'Wed', amount: 430 },
+  { day: 'Thu', amount: 910 },
+  { day: 'Fri', amount: 650 },
+  { day: 'Sat', amount: 1100 },
+  { day: 'Sun', amount: 430 },
+];
+
+// ── Conversion funnel (for the funnel chart placeholder) ────────────────────
+export const mockFunnel = [
+  { label: 'Clicks',   value: 12480, pct: 100 },
+  { label: 'Signups',  value: 834,   pct: 6.7 },
+  { label: 'FTDs',     value: 312,   pct: 2.5 },
+];
+
+// ── Top performing tracking links ────────────────────────────────────────────
+export const mockTopLinks = [
+  { name: 'Homepage Banner Q3',   sub: 'q3-banner',  clicks: 3200, signups: 218, ftds: 84,  commission: 2040 },
+  { name: 'Telegram Post — Slots',sub: 'tg-slots',   clicks: 2780, signups: 190, ftds: 71,  commission: 1705 },
+  { name: 'YouTube Pre-Roll',     sub: 'yt-preroll', clicks: 2340, signups: 155, ftds: 59,  commission: 1420 },
+  { name: 'Blog Review Article',  sub: 'blog-rev',   clicks: 1980, signups: 134, ftds: 50,  commission: 1210 },
+  { name: 'Instagram Story Link', sub: 'ig-story',   clicks: 1450, signups:  98, ftds: 37,  commission:  890 },
+];
+
+// ── Recent referral activity feed ────────────────────────────────────────────
+export const mockActivity = [
+  { type: 'deposit',  text: 'Player #A8821 made their first deposit of $250',          time: '4 min ago' },
+  { type: 'signup',   text: 'New player #B3312 signed up via your Telegram link',       time: '18 min ago' },
+  { type: 'deposit',  text: 'Player #C9201 deposited $100 — commission credited',       time: '42 min ago' },
+  { type: 'payout',   text: 'Payout of $1,240 has been approved and sent',              time: '2 hrs ago' },
+  { type: 'signup',   text: 'New player #D4477 signed up via your Homepage Banner',     time: '3 hrs ago' },
+  { type: 'deposit',  text: 'Player #E1122 made their first deposit of $500',           time: '5 hrs ago' },
+  { type: 'signup',   text: 'New player #F5599 signed up via your YouTube Pre-Roll',    time: '6 hrs ago' },
+  { type: 'payout',   text: 'Payout request of $800 is under review',                  time: 'Yesterday' },
+  { type: 'deposit',  text: 'Player #G7743 deposited $75 — commission credited',        time: 'Yesterday' },
+  { type: 'signup',   text: 'New player #H2231 signed up via your Blog Review Article', time: '2 days ago' },
+];
+
+// ── Referrals table (used by /referrals page) ────────────────────────────────
+export const mockReferrals = [
+  { id: 'A8821', signupDate: '2026-07-28', kyc: 'Verified',  ftdDate: '2026-07-29', ftdAmount: 250, lifetimeDeposits: 1200, commission: 420, status: 'active',  country: 'IN', lastActive: '2026-08-03', source: 'Homepage Banner Q3',    monthlyDeposits: [0, 0, 120, 280, 350, 450] },
+  { id: 'B3312', signupDate: '2026-07-30', kyc: 'Pending',   ftdDate: null,         ftdAmount: 0,   lifetimeDeposits: 0,    commission: 0,   status: 'active',  country: 'BR', lastActive: '2026-08-02', source: 'Telegram Post — Slots', monthlyDeposits: [0, 0, 0, 0, 0, 0] },
+  { id: 'C9201', signupDate: '2026-07-25', kyc: 'Verified',  ftdDate: '2026-07-26', ftdAmount: 100, lifetimeDeposits: 640,  commission: 220, status: 'active',  country: 'NG', lastActive: '2026-08-03', source: 'YouTube Pre-Roll',      monthlyDeposits: [0, 0, 0, 100, 240, 300] },
+  { id: 'D4477', signupDate: '2026-07-22', kyc: 'Verified',  ftdDate: '2026-07-22', ftdAmount: 200, lifetimeDeposits: 980,  commission: 340, status: 'dormant', country: 'PH', lastActive: '2026-07-28', source: 'Blog Review Article',   monthlyDeposits: [0, 0, 200, 380, 400, 0] },
+  { id: 'E1122', signupDate: '2026-07-18', kyc: 'Verified',  ftdDate: '2026-07-19', ftdAmount: 500, lifetimeDeposits: 3100, commission: 980, status: 'active',  country: 'US', lastActive: '2026-08-03', source: 'Instagram Story Link',  monthlyDeposits: [0, 500, 600, 700, 650, 650] },
+  { id: 'F5599', signupDate: '2026-07-15', kyc: 'Verified',  ftdDate: '2026-07-16', ftdAmount: 75,  lifetimeDeposits: 420,  commission: 145, status: 'active',  country: 'DE', lastActive: '2026-08-01', source: 'Twitter Bio Link',      monthlyDeposits: [0, 75, 100, 85, 80, 80] },
+  { id: 'G7743', signupDate: '2026-07-10', kyc: 'Verified',  ftdDate: '2026-07-11', ftdAmount: 150, lifetimeDeposits: 890,  commission: 310, status: 'active',  country: 'GB', lastActive: '2026-08-02', source: 'Discord Welcome DM',    monthlyDeposits: [0, 150, 180, 200, 180, 180] },
+  { id: 'H2231', signupDate: '2026-07-08', kyc: 'Rejected',  ftdDate: null,         ftdAmount: 0,   lifetimeDeposits: 0,    commission: 0,   status: 'blocked', country: 'RU', lastActive: '2026-07-09', source: 'Homepage Banner Q3',    monthlyDeposits: [0, 0, 0, 0, 0, 0] },
+  { id: 'J4410', signupDate: '2026-07-05', kyc: 'Verified',  ftdDate: '2026-07-06', ftdAmount: 300, lifetimeDeposits: 2200, commission: 760, status: 'active',  country: 'JP', lastActive: '2026-08-03', source: 'YouTube Pre-Roll',      monthlyDeposits: [300, 400, 380, 420, 350, 350] },
+  { id: 'K6678', signupDate: '2026-06-28', kyc: 'Verified',  ftdDate: '2026-06-29', ftdAmount: 100, lifetimeDeposits: 560,  commission: 195, status: 'dormant', country: 'AU', lastActive: '2026-07-20', source: 'Blog Review Article',   monthlyDeposits: [100, 120, 140, 100, 100, 0] },
+  { id: 'L9902', signupDate: '2026-06-20', kyc: 'Pending',   ftdDate: null,         ftdAmount: 0,   lifetimeDeposits: 0,    commission: 0,   status: 'active',  country: 'KE', lastActive: '2026-07-30', source: 'Telegram Post — Slots', monthlyDeposits: [0, 0, 0, 0, 0, 0] },
+  { id: 'M1155', signupDate: '2026-06-15', kyc: 'Verified',  ftdDate: '2026-06-16', ftdAmount: 1000,lifetimeDeposits: 8500, commission: 2940,status: 'active',  country: 'AE', lastActive: '2026-08-03', source: 'Instagram Story Link',  monthlyDeposits: [1000, 1500, 1800, 1600, 1400, 1200] },
+];
+
+// ── Player activity timeline (used by referral detail panel) ──────────────────
+export const mockPlayerActivity = [
+  { type: 'signup',  text: 'Account created via tracking link', icon: 'user-plus' },
+  { type: 'kyc',     text: 'KYC documents submitted',           icon: 'shield-check' },
+  { type: 'ftd',     text: 'First deposit completed',           icon: 'banknote' },
+  { type: 'deposit', text: 'Deposit — commission credited',     icon: 'arrow-down' },
+  { type: 'active',  text: 'Player placed first bet',           icon: 'gamepad-2' },
+];
+
+// ── Earnings ledger (used by /finance/earnings page) ─────────────────────────
+export const mockEarnings = [
+  { id: 'TXN-901', period: '2026-08-01 to 2026-08-07', type: 'Revenue Share', base: 'NGR: $4,500',   rate: '40%', amount: 1800, status: 'pending' },
+  { id: 'TXN-902', period: '2026-08-01 to 2026-08-07', type: 'Override',      base: 'Network: $2,800',rate: '5%',  amount: 140,  status: 'pending' },
+  { id: 'TXN-903', period: '2026-07-25 to 2026-07-31', type: 'Revenue Share', base: 'NGR: $6,200',   rate: '45%', amount: 2790, status: 'approved' },
+  { id: 'TXN-904', period: '2026-07-25 to 2026-07-31', type: 'CPA',           base: '12 FTDs',         rate: '$100',amount: 1200, status: 'approved' },
+  { id: 'TXN-905', period: '2026-07-18 to 2026-07-24', type: 'Revenue Share', base: 'NGR: $3,800',   rate: '45%', amount: 1710, status: 'paid' },
+  { id: 'TXN-906', period: '2026-07-18 to 2026-07-24', type: 'Override',      base: 'Network: $4,100',rate: '5%',  amount: 205,  status: 'paid' },
+  { id: 'TXN-907', period: '2026-07-11 to 2026-07-17', type: 'CPA',           base: '8 FTDs',          rate: '$100',amount: 800,  status: 'paid' },
+  { id: 'TXN-908', period: '2026-07-04 to 2026-07-10', type: 'Revenue Share', base: 'NGR: $5,100',   rate: '45%', amount: 2295, status: 'paid' },
+  { id: 'TXN-909', period: '2026-06-27 to 2026-07-03', type: 'Revenue Share', base: 'NGR: $4,900',   rate: '45%', amount: 2205, status: 'paid' },
+  { id: 'TXN-910', period: '2026-06-20 to 2026-06-26', type: 'CPA',           base: 'Invalid Lead',    rate: '$100',amount: -200, status: 'clawed_back' },
+  { id: 'TXN-911', period: '2026-06-13 to 2026-06-19', type: 'Revenue Share', base: 'NGR: $3,200',   rate: '40%', amount: 1280, status: 'paid' },
+  { id: 'TXN-912', period: '2026-06-06 to 2026-06-12', type: 'Override',      base: 'Network: $1,900',rate: '5%',  amount: 95,   status: 'paid' },
+];
+
+export const mockPayoutInfo = {
+  availableBalance: 1600,
+  minimumThreshold: 1500,
+  nextPayoutCycle: 'Monday, 12 Aug 2026',
+};
+
+export const mockPayoutMethods = [
+  { id: 'bank-1', type: 'bank', label: 'Bank Transfer', details: 'ICICI Bank • ****1234', isPrimary: true },
+  { id: 'upi-1', type: 'upi', label: 'UPI', details: 'dollara@upi', isPrimary: false },
+  { id: 'crypto-1', type: 'crypto', label: 'Crypto Wallet', details: 'USDT TRC-20 • 0x3a...f9C2', isPrimary: false },
+];
+
+export const mockPayoutHistory = [
+  { id: 'P-1001', amount: 1600, method: 'Bank Transfer', requestedAt: '2026-08-01', processedAt: '2026-08-03', status: 'approved' },
+  { id: 'P-0998', amount: 800, method: 'UPI', requestedAt: '2026-07-20', processedAt: '2026-07-22', status: 'paid' },
+  { id: 'P-0985', amount: 450, method: 'Crypto Wallet', requestedAt: '2026-07-05', processedAt: '2026-07-07', status: 'rejected' },
+];
+
+// ── Sub-affiliates Network (used by /network page) ───────────────────────────
+export const mockSubAffiliates = [
+  {
+    id: 'SUB-A01',
+    name: 'Marcus Vance',
+    joinedDate: '2026-07-15',
+    status: 'active',
+    clicks: 1450,
+    signups: 198,
+    ftds: 62,
+    subCommission: 4850,
+    overrideRate: '5%',
+    overrideEarned: 242.50,
+    tier: 1,
+    children: [
+      { id: 'SUB-A01-C1', name: 'Elite Betting Blog', joinedDate: '2026-07-20', recruits: '18 Players' },
+      { id: 'SUB-A01-C2', name: 'Vance Telegram Tipster', joinedDate: '2026-07-22', recruits: '44 Players' }
+    ]
+  },
+  {
+    id: 'SUB-B02',
+    name: 'Helena Costa',
+    joinedDate: '2026-07-18',
+    status: 'active',
+    clicks: 980,
+    signups: 110,
+    ftds: 31,
+    subCommission: 2900,
+    overrideRate: '5%',
+    overrideEarned: 145.00,
+    tier: 1,
+    children: [
+      { id: 'SUB-B02-C1', name: 'Costa Instagram Affiliate', joinedDate: '2026-07-25', recruits: '31 Players' }
+    ]
+  },
+  {
+    id: 'SUB-C03',
+    name: 'Akira Tanaka',
+    joinedDate: '2026-07-22',
+    status: 'active',
+    clicks: 1210,
+    signups: 145,
+    ftds: 40,
+    subCommission: 3800,
+    overrideRate: '3%',
+    overrideEarned: 114.00,
+    tier: 1,
+    children: []
+  },
+  {
+    id: 'SUB-D04',
+    name: 'Dmitri Smirnov',
+    joinedDate: '2026-07-26',
+    status: 'dormant',
+    clicks: 120,
+    signups: 8,
+    ftds: 1,
+    subCommission: 120,
+    overrideRate: '5%',
+    overrideEarned: 6.00,
+    tier: 1,
+    children: []
+  },
+  {
+    id: 'SUB-E05',
+    name: 'Sarah Jenkins',
+    joinedDate: '2026-07-30',
+    status: 'active',
+    clicks: 640,
+    signups: 54,
+    ftds: 12,
+    subCommission: 1100,
+    overrideRate: '5%',
+    overrideEarned: 55.00,
+    tier: 1,
+    children: []
+  }
+];
+
+// ── Tracking Links (used by /links page) ─────────────────────────────────────
+export const LANDING_PAGES = [
+  { value: '/',            label: 'Homepage' },
+  { value: '/register',    label: 'Register' },
+  { value: '/casino',      label: 'Casino' },
+  { value: '/sportsbook',  label: 'Sportsbook' },
+  { value: '/slots',       label: 'Slots' },
+  { value: '/live-casino', label: 'Live Casino' },
+];
+
+export const mockTrackingLinks = [
+  { id: 'lnk-001', name: 'Homepage Banner Q3',    sub: 'q3-banner',  target: '/',           clicks: 3200, signups: 218, ftds: 84,  commission: 2040, created: '2026-06-15' },
+  { id: 'lnk-002', name: 'Telegram Post — Slots', sub: 'tg-slots',   target: '/slots',      clicks: 2780, signups: 190, ftds: 71,  commission: 1705, created: '2026-06-22' },
+  { id: 'lnk-003', name: 'YouTube Pre-Roll',      sub: 'yt-preroll',  target: '/register',   clicks: 2340, signups: 155, ftds: 59,  commission: 1420, created: '2026-07-01' },
+  { id: 'lnk-004', name: 'Blog Review Article',   sub: 'blog-rev',   target: '/casino',     clicks: 1980, signups: 134, ftds: 50,  commission: 1210, created: '2026-07-08' },
+  { id: 'lnk-005', name: 'Instagram Story Link',  sub: 'ig-story',   target: '/sportsbook', clicks: 1450, signups:  98, ftds: 37,  commission:  890, created: '2026-07-14' },
+  { id: 'lnk-006', name: 'Twitter Bio Link',      sub: 'tw-bio',     target: '/',           clicks:  920, signups:  62, ftds: 24,  commission:  580, created: '2026-07-20' },
+  { id: 'lnk-007', name: 'Discord Welcome DM',    sub: 'dc-welcome', target: '/register',   clicks:  680, signups:  48, ftds: 18,  commission:  435, created: '2026-07-25' },
+];
+
+// ── Creative banner assets (used by /links creative gallery tab) ─────────────
+export const mockCreatives = [
+  { id: 'cr-001', name: 'Gold Rush Banner',       size: '728x90',    label: 'Leaderboard',       color: 'from-brand-400 to-brand-600' },
+  { id: 'cr-002', name: 'Casino Night Rectangle', size: '300x250',   label: 'Medium Rectangle',  color: 'from-purple-500 to-indigo-600' },
+  { id: 'cr-003', name: 'Slots Mania Tower',      size: '160x600',   label: 'Skyscraper',        color: 'from-emerald-500 to-teal-600' },
+  { id: 'cr-004', name: 'Social Promo Square',    size: '1080x1080', label: 'Social',            color: 'from-rose-500 to-orange-500' },
+  { id: 'cr-005', name: 'Welcome Bonus Header',   size: '728x90',    label: 'Leaderboard',       color: 'from-sky-400 to-blue-600' },
+  { id: 'cr-006', name: 'VIP Lounge Card',        size: '300x250',   label: 'Medium Rectangle',  color: 'from-amber-500 to-yellow-500' },
+  { id: 'cr-007', name: 'Sports Bet Tower',       size: '160x600',   label: 'Skyscraper',        color: 'from-brand-500 to-orange-500' },
+  { id: 'cr-008', name: 'Live Casino Social',     size: '1080x1080', label: 'Social',            color: 'from-violet-500 to-fuchsia-500' },
+];
+
+// ── In-app notifications (for Settings / Notifications feed) ───────────────
+export const mockNotifications = [
+  { id: 'N-001', type: 'referral', time: '2026-08-05 11:02', title: 'New referral',
+    message: 'Player #Z9123 signed up via your Homepage Banner Q3.', read: false },
+  { id: 'N-002', type: 'deposit', time: '2026-08-05 09:47', title: 'First deposit',
+    message: 'Player #A8821 made their first deposit of $250 — commission credited.', read: false },
+  { id: 'N-003', type: 'commission', time: '2026-08-04 18:15', title: 'Commission approved',
+    message: 'Your commission for 2026-08-01 to 2026-08-07 has been approved.', read: true },
+  { id: 'N-004', type: 'payout', time: '2026-08-03 14:22', title: 'Payout sent',
+    message: 'Payout P-0998 of $800 has been sent via UPI.', read: true },
+  { id: 'N-005', type: 'payout', time: '2026-07-05 08:30', title: 'Payout rejected',
+    message: 'Payout P-0985 was rejected — update your payout details.', read: false },
+  { id: 'N-006', type: 'key-rotation', time: '2026-06-20 07:12', title: 'Key rotation reminder',
+    message: 'Your API key will rotate in 3 days. Please prepare to update integrations.', read: false },
+];
+
+// ── Affiliate profile (mock) ───────────────────────────────────────────────
+export const mockAffiliateProfile = {
+  companyName: 'Vance Media LLC',
+  contactName: 'Marcus Vance',
+  contactEmail: 'marcus@vancemedia.example',
+  contactPhone: '+44 20 7946 0958',
+  timezone: 'UTC',
+  currency: 'USD',
+  twoFactorEnabled: true,
+  notificationPreferences: {
+    referrals: true,
+    deposits: true,
+    commission: true,
+    payouts: true,
+    keyRotation: true,
+  },
+};
+
+// ── Support tickets (mock) ─────────────────────────────────────────────────
+export const mockSupportTickets = [
+  { id: 'T-1001', subject: 'Unable to verify bank details', status: 'open', createdAt: '2026-07-30', source: 'affiliate', message: 'I uploaded my bank statement but it still shows pending.' },
+  { id: 'T-1002', subject: 'Commission discrepancy', status: 'closed', createdAt: '2026-07-25', source: 'affiliate', message: 'My commission total differs from the ledger.' },
+  { id: 'T-1003', subject: 'API key rotation', status: 'open', createdAt: '2026-06-18', source: 'affiliate', message: 'Please confirm upcoming key rotation window.' },
+];

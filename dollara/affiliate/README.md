@@ -42,29 +42,56 @@ dollara/affiliate/
 │   ├── web/website_image.png  # platform screenshot used in landing page brand section
 │   └── payment/               # bhmi.png, imps.png, upi.png — payment method logos
 └── src/
-    └── app/
-        ├── globals.css        # Ice-Blue light theme, glass utility, grid background
-        ├── layout.js          # root layout (font loading, html/body)
-        ├── page.js            # PUBLIC — Landing page
-        ├── apply/
-        │   └── page.js        # PUBLIC — 3-step application wizard
-        ├── login/
-        │   ├── page.js        # AUTH — Email + password form
-        │   ├── 2fa/
-        │   │   └── page.js    # AUTH — 6-digit OTP verification
-        │   ├── forgot/
-        │   │   └── page.js    # AUTH — Password reset / send recovery link
-        │   └── _components/
-        │       └── AuthShell.js   # Shared: page wrapper + CSS token exports
-        └── onboarding/
-            ├── page.js            # POST-APPROVAL — Orchestrator (state only)
-            └── _components/
-                ├── tokens.js          # Shared: CSS class strings + Spinner
-                ├── OnboardingShell.js # Shared: top-bar, glass card, step dots, progress bar
-                ├── StepTerms.js       # Step 1: scrollable T&C + agree checkbox
-                ├── StepPayout.js      # Step 2: UPI / Crypto / Bank Wire inputs
-                ├── StepKYC.js         # Step 3: drag-and-drop document upload
-                └── StepTrackingLink.js # Step 4: referral link, copy button, summary
+  └── app/
+    ├── globals.css        # Ice-Blue light theme, glass utility, grid background
+    ├── layout.js          # root layout (font loading, html/body)
+    ├── page.js            # PUBLIC — Landing page
+    ├── apply/
+    │   └── page.js        # PUBLIC — 3-step application wizard
+    ├── login/
+    │   ├── page.js        # AUTH — Email + password form
+    │   ├── 2fa/
+    │   │   └── page.js    # AUTH — 6-digit OTP verification
+    │   ├── forgot/
+    │   │   └── page.js    # AUTH — Password reset / send recovery link
+    │   └── _components/
+    │       └── AuthShell.js   # Shared: page wrapper + CSS token exports
+    ├── onboarding/
+    │   ├── page.js            # POST-APPROVAL — Orchestrator (state only)
+    │   └── _components/
+    │       ├── tokens.js          # Shared: CSS class strings + Spinner
+    │       ├── OnboardingShell.js # Shared: top-bar, glass card, step dots, progress bar
+    │       ├── StepTerms.js       # Step 1: scrollable T&C + agree checkbox
+    │       ├── StepPayout.js      # Step 2: UPI / Crypto / Bank Wire inputs
+    │       ├── StepKYC.js         # Step 3: drag-and-drop document upload
+    │       └── StepTrackingLink.js # Step 4: referral link, copy button, summary
+    └── (dashboard)/
+      ├── dashboard/page.js         # Main stats dashboard
+      ├── _components/              # Shared dashboard components
+      │   ├── ActivityFeed.js
+      │   ├── ActivityFeed.module.css
+      │   ├── ChartPlaceholder.js
+      │   ├── StatCard.js
+      │   └── Sidebar.js
+      ├── links/
+      │   └── page.js                # Tracking links + creative gallery
+      ├── referrals/
+      │   ├── page.js                # Referred players table
+      │   └── _components/           # referral helpers
+      ├── network/
+      │   └── page.js                # Sub-affiliates tree view
+      ├── finance/
+      │   ├── earnings/page.js       # Commission ledger and statements
+      │   └── payouts/page.js        # Balance, request modal, manage methods
+      ├── reports/
+      │   └── page.js                # Custom date-range reports + CSV export (mock)
+      ├── settings/
+      │   ├── profile/page.js        # Company, contact, password, 2FA, notifications
+      │   └── api/page.js            # API keypair UI, webhook config (mock)
+      ├── notifications/
+      │   └── page.js                # In-app notifications feed
+      └── support/
+        └── page.js                # Support ticket list + new ticket form (mock)
 ```
 
 ---
@@ -79,17 +106,24 @@ dollara/affiliate/
 | `/login/2fa` | `src/app/login/2fa/page.js` | Built | 6-digit OTP verification screen |
 | `/login/forgot` | `src/app/login/forgot/page.js` | Built | Password recovery email form |
 | `/onboarding` | `src/app/onboarding/page.js` | Built | 4-step post-approval onboarding wizard |
-| `/dashboard` | not yet built | Planned | Main stats dashboard |
-| `/links` | not yet built | Planned | Tracking links + creative assets |
-| `/referrals` | not yet built | Planned | Referred player table |
-| `/network` | not yet built | Planned | Sub-affiliate tree view |
-| `/finance/earnings` | not yet built | Planned | Commission ledger |
+| `/dashboard` | `src/app/(dashboard)/dashboard/page.js` | Built | Main stats dashboard (implemented)
+| `/links` | `src/app/(dashboard)/links/page.js` | Built | Tracking links + creative assets (links directory + creative gallery)
+| `/referrals` | `src/app/(dashboard)/referrals/page.js` | Built | Referred player table (implemented)
+| `/network` | `src/app/(dashboard)/network/page.js` | Built | Sub-affiliate tree view (Sub-affiliates implemented)
+| `/finance/earnings` | `src/app/(dashboard)/finance/earnings/page.js` | Built | Commission ledger (earnings / statements implemented)
 | `/finance/payouts` | not yet built | Planned | Balance + payout requests |
 | `/reports` | not yet built | Planned | Custom date-range reports |
 | `/settings/profile` | not yet built | Planned | Company info, 2FA, password |
 | `/settings/api` | not yet built | Planned | API keypair + webhook config |
 | `/notifications` | not yet built | Planned | In-app activity feed |
 | `/support` | not yet built | Planned | Support ticket list + new ticket |
+
+| `/finance/payouts` | `src/app/(dashboard)/finance/payouts/page.js` | Built | Balance card, request modal, manage methods modal |
+| `/reports` | `src/app/(dashboard)/reports/page.js` | Built | Custom date-range reports + CSV export (client mock) |
+| `/settings/profile` | `src/app/(dashboard)/settings/profile/page.js` | Built | Company info, contact, password, 2FA toggle, notification prefs |
+| `/settings/api` | `src/app/(dashboard)/settings/api/page.js` | Built | API keypair UI, rotate/revoke controls, webhook config (mock) |
+| `/notifications` | `src/app/(dashboard)/notifications/page.js` | Built | In-app notifications feed with read/clear actions |
+| `/support` | `src/app/(dashboard)/support/page.js` | Built | Support ticket list + new-ticket form (mock) |
 
 ---
 
@@ -227,6 +261,20 @@ To add a new step: create a new `StepXxx.js` in `_components/`, add its state to
 | **Phase 3** | Add the Affiliates section to `dollara/admin` for staff-facing approval, commission overrides. |
 
 ---
+
+## Changelog — 2026-08-04
+
+Today's work (automatic summary from local commits):
+
+- `43785c1` — implement Sub-affiliates / Network and Earnings / Commission ledger
+- `76458e4` — implement affiliate panel dashboard, links directory, creative gallery, and referred players portal
+
+Additional work (2026-08-05):
+
+- Implemented Reports page, API & Integration UI, Notifications feed, Profile/Settings, and Support pages (client-side mocks and UI components).
+
+If you'd like, I can expand each item into a short summary with affected files and screenshots (if available).
+
 
 ## Key Conventions
 
