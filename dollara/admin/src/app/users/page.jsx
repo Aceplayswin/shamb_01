@@ -138,11 +138,18 @@ export default function AdminUsersPage() {
   const columns = [
     {
       key: 'username',
+      label: 'Member ID',
+      render: (r) => (
+        <span className="font-mono text-sm text-slate-300">{r.username || '—'}</span>
+      ),
+    },
+    {
+      key: 'full_name',
       label: 'User',
       render: (r) => (
         <div>
           <p className="font-medium text-white">{r.full_name || r.username}</p>
-          <p className="text-xs text-slate-500">{r.phone || r.email || r.username}</p>
+          <p className="text-xs text-slate-500">{r.phone || r.email || '—'}</p>
         </div>
       ),
     },
@@ -207,7 +214,7 @@ export default function AdminUsersPage() {
         loading={loading}
         searchable
         searchKeys={['username', 'full_name', 'phone', 'email']}
-        searchPlaceholder="Search by name, phone, email…"
+        searchPlaceholder="Search by name, member ID, phone, email…"
         noun="user"
         pageSize={15}
         emptyIcon={Users}

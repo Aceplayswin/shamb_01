@@ -22,7 +22,7 @@ from core import (
     game_services,
     services,
 )
-from core.ai import chat_respond, fraud_score, pytorch_version, welcome_call
+from core.ai import chat_respond, fraud_score, welcome_call
 from core.game_services import GameError
 from core.geo import detect_geo_from_ip
 from core.middleware import require_auth
@@ -54,7 +54,6 @@ def health(request):
         'status': 'ok',
         'service': 'dollara-api',
         'version': '1.0.0',
-        'pytorch_version': pytorch_version(),
     })
 
 
@@ -1283,8 +1282,11 @@ def admin_report_export(request, kind):
     """Stream one report as a CSV download."""
     date_from = _parse_date(request.GET.get('from'))
     date_to = _parse_date(request.GET.get('to'))
+    member_id = (request.GET.get('memberId') or '').strip() or None
     try:
-        header, rows = admin_services.build_report(kind, date_from, date_to)
+        header, rows = admin_services.build_report(
+            kind, date_from, date_to, member_id=member_id,
+        )
     except ValueError as e:
         return _error_response(e, 404)
 
