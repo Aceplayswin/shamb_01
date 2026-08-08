@@ -88,6 +88,17 @@ export default function AdminDepositsPage() {
       filter: 'select',
       filterLabel: 'Payment method',
     },
+    {
+      key: 'reference_number',
+      label: 'UTR',
+      sortable: false,
+      render: (r) =>
+        r.reference_number ? (
+          <span className="font-mono text-xs text-slate-300">{r.reference_number}</span>
+        ) : (
+          <span className="text-slate-600">—</span>
+        ),
+    },
     { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} />, filter: 'select' },
     {
       key: 'actions',
@@ -112,7 +123,7 @@ export default function AdminDepositsPage() {
         rows={items}
         loading={loading}
         searchable
-        searchKeys={['username', 'full_name']}
+        searchKeys={['username', 'full_name', 'reference_number']}
         searchPlaceholder="Search deposits…"
         noun="deposit"
         pageSize={15}

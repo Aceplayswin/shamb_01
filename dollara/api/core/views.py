@@ -1345,6 +1345,8 @@ def admin_withdrawals_pending(request):
             'user_id': t.user_id,
             'amount': float(t.amount),
             'status': t.status,
+            'payment_method': t.payment_method,
+            'reference_number': t.reference_number,
             'created_at': t.created_at.isoformat(),
             'username': t.user.username,
             'full_name': t.user.full_name,
