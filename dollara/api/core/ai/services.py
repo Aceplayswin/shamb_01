@@ -1,42 +1,6 @@
-"""In-process AI: fraud scoring (PyTorch), welcome calls, chatbot."""
+"""In-process AI: fraud scoring (heuristics), welcome calls, chatbot."""
 
 from __future__ import annotations
-
-import torch
-import torch.nn as nn
-
-PYTORCH_VERSION = torch.__version__
-
-
-class FraudNet(nn.Module):
-    """Simple MLP for transaction fraud scoring."""
-
-    def __init__(self):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(8, 32),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(32, 16),
-            nn.ReLU(),
-            nn.Linear(16, 1),
-            nn.Sigmoid(),
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x)
-
-
-_fraud_model = FraudNet()
-_fraud_model.eval()
-
-with torch.no_grad():
-    for p in _fraud_model.parameters():
-        nn.init.xavier_uniform_(p if p.dim() > 1 else p.unsqueeze(0))
-
-
-def pytorch_version() -> str:
-    return PYTORCH_VERSION
 
 
 def fraud_score(
@@ -51,36 +15,36 @@ def fraud_score(
     vpn_detected: bool = False,
     wagering_complete: bool = True,
 ) -> dict:
-    features = torch.tensor(
-        [
-            [
-                min(amount / 100000, 1.0),
-                min(deposit_count / 50, 1.0),
-                min(withdrawal_count / 20, 1.0),
-                min(account_age_days / 365, 1.0),
-                min(same_ip_accounts / 5, 1.0),
-                float(vpn_detected),
-                float(not wagering_complete),
-                0.5,
-            ]
-        ],
-        dtype=torch.float32,
-    )
-
-    with torch.no_grad():
-        raw = _fraud_model(features).item()
-
-    score = int(raw * 100)
+    score = 0
     factors: list[str] = []
+
     if vpn_detected:
+        score += 25
         factors.append('VPN/proxy detected')
     if same_ip_accounts > 2:
+        score += min(same_ip_accounts * 8, 30)
         factors.append(f'Shared IP with {same_ip_accounts} accounts')
     if amount > 50000:
+        score += 20
         factors.append('High transaction amount')
+    elif amount > 20000:
+        score += 10
     if not wagering_complete:
+        score += 20
         factors.append('Wagering incomplete')
+    if account_age_days < 7:
+        score += 15
+        factors.append('New account')
+    elif account_age_days < 30:
+        score += 5
+    if deposit_count == 0 and amount > 0:
+        score += 10
+        factors.append('First deposit / no prior deposits')
+    if withdrawal_count > deposit_count * 2 and withdrawal_count > 3:
+        score += 15
+        factors.append('High withdrawal frequency')
 
+    score = min(score, 100)
     risk = 'low' if score < 40 else 'medium' if score < 70 else 'high'
     rec = 'approve' if score < 40 else 'review' if score < 80 else 'reject'
 

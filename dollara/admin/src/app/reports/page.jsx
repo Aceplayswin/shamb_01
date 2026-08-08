@@ -38,6 +38,7 @@ function preset(days) {
 export default function AdminReportsPage() {
   const { data: kinds, loading } = useAdminData('/api/v1/admin/reports');
   const [range, setRange] = useState({ from: '', to: '' });
+  const [memberId, setMemberId] = useState('');
   const [busy, setBusy] = useState(null);
 
   const download = async (kind) => {
@@ -46,6 +47,8 @@ export default function AdminReportsPage() {
       const params = new URLSearchParams();
       if (range.from) params.set('from', range.from);
       if (range.to) params.set('to', range.to);
+      const trimmedMemberId = memberId.trim();
+      if (trimmedMemberId) params.set('memberId', trimmedMemberId);
 
       // Fetched with the admin token, then handed to the browser as a blob —
       // a plain link could not carry the Authorization header.
@@ -59,7 +62,10 @@ export default function AdminReportsPage() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${kind}-${new Date().toISOString().slice(0, 10)}.csv`;
+      const stamp = new Date().toISOString().slice(0, 10);
+      link.download = trimmedMemberId
+        ? `${kind}-${trimmedMemberId}-${stamp}.csv`
+        : `${kind}-${stamp}.csv`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -72,13 +78,27 @@ export default function AdminReportsPage() {
     }
   };
 
+  const rangeHint = range.from || range.to
+    ? `Exporting ${range.from || 'the beginning'} → ${range.to || 'today'}`
+    : 'No range set — exports cover all time';
+  const memberHint = memberId.trim()
+    ? ` · filtered to member ID ${memberId.trim()}`
+    : '';
+
   return (
     <AdminShell title="Reports" subtitle="Export platform data as CSV">
       <Card className="mb-5 p-5">
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
-          Date range
+          Filters
         </h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <Field label="Member ID">
+            <Input
+              placeholder="e.g. 10000001"
+              value={memberId}
+              onChange={(e) => setMemberId(e.target.value)}
+            />
+          </Field>
           <Field label="From">
             <Input
               type="date"
@@ -121,9 +141,7 @@ export default function AdminReportsPage() {
           </div>
         </div>
         <p className="mt-3 text-xs text-slate-500">
-          {range.from || range.to
-            ? `Exporting ${range.from || 'the beginning'} → ${range.to || 'today'}.`
-            : 'No range set — exports cover all time.'}
+          {rangeHint}{memberHint}.
         </p>
       </Card>
 

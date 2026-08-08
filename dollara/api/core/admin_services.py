@@ -1065,10 +1065,12 @@ def _d(value) -> str:
     return value.isoformat() if value else ''
 
 
-def _report_users(date_from, date_to):
+def _report_users(date_from, date_to, member_id=None):
     qs = User.objects.filter(role=User.Role.USER).select_related(
         'wallet', 'usersetting'
     ).order_by('-created_at')
+    if member_id:
+        qs = qs.filter(username=member_id)
     if date_from:
         qs = qs.filter(created_at__date__gte=date_from)
     if date_to:
@@ -1093,10 +1095,12 @@ def _report_users(date_from, date_to):
     return header, rows()
 
 
-def _report_transactions(date_from, date_to, tx_type=None):
+def _report_transactions(date_from, date_to, tx_type=None, member_id=None):
     qs = Transaction.objects.select_related('user').order_by('-created_at')
     if tx_type:
         qs = qs.filter(type=tx_type)
+    if member_id:
+        qs = qs.filter(user__username=member_id)
     if date_from:
         qs = qs.filter(created_at__date__gte=date_from)
     if date_to:
@@ -1117,10 +1121,12 @@ def _report_transactions(date_from, date_to, tx_type=None):
     return header, rows()
 
 
-def _report_bet_history(date_from, date_to):
+def _report_bet_history(date_from, date_to, member_id=None):
     qs = GameSession.objects.select_related('user', 'game').filter(
         Q(rounds_count__gt=0) | Q(total_bet__gt=0)
     ).order_by('-updated_at')
+    if member_id:
+        qs = qs.filter(user__username=member_id)
     if date_from:
         qs = qs.filter(created_at__date__gte=date_from)
     if date_to:
@@ -1144,8 +1150,10 @@ def _report_bet_history(date_from, date_to):
     return header, rows()
 
 
-def _report_rounds(date_from, date_to):
+def _report_rounds(date_from, date_to, member_id=None):
     qs = GameRound.objects.select_related('user', 'game').order_by('-created_at')
+    if member_id:
+        qs = qs.filter(user__username=member_id)
     if date_from:
         qs = qs.filter(created_at__date__gte=date_from)
     if date_to:
@@ -1169,8 +1177,10 @@ def _report_rounds(date_from, date_to):
     return header, rows()
 
 
-def _report_bonuses(date_from, date_to):
+def _report_bonuses(date_from, date_to, member_id=None):
     qs = UserBonus.objects.select_related('user', 'bonus').order_by('-created_at')
+    if member_id:
+        qs = qs.filter(user__username=member_id)
     if date_from:
         qs = qs.filter(created_at__date__gte=date_from)
     if date_to:
@@ -1196,19 +1206,19 @@ def _report_bonuses(date_from, date_to):
 # Report kind -> (label, builder). Each builder returns (header, row iterator)
 # so exports stream instead of materialising the whole table in memory.
 REPORT_KINDS = {
-    'users': ('Users', lambda f, t: _report_users(f, t)),
-    'transactions': ('Transactions', lambda f, t: _report_transactions(f, t)),
+    'users': ('Users', lambda f, t, m: _report_users(f, t, m)),
+    'transactions': ('Transactions', lambda f, t, m: _report_transactions(f, t, member_id=m)),
     'deposits': (
         'Deposits',
-        lambda f, t: _report_transactions(f, t, Transaction.TxType.DEPOSIT),
+        lambda f, t, m: _report_transactions(f, t, Transaction.TxType.DEPOSIT, m),
     ),
     'withdrawals': (
         'Withdrawals',
-        lambda f, t: _report_transactions(f, t, Transaction.TxType.WITHDRAWAL),
+        lambda f, t, m: _report_transactions(f, t, Transaction.TxType.WITHDRAWAL, m),
     ),
-    'bet-history': ('Bet history', lambda f, t: _report_bet_history(f, t)),
-    'rounds': ('Game rounds', lambda f, t: _report_rounds(f, t)),
-    'bonuses': ('Issued bonuses', lambda f, t: _report_bonuses(f, t)),
+    'bet-history': ('Bet history', lambda f, t, m: _report_bet_history(f, t, m)),
+    'rounds': ('Game rounds', lambda f, t, m: _report_rounds(f, t, m)),
+    'bonuses': ('Issued bonuses', lambda f, t, m: _report_bonuses(f, t, m)),
 }
 
 
@@ -1216,12 +1226,12 @@ def list_report_kinds() -> list[dict]:
     return [{'kind': kind, 'label': label} for kind, (label, _) in REPORT_KINDS.items()]
 
 
-def build_report(kind: str, date_from=None, date_to=None):
+def build_report(kind: str, date_from=None, date_to=None, member_id=None):
     """Resolve a report kind to ``(header, rows)`` for CSV streaming."""
     entry = REPORT_KINDS.get(kind)
     if not entry:
         raise ValueError(f'Unknown report: {kind}')
-    return entry[1](date_from, date_to)
+    return entry[1](date_from, date_to, member_id)
 
 
 def get_user_full_detail(user_id: int) -> dict:
