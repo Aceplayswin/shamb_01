@@ -7,6 +7,23 @@ html {
 }
 
 :root {
+  /* Brand ramp. tailwind.config.js reads these as
+     rgb(var(--brand-500, ...) / <alpha-value>) with a hardcoded fallback, so
+     until they were declared here every `brand-*` class resolved to its
+     fallback and the palette could not be rebranded at all. Space-separated
+     RGB triplets, which is the format the <alpha-value> syntax requires. */
+  --brand-50: 254 250 235;
+  --brand-100: 253 243 205;
+  --brand-200: 252 233 154;
+  --brand-300: 250 219 103;
+  --brand-400: 247 205 74;
+  --brand-500: 245 197 66;
+  --brand-600: 217 164 38;
+  --brand-700: 173 127 27;
+  --brand-800: 130 95 24;
+  --brand-900: 107 78 24;
+  --brand-950: 62 43 10;
+
   /* Premium Ice-Blue & Silver Light Theme */
   --color-app-bg: 244 246 250; /* #F4F6FA */
   --color-app-fg: 15 23 42; /* Slate 900 */
@@ -35,7 +52,7 @@ body {
   background-image: radial-gradient(rgba(15, 23, 42, 0.02) 1px, transparent 1px);
   background-size: 32px 32px;
   background-attachment: fixed;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-family: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
 @layer utilities {

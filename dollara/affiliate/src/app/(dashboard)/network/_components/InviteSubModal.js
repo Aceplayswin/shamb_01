@@ -1,30 +1,53 @@
 'use client';
 
-import { useState } from 'react';
-import { X, Copy, Check, Sparkles } from 'lucide-react';
-
-
-
+import { useEffect, useState } from 'react';
+import { X, Copy, Check, Sparkles, Loader2 } from 'lucide-react';
+import { affiliateApi } from '../../../../services/affiliateApi';
+import { toast } from '../../../../lib/toast';
 
 export default function InviteSubModal({ onClose }) {
   const [overrideRate, setOverrideRate] = useState('5%');
   const [copied, setCopied] = useState(false);
+  const [inviteLink, setInviteLink] = useState('');
+  const [loading, setLoading] = useState(false);
 
-
-
-
-  const inviteLink = `https://dollara.com/apply?parent_affiliate_id=DLR-AF7X92&override_rate=${overrideRate.replace('%', '')}`;
-
-
+  /**
+   * The link is minted by the server, not assembled here.
+   *
+   * That matters for two reasons: the rate is capped against the programme
+   * default (a partner cannot invite someone at a rate the platform has not
+   * sanctioned), and the resulting URL carries the parameters the apply form
+   * actually reads. The previous hand-built link used a parameter name nothing
+   * consumed, so every invite produced an unlinked application.
+   */
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    affiliateApi('/api/v1/affiliate/network/invite', {
+      method: 'POST',
+      body: JSON.stringify({ overrideRate: overrideRate.replace('%', '') }),
+    })
+      .then((res) => {
+        if (!active) return;
+        setInviteLink(res.invite_url);
+        // The server may have clamped the rate; show what it actually granted.
+        setOverrideRate(`${res.override_rate}%`);
+      })
+      .catch((err) => active && toast.error(err.message))
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overrideRate]);
 
   const handleCopy = () => {
+    if (!inviteLink) return;
     navigator.clipboard.writeText(inviteLink).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
   };
-
-
 
   const overrideRates = ['2%', '3%', '5%', '7%', '10%'];
 
@@ -99,7 +122,14 @@ export default function InviteSubModal({ onClose }) {
             <label className={labelCls}>Invite Link</label>
             <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
               <p className="text-xs font-mono text-brand-600 dark:text-brand-400 break-all leading-normal">
-                {inviteLink}
+                {loading ? (
+                  <span className="inline-flex items-center gap-2 text-slate-400">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Generating link…
+                  </span>
+                ) : (
+                  inviteLink || 'Could not generate a link. Close and try again.'
+                )}
               </p>
             </div>
           </div>
@@ -109,7 +139,8 @@ export default function InviteSubModal({ onClose }) {
           {/* Copy Button */}
           <button
             onClick={handleCopy}
-            className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${
+            disabled={loading || !inviteLink}
+            className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 ${
               copied
                 ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/30'
                 : 'bg-gradient-to-r from-brand-400 to-brand-600 text-black shadow-sm hover:shadow-md hover:brightness-105'

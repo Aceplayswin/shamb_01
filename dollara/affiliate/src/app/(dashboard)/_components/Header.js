@@ -3,77 +3,27 @@
 
 
 
-import { useState } from 'react';
+import Link from 'next/link';
 import { Bell, Calendar, Sun, Moon } from 'lucide-react';
+import { useAffiliate } from '../../../context/AffiliateContext';
 
 
 
+// Mirrors the keys AffiliateProvider understands. The range itself lives in
+// context, not here: while this component owned it, changing the date range
+// re-rendered the picker and reached no page below it.
 const PRESETS = [
-  { label: 'Today',      days: 0 },
-  { label: 'Last 7 Days', days: 7 },
-  { label: 'Last 30 Days',days: 30 },
-  { label: 'This Month',  days: null },
+  { label: 'Last 7 Days', key: '7d' },
+  { label: 'Last 30 Days', key: '30d' },
+  { label: 'Last 90 Days', key: '90d' },
 ];
 
 
 
-function todayISO() {
-
-
-  return new Date().toISOString().split('T')[0];
-
-
-}
-
-
-function offsetISO(days) {
-
-
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString().split('T')[0];
-
-
-}
-
 export default function Header({ theme, toggleTheme }) {
+  const { me, unread, range, applyPreset, setCustomRange } = useAffiliate();
 
-
-  const [activePreset, setActivePreset] = useState('Last 7 Days');
-
-  const [from, setFrom] = useState(offsetISO(7));
-
-  const [to,   setTo]   = useState(todayISO());
-
-
-  const applyPreset = ({ label, days }) => {
-
-    setActivePreset(label);
-
-    if (days === 0) { setFrom(todayISO()); setTo(todayISO()); return; }
-
-    if (days === null) {
-
-      const d = new Date();
-
-      setFrom(new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0]);
-
-      setTo(todayISO());
-
-      return;
-
-    }
-
-
-    setFrom(offsetISO(days));
-
-
-    setTo(todayISO());
-
-
-
-
-  };
+  const initial = (me?.name || '?').trim().charAt(0).toUpperCase();
 
   return (
     <header className="h-16 shrink-0 flex items-center justify-between px-6 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm sticky top-0 z-30 transition-colors duration-300">
@@ -97,9 +47,9 @@ export default function Header({ theme, toggleTheme }) {
           <button
               key={p.label}
               type="button"
-              onClick={() => applyPreset(p)}
+              onClick={() => applyPreset(p.key)}
               className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                activePreset === p.label
+                range.preset === p.key
                   ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm'
                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
@@ -123,8 +73,8 @@ export default function Header({ theme, toggleTheme }) {
          
           <input
             type="date"
-            value={from}
-            onChange={(e) => { setFrom(e.target.value); setActivePreset('Custom'); }}
+            value={range.from}
+            onChange={(e) => setCustomRange(e.target.value, range.to)}
             className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-[11px] focus:outline-none focus:border-brand-500"
           />
 
@@ -133,8 +83,8 @@ export default function Header({ theme, toggleTheme }) {
 
           <input
             type="date"
-            value={to}
-            onChange={(e) => { setTo(e.target.value); setActivePreset('Custom'); }}
+            value={range.to}
+            onChange={(e) => setCustomRange(range.from, e.target.value)}
             className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-[11px] focus:outline-none focus:border-brand-500"
           />
         </div>
@@ -165,14 +115,19 @@ export default function Header({ theme, toggleTheme }) {
 
 
 
-        {/* Notification bell */}
-        <button
-          type="button"
+        {/* Notification bell — a link now, and the dot reflects the real count */}
+        <Link
+          href="/notifications"
+          title={unread ? `${unread} unread notification${unread === 1 ? '' : 's'}` : 'Notifications'}
           className="relative w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
         >
           <Bell className="w-4 h-4" />
-          <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-brand-500 border border-white dark:border-slate-900" />
-        </button>
+          {unread > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border border-white bg-brand-500 px-1 text-[9px] font-bold text-slate-900 dark:border-slate-900">
+              {unread > 9 ? '9+' : unread}
+            </span>
+          )}
+        </Link>
 
 
 
@@ -181,15 +136,19 @@ export default function Header({ theme, toggleTheme }) {
          
          
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center text-black font-bold text-xs shrink-0 shadow-sm">
-            A
+            {initial}
           </div>
 
 
           <div className="hidden sm:block">
 
-            <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">Alex Morgan</p>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500">Partner Account</p>
-            
+            <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
+              {me?.name ?? 'Loading…'}
+            </p>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500">
+              {me?.tier_label ? `${me.tier_label} Partner` : 'Partner Account'}
+            </p>
+
           </div>
         </div>
 

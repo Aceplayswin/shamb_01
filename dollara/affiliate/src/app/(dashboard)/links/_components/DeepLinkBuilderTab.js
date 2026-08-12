@@ -2,18 +2,26 @@
 
 import { useState } from 'react';
 import { Smartphone, Copy, Check, Apple, Monitor } from 'lucide-react';
+import { useAffiliate } from '../../../../context/AffiliateContext';
 
-
-
-
-export default function DeepLinkBuilderTab() {
+export default function DeepLinkBuilderTab({ links = [] }) {
+  const { me } = useAffiliate();
   const [platform, setPlatform] = useState('android');
   const [bundleId, setBundleId] = useState('com.dollara.gaming');
   const [deepPath, setDeepPath] = useState('dollara://slots/crash-game');
   const [sub, setSub] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const generatedUrl = `https://dollara.com/dl?platform=${platform}&pkg=${bundleId}&deep=${encodeURIComponent(deepPath)}&ref=DLR-AF7X92${sub ? `&sub=${sub}` : ''}`;
+  // Built on the real tracking endpoint and this partner's real code, so the
+  // link resolves through /r/ and the click is attributed like any other.
+  const base = me ? `${me.tracking_base_url}${me.code}` : '';
+  const params = new URLSearchParams({
+    platform,
+    pkg: bundleId,
+    deep: deepPath,
+  });
+  if (sub) params.set('sub', sub);
+  const generatedUrl = base ? `${base}?${params.toString()}` : '';
 
   const handleCopy = () => {
 
@@ -155,7 +163,10 @@ export default function DeepLinkBuilderTab() {
 
 
         <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-3 text-center">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-700 dark:text-brand-400 font-bold">Phase 1 Mock</span> — Real deferred deep-linking in Phase 2
+          The click is tracked by the same redirect as your web links. Deferred
+          deep-linking — surviving an app-store install — needs the mobile SDK and
+          is not active yet, so on a device without the app this falls back to the
+          web site.
        
        
         </p>

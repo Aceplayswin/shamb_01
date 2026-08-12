@@ -1,3 +1,4 @@
+import logging
 import random
 import secrets
 import string
@@ -145,6 +146,12 @@ def register_user(
     password: str,
     country_code: str = 'IN',
     referral_code: str | None = None,
+    *,
+    affiliate_ref: str | None = None,
+    affiliate_sub: str | None = None,
+    affiliate_click_id=None,
+    signup_ip: str | None = None,
+    email: str | None = None,
 ) -> dict:
     """Direct sign-up: full name + phone + password, no verification step."""
     full_name = (full_name or '').strip()
@@ -201,6 +208,26 @@ def register_user(
         joining = bonus_services.award_joining_bonus(user.id)
         if referred_by:
             bonus_services.award_referral_bonus(user.id, event='register')
+    # Affiliate attribution runs AFTER the transaction commits, in its own
+    # try/except. An affiliate bug must never roll back a created account — the
+    # cost of getting this wrong is a player who cannot log into an account they
+    # just made, versus a missed referral that a backfill can repair.
+    if affiliate_ref:
+        try:
+            # Imported here, not at module scope: core.affiliate_services imports
+            # the password helpers from this module, so a top-level import would
+            # be circular.
+            from core import affiliate_services
+
+            affiliate_services.attribute_signup(
+                user.id, affiliate_ref, affiliate_sub, affiliate_click_id,
+                ip=signup_ip, email=email, phone=phone,
+            )
+        except Exception:
+            logging.getLogger('affiliate').exception(
+                'attribute_signup failed for user %s', user.id
+            )
+
     token = sign_token({'sub': user.id, 'role': User.Role.USER}, tenant=get_current_tenant_id())
     return {
         'userId': user.id,
@@ -482,6 +509,13 @@ def confirm_deposit(transaction_id: int, reference_number: str) -> dict:
     try:
         bonus = bonus_services.award_deposit_bonus(tx.user_id, amount, tx.id)
         bonus_services.award_referral_bonus(tx.user_id, event='deposit', deposit_amount=amount)
+        # Stamps the first deposit and accumulates lifetime totals on the
+        # affiliate referral, if this player came from one. No commission is
+        # awarded here: that happens in the nightly run so every rupee passes
+        # through the same approval workflow. Deferred import — see register_user.
+        from core import affiliate_services
+
+        affiliate_services.record_deposit(tx.user_id, amount, tx.id)
     except Exception:
         pass
     return {

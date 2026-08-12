@@ -31,6 +31,8 @@ import {
   ChevronRight,
   SlidersHorizontal,
   Loader2,
+  AlertTriangle,
+  RefreshCw,
   Image as ImageIcon,
   UploadCloud,
   History,
@@ -394,17 +396,54 @@ export function Button({
   children,
   className = '',
   size = 'md',
+  // `busy` swaps the icon for a spinner and disables the button, so a slow
+  // mutation cannot be double-submitted. Several pages already passed this
+  // prop; without it declared here it was spread onto the DOM node as an
+  // unknown attribute and did nothing.
+  busy = false,
+  disabled,
   ...props
 }) {
   const sizes = { sm: 'px-3 py-1.5 text-xs', md: 'px-4 py-2 text-sm', lg: 'px-5 py-2.5 text-sm' };
   return (
     <button
+      disabled={disabled || busy}
       className={`inline-flex items-center justify-center gap-1.5 rounded-lg font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 disabled:cursor-not-allowed disabled:opacity-50 ${BTN_VARIANTS[variant]} ${sizes[size]} ${className}`}
       {...props}
     >
-      {Icon && <Icon className="h-4 w-4" />}
+      {busy ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        Icon && <Icon className="h-4 w-4" />
+      )}
       {children}
     </button>
+  );
+}
+
+/**
+ * Inline failure state with a retry.
+ *
+ * `useAdminData` has returned an `error` since it was written and no page ever
+ * rendered it — a failed list request just showed an empty table, which reads
+ * as "no data" rather than "this did not load".
+ */
+export function ErrorState({ message, onRetry, className = '' }) {
+  return (
+    <div
+      className={`flex flex-col items-center justify-center gap-3 rounded-xl border border-rose-500/30 bg-rose-500/5 px-6 py-10 text-center ${className}`}
+    >
+      <AlertTriangle className="h-7 w-7 text-rose-400" />
+      <div>
+        <p className="font-semibold text-slate-200">Could not load this</p>
+        <p className="mt-1 text-sm text-slate-400">{message}</p>
+      </div>
+      {onRetry && (
+        <Button variant="secondary" size="sm" icon={RefreshCw} onClick={onRetry}>
+          Try again
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -694,6 +733,27 @@ export function StatusBadge({ status }) {
     cancelled: 'bg-slate-500/15 text-slate-400 ring-slate-500/30',
     inactive: 'bg-slate-500/15 text-slate-400 ring-slate-500/30',
     none: 'bg-slate-500/15 text-slate-400 ring-slate-500/30',
+    // Affiliate programme statuses. Without these they all fell through to the
+    // neutral slate default, which made "paid" and "rejected" look identical.
+    approved: 'bg-emerald-500/15 text-emerald-400 ring-emerald-500/30',
+    paid: 'bg-emerald-500/15 text-emerald-400 ring-emerald-500/30',
+    resolved: 'bg-emerald-500/15 text-emerald-400 ring-emerald-500/30',
+    requested: 'bg-sky-500/15 text-sky-400 ring-sky-500/30',
+    in_progress: 'bg-sky-500/15 text-sky-400 ring-sky-500/30',
+    rotating: 'bg-sky-500/15 text-sky-400 ring-sky-500/30',
+    info_requested: 'bg-amber-500/15 text-amber-400 ring-amber-500/30',
+    pending_affiliate: 'bg-amber-500/15 text-amber-400 ring-amber-500/30',
+    dormant: 'bg-amber-500/15 text-amber-400 ring-amber-500/30',
+    clawed_back: 'bg-red-500/15 text-red-400 ring-red-500/30',
+    revoked: 'bg-red-500/15 text-red-400 ring-red-500/30',
+    actioned: 'bg-red-500/15 text-red-400 ring-red-500/30',
+    dismissed: 'bg-slate-500/15 text-slate-400 ring-slate-500/30',
+    closed: 'bg-slate-500/15 text-slate-400 ring-slate-500/30',
+    // Fraud risk levels, shown through the same badge.
+    low: 'bg-slate-500/15 text-slate-400 ring-slate-500/30',
+    medium: 'bg-amber-500/15 text-amber-400 ring-amber-500/30',
+    high: 'bg-orange-500/15 text-orange-400 ring-orange-500/30',
+    critical: 'bg-red-500/15 text-red-400 ring-red-500/30',
   };
   const cls = map[status] ?? 'bg-slate-500/15 text-slate-400 ring-slate-500/30';
   return (
@@ -956,6 +1016,13 @@ export function DataTable({
   noun = 'record',
   paginate = true,
   pageSize = 10,
+  // Optional checkbox column. Selection is scoped to the visible page, because
+  // the table pages client-side and "select all" across pages the user has not
+  // seen is a bulk action nobody intends.
+  selectable = false,
+  selectedIds,
+  onSelectionChange,
+  rowId = (row) => row.id,
 }) {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -986,7 +1053,7 @@ export function DataTable({
   const filterableCols = useMemo(() => columns.filter((c) => c.filter), [columns]);
 
   // Columns as rendered — a running "Sl. No." is prepended unless opted out.
-  const displayColumns = useMemo(
+  const baseColumns = useMemo(
     () =>
       serialNumber
         ? [
@@ -1092,6 +1159,59 @@ export function DataTable({
   const pageRows = paginate
     ? sorted.slice(safePage * perPage, safePage * perPage + perPage)
     : sorted;
+
+  // --- checkbox selection (opt-in) ---
+  const selection = selectedIds ?? [];
+  const pageIds = useMemo(() => pageRows.map(rowId), [pageRows, rowId]);
+  const allOnPageSelected =
+    pageIds.length > 0 && pageIds.every((id) => selection.includes(id));
+
+  const toggleRow = (id) => {
+    if (!onSelectionChange) return;
+    onSelectionChange(
+      selection.includes(id) ? selection.filter((x) => x !== id) : [...selection, id],
+    );
+  };
+
+  const togglePage = () => {
+    if (!onSelectionChange) return;
+    onSelectionChange(
+      allOnPageSelected
+        ? selection.filter((id) => !pageIds.includes(id))
+        : [...new Set([...selection, ...pageIds])],
+    );
+  };
+
+  const displayColumns = useMemo(() => {
+    if (!selectable) return baseColumns;
+    return [
+      {
+        key: '__select',
+        label: (
+          <input
+            type="checkbox"
+            checked={allOnPageSelected}
+            onChange={togglePage}
+            aria-label="Select all rows on this page"
+            className="h-4 w-4 cursor-pointer rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500/40"
+          />
+        ),
+        sortable: false,
+        render: (row) => (
+          <input
+            type="checkbox"
+            checked={selection.includes(rowId(row))}
+            onChange={() => toggleRow(rowId(row))}
+            onClick={(e) => e.stopPropagation()}
+            aria-label="Select row"
+            className="h-4 w-4 cursor-pointer rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500/40"
+          />
+        ),
+      },
+      ...baseColumns,
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectable, baseColumns, selection, allOnPageSelected, pageIds]);
 
   const hasFilterUi = !!filters || filterableCols.length > 0;
   const filterActiveResolved = filterActive || activeColFilters.length > 0;

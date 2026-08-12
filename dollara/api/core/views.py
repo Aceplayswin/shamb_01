@@ -260,6 +260,15 @@ def register(request):
             body['password'],
             body.get('countryCode', 'IN'),
             referral_code=body.get('referralCode'),
+            # Affiliate attribution, forwarded by the web app from the ?ref/&sub
+            # /&clk params a tracking link left behind. All optional: a direct
+            # sign-up sends none of them and behaves exactly as before.
+            affiliate_ref=body.get('affiliateRef'),
+            affiliate_sub=body.get('affiliateSub'),
+            affiliate_click_id=body.get('affiliateClickId'),
+            signup_ip=(request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip()
+                       or request.META.get('REMOTE_ADDR')),
+            email=body.get('email'),
         )
         return JsonResponse(result, status=201)
     except (KeyError, json.JSONDecodeError) as e:

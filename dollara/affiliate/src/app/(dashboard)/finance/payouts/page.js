@@ -1,10 +1,16 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { Search, Plus, Clock3, Wallet, CreditCard, Banknote, ArrowUpRight } from 'lucide-react';
-import { mockPayoutInfo, mockPayoutMethods, mockPayoutHistory } from '../../../../lib/mockData';
+import { useEffect, useMemo, useState } from 'react';
+import { Search, Plus, Clock3, Wallet, CreditCard } from 'lucide-react';
+import { useAffiliateData } from '../../../../hooks/useAffiliateData';
+import { DataState } from '../../../../components/ui/DataState';
+import { Pagination } from '../../../../components/ui/Pagination';
+import { fmtDateShort, inr, label } from '../../../../lib/format';
+import { toast } from '../../../../lib/toast';
 import RequestPayoutModal from './_components/RequestPayoutModal';
 import ManageMethodsModal from './_components/ManageMethodsModal';
+
+const PAGE_SIZE = 20;
 
 const STATUS_BADGES = {
   requested: 'bg-slate-50 dark:bg-slate-950/20 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800',
@@ -23,24 +29,55 @@ const STATUS_LABELS = {
 export default function PayoutsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [page, setPage] = useState(0);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [showManageMethods, setShowManageMethods] = useState(false);
 
-  const canRequestPayout = mockPayoutInfo.availableBalance >= mockPayoutInfo.minimumThreshold;
+  const query = useMemo(() => {
+    const params = new URLSearchParams({
+      limit: String(PAGE_SIZE),
+      offset: String(page * PAGE_SIZE),
+    });
+    if (statusFilter !== 'all') params.set('status', statusFilter);
+    return params.toString();
+  }, [statusFilter, page]);
 
+  const { data, loading, error, reload } = useAffiliateData(
+    `/api/v1/affiliate/payouts?${query}`,
+    [query],
+  );
+
+  const balance = data?.balance;
+  const methods = data?.methods ?? [];
+  const history = data?.records ?? [];
+  const total = data?.total ?? 0;
+
+  // The server decides eligibility — it knows the threshold, whether a request
+  // is already open, and whether a payout method exists. Recomputing that here
+  // would be a second source of truth that can disagree with the one enforced.
+  const canRequestPayout = Boolean(balance?.can_request);
+
+  // Request ID / method search stays client-side: the page is already small and
+  // the API's payout list has no text index worth hitting for it.
   const filteredHistory = useMemo(() => {
-    let items = mockPayoutHistory;
-    if (statusFilter !== 'all') {
-      items = items.filter((item) => item.status === statusFilter);
-    }
-    if (search.trim()) {
-      items = items.filter((item) =>
-        item.id.toLowerCase().includes(search.toLowerCase()) ||
-        item.method.toLowerCase().includes(search.toLowerCase())
-      );
-    }
-    return items;
-  }, [search, statusFilter]);
+    const needle = search.trim().toLowerCase();
+    if (!needle) return history;
+    return history.filter(
+      (item) =>
+        String(item.id).includes(needle)
+        || (item.method_label || '').toLowerCase().includes(needle),
+    );
+  }, [history, search]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [statusFilter]);
+
+  const handleRequested = () => {
+    setShowRequestModal(false);
+    reload();
+    toast.success('Payout requested — the finance team will review it shortly.');
+  };
 
   return (
     <div className="space-y-6 animate-fade-up">
@@ -68,27 +105,48 @@ export default function PayoutsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Card is dark in both themes, so the text is explicitly light. It
+            previously used a near-black panel with slate-900 text, which made
+            the balance invisible in light mode. */}
         <div className="rounded-3xl bg-slate-950/95 border border-slate-800/80 p-5 shadow-sm shadow-slate-950/50">
           <div className="flex items-center justify-between gap-3 mb-4">
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400 dark:text-slate-500">
+              <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400">
                 Available balance
               </span>
-              <p className="mt-3 text-3xl font-black font-display text-slate-900 dark:text-slate-100">
-                ${mockPayoutInfo.availableBalance.toLocaleString()}
+              <p className="mt-3 text-3xl font-black font-display text-white">
+                {inr(balance?.available ?? 0)}
               </p>
+              {balance?.pending > 0 && (
+                <p className="mt-1 text-xs text-slate-400">
+                  {inr(balance.pending)} still pending approval
+                </p>
+              )}
             </div>
-            <Wallet className="w-7 h-7 text-brand-600 dark:text-brand-400" />
+            <Wallet className="w-7 h-7 text-brand-400" />
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Minimum payout threshold: <span className="font-semibold text-slate-900 dark:text-slate-100">${mockPayoutInfo.minimumThreshold.toLocaleString()}</span>.
+          <p className="text-xs text-slate-400">
+            Minimum payout threshold:{' '}
+            <span className="font-semibold text-slate-100">
+              {inr(balance?.minimum_threshold ?? 0)}
+            </span>.
           </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-            Next automatic payout window: <span className="font-semibold text-slate-900 dark:text-slate-100">{mockPayoutInfo.nextPayoutCycle}</span>.
+          <p className="text-xs text-slate-400 mt-2">
+            Next automatic payout window:{' '}
+            <span className="font-semibold text-slate-100">
+              {fmtDateShort(balance?.next_cycle_at)}
+            </span>.
           </p>
-          {!canRequestPayout && (
-            <div className="mt-4 rounded-2xl bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/30 p-3 text-sm text-rose-700 dark:text-rose-300">
-              Your balance is below the minimum payout threshold. Keep earning to request a payout.
+
+          {balance && !canRequestPayout && (
+            <div className="mt-4 rounded-2xl bg-rose-950/40 border border-rose-900/40 p-3 text-sm text-rose-200">
+              {/* Says which condition is actually blocking, rather than always
+                  blaming the balance. */}
+              {balance.has_open_request
+                ? 'You already have a payout in progress. It has to complete before you can request another.'
+                : methods.length === 0
+                  ? 'Add a payout method before you can withdraw.'
+                  : 'Your approved balance is below the minimum payout threshold.'}
             </div>
           )}
         </div>
@@ -113,20 +171,32 @@ export default function PayoutsPage() {
               </button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {mockPayoutMethods.map((method) => (
-                <div key={method.id} className={`rounded-3xl border p-4 transition-colors ${method.isPrimary ? 'border-brand-400/30 bg-brand-50/50 dark:bg-brand-950/20' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/30'}`}>
+              {methods.length === 0 && (
+                <p className="col-span-full rounded-2xl border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400 dark:border-slate-700">
+                  No payout methods yet. Add one before requesting a withdrawal.
+                </p>
+              )}
+              {methods.map((method) => (
+                <div
+                  key={method.id}
+                  className={`rounded-3xl border p-4 transition-colors ${method.is_primary ? 'border-brand-400/30 bg-brand-50/50 dark:bg-brand-950/20' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/30'}`}
+                >
                   <div className="flex items-start justify-between gap-2 mb-4">
                     <div>
                       <p className="text-xs font-bold uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">
-                        {method.type.toUpperCase()}
+                        {method.method_type.toUpperCase()}
                       </p>
-                      <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">{method.label}</p>
+                      <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        {method.label || label(method.method_type)}
+                      </p>
                     </div>
-                    {method.isPrimary && (
-                      <span className="rounded-full bg-brand-500/10 text-brand-700 dark:text-brand-300 text-[10px] font-bold px-2 py-1">Primary</span>
+                    {method.is_primary && (
+                      <span className="rounded-full bg-brand-500/10 text-brand-700 dark:text-brand-300 text-[10px] font-bold px-2 py-1">
+                        Primary
+                      </span>
                     )}
                   </div>
-                  <p className="text-sm text-slate-600 dark:text-slate-300">{method.details}</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">{method.masked_details}</p>
                 </div>
               ))}
             </div>
@@ -180,6 +250,15 @@ export default function PayoutsPage() {
           </div>
         </div>
 
+        <DataState
+          loading={loading}
+          error={error}
+          onRetry={reload}
+          empty={!filteredHistory.length}
+          emptyTitle="No payout requests yet"
+          emptyHint="Once your approved balance clears the threshold you can request a withdrawal."
+          emptyIcon={Wallet}
+        >
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
@@ -195,14 +274,23 @@ export default function PayoutsPage() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredHistory.map((entry) => (
                 <tr key={entry.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                  <td className="p-4 font-mono font-bold text-slate-400 dark:text-slate-500">{entry.id}</td>
-                  <td className="p-4 font-black font-display text-slate-900 dark:text-slate-100">${entry.amount.toLocaleString()}</td>
-                  <td className="p-4 text-slate-600 dark:text-slate-300 font-semibold">{entry.method}</td>
-                  <td className="p-4 text-slate-500 dark:text-slate-400">{entry.requestedAt}</td>
-                  <td className="p-4 text-slate-500 dark:text-slate-400">{entry.processedAt}</td>
+                  <td className="p-4 font-mono font-bold text-slate-400 dark:text-slate-500">#{entry.id}</td>
+                  <td className="p-4 font-black font-display text-slate-900 dark:text-slate-100">{inr(entry.amount)}</td>
+                  <td className="p-4 text-slate-600 dark:text-slate-300 font-semibold">
+                    {entry.method_label}
+                    {entry.reference && (
+                      <span className="block text-[10px] font-normal text-slate-400">
+                        Ref: {entry.reference}
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-4 text-slate-500 dark:text-slate-400">{fmtDateShort(entry.requested_at)}</td>
+                  <td className="p-4 text-slate-500 dark:text-slate-400">
+                    {entry.processed_at ? fmtDateShort(entry.processed_at) : '—'}
+                  </td>
                   <td className="p-4">
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap ${STATUS_BADGES[entry.status]}`}>
-                      {STATUS_LABELS[entry.status]}
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap ${STATUS_BADGES[entry.status] || STATUS_BADGES.requested}`}>
+                      {STATUS_LABELS[entry.status] || entry.status}
                     </span>
                   </td>
                 </tr>
@@ -217,21 +305,32 @@ export default function PayoutsPage() {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          page={page}
+          total={total}
+          perPage={PAGE_SIZE}
+          onPage={setPage}
+          noun="request"
+        />
+        </DataState>
       </div>
 
       {showRequestModal && (
         <RequestPayoutModal
-          methods={mockPayoutMethods}
-          balance={mockPayoutInfo.availableBalance}
-          minimumThreshold={mockPayoutInfo.minimumThreshold}
+          methods={methods}
+          balance={balance?.available ?? 0}
+          minimumThreshold={balance?.minimum_threshold ?? 0}
           onClose={() => setShowRequestModal(false)}
+          onRequested={handleRequested}
         />
       )}
 
       {showManageMethods && (
         <ManageMethodsModal
-          methods={mockPayoutMethods}
+          methods={methods}
           onClose={() => setShowManageMethods(false)}
+          onChanged={reload}
         />
       )}
     </div>

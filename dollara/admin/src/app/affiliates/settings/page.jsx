@@ -1,33 +1,77 @@
 'use client';
 
-import { useState } from 'react';
-import { 
+import { useEffect, useState } from 'react';
+import {
   AdminShell,
   Button,
+  ErrorState,
   Field,
   Input,
   Select,
-  toast
+  Toggle,
+  toast,
+  useAdminData,
 } from '@/components/admin/AdminShell';
-import { AFFILIATE_SETTINGS } from '@/lib/affiliateMockData';
-import { Percent, DollarSign, Clock, ShieldAlert } from 'lucide-react';
+import { adminApi } from '@/services/adminApi';
+import { Percent, DollarSign, Clock, ShieldAlert, Loader2 } from 'lucide-react';
 
+/**
+ * Programme-wide defaults.
+ *
+ * Stored as one JSON row in `platform_settings`, which is why this whole screen
+ * is a single GET and a single PUT. Every rate here is what an affiliate
+ * inherits when their own override is left at zero.
+ */
 export default function GlobalSettingsPage() {
-  const [settings, setSettings] = useState(AFFILIATE_SETTINGS);
+  const { data, loading, error, reload } = useAdminData(
+    '/api/v1/admin/affiliates/settings',
+    [],
+  );
+  const [settings, setSettings] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  const handleSave = (e) => {
+  useEffect(() => {
+    if (data) setSettings(data);
+  }, [data]);
+
+  const handleSave = async (e) => {
     e.preventDefault();
     setBusy(true);
-    setTimeout(() => {
-      toast.success('Global settings updated successfully');
+    try {
+      await adminApi('/api/v1/admin/affiliates/settings', {
+        method: 'PUT',
+        body: JSON.stringify(settings),
+      });
+      toast.success('Global settings updated');
+      reload();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
       setBusy(false);
-    }, 600);
+    }
   };
 
   const handleChange = (key, value) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
+    setSettings((prev) => ({ ...prev, [key]: value }));
   };
+
+  if (error) {
+    return (
+      <AdminShell title="Global Settings">
+        <ErrorState message={error} onRetry={reload} />
+      </AdminShell>
+    );
+  }
+
+  if (!settings) {
+    return (
+      <AdminShell title="Global Settings">
+        <div className="flex justify-center py-16">
+          <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
+        </div>
+      </AdminShell>
+    );
+  }
 
   return (
     <AdminShell title="Global Settings">
@@ -66,7 +110,7 @@ export default function GlobalSettingsPage() {
                   onChange={e => handleChange('default_commission_rate', Number(e.target.value))}
                 />
               </Field>
-              <Field label="CPA Amount ($)">
+              <Field label="CPA Amount (₹)">
                 <Input 
                   type="number" 
                   value={settings.default_cpa_amount}
@@ -106,7 +150,7 @@ export default function GlobalSettingsPage() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Field label="Minimum Payout Threshold ($)">
+            <Field label="Minimum Payout Threshold (₹)">
               <Input 
                 type="number" 
                 value={settings.min_payout_threshold}
@@ -124,6 +168,91 @@ export default function GlobalSettingsPage() {
                 <option value="on_demand">On-Demand (Anytime)</option>
               </Select>
             </Field>
+
+            <div>
+              <Field label="Auto-approve commission after (days)">
+                <Input
+                  type="number"
+                  min="0"
+                  value={settings.auto_approve_days}
+                  onChange={(e) => handleChange('auto_approve_days', Number(e.target.value))}
+                />
+              </Field>
+              <p className="mt-2 text-xs text-slate-500">
+                Pending entries older than this are approved automatically — unless the
+                referral carries an open fraud flag, which always waits for a human.
+                Set 0 to approve everything by hand.
+              </p>
+            </div>
+
+            <div>
+              <Field label="Minimum first deposit for CPA (₹)">
+                <Input
+                  type="number"
+                  min="0"
+                  value={settings.cpa_min_deposit}
+                  onChange={(e) => handleChange('cpa_min_deposit', Number(e.target.value))}
+                />
+              </Field>
+              <p className="mt-2 text-xs text-slate-500">
+                A first deposit below this does not trigger the acquisition bounty.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Network overrides */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
+          <div className="mb-6 flex items-center gap-2">
+            <Percent className="text-emerald-500" size={20} />
+            <h3 className="text-lg font-semibold text-white">Network Overrides</h3>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div>
+              <Field label="Default override rate (%)">
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={settings.default_override_rate}
+                  onChange={(e) => handleChange('default_override_rate', Number(e.target.value))}
+                />
+              </Field>
+              <p className="mt-2 text-xs text-slate-500">
+                What a parent earns on their sub-affiliates&apos; commission. Overrides
+                are never taken on other overrides, so a deep chain cannot compound.
+              </p>
+            </div>
+
+            <div>
+              <Field label="Maximum network depth">
+                <Input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={settings.max_override_depth}
+                  onChange={(e) => handleChange('max_override_depth', Number(e.target.value))}
+                />
+              </Field>
+              <p className="mt-2 text-xs text-slate-500">
+                How many levels up the tree an override is paid.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-4">
+            <Toggle
+              checked={Boolean(settings.deduct_bonus_from_ngr)}
+              onChange={(v) => handleChange('deduct_bonus_from_ngr', v)}
+              label="Deduct bonus costs from net gaming revenue"
+            />
+            <Toggle
+              checked={Boolean(settings.negative_ngr_carry_forward)}
+              onChange={(v) => handleChange('negative_ngr_carry_forward', v)}
+              label="Carry a losing day forward against future revenue"
+            />
           </div>
         </div>
 
@@ -146,32 +275,46 @@ export default function GlobalSettingsPage() {
               <p className="text-xs text-slate-500 mt-2">Flags the affiliate account if too many signups occur from the exact same IP address.</p>
             </div>
 
+            {/* The shared Toggle, not raw checkboxes — these looked and behaved
+                differently from every other switch in the console. */}
             <div className="flex flex-col gap-4">
-              <label className="flex items-center gap-3 cursor-pointer group">
-                <input 
-                  type="checkbox" 
-                  className="w-5 h-5 rounded border-slate-700 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-900"
-                  checked={settings.fraud_block_disposable_emails}
-                  onChange={e => handleChange('fraud_block_disposable_emails', e.target.checked)}
+              <div>
+                <Toggle
+                  checked={Boolean(settings.fraud_block_disposable_emails)}
+                  onChange={(v) => handleChange('fraud_block_disposable_emails', v)}
+                  label="Flag disposable email domains"
                 />
-                <div>
-                  <p className="text-sm font-medium text-slate-200 group-hover:text-white transition-colors">Block Disposable Emails</p>
-                  <p className="text-xs text-slate-500">Prevent signups from known temporary email domains (e.g., mailinator.com)</p>
-                </div>
-              </label>
+                <p className="mt-1 text-xs text-slate-500">
+                  Raises a flag when a referred player signs up with a throwaway address.
+                  Signups are never blocked — a false positive would cost a real player.
+                </p>
+              </div>
 
-              <label className="flex items-center gap-3 cursor-pointer group">
-                <input 
-                  type="checkbox" 
-                  className="w-5 h-5 rounded border-slate-700 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-slate-900"
-                  checked={settings.fraud_flag_self_referral}
-                  onChange={e => handleChange('fraud_flag_self_referral', e.target.checked)}
+              <div>
+                <Toggle
+                  checked={Boolean(settings.fraud_flag_self_referral)}
+                  onChange={(v) => handleChange('fraud_flag_self_referral', v)}
+                  label="Flag self-referrals"
                 />
-                <div>
-                  <p className="text-sm font-medium text-slate-200 group-hover:text-white transition-colors">Flag Self-Referrals</p>
-                  <p className="text-xs text-slate-500">Automatically flag accounts where the player device signature matches the affiliate's device signature.</p>
-                </div>
-              </label>
+                <p className="mt-1 text-xs text-slate-500">
+                  Flags a referral whose contact details match the affiliate&apos;s own.
+                </p>
+              </div>
+
+              <div>
+                <Field label="Click retention (days)">
+                  <Input
+                    type="number"
+                    min="30"
+                    value={settings.click_retention_days}
+                    onChange={(e) => handleChange('click_retention_days', Number(e.target.value))}
+                  />
+                </Field>
+                <p className="mt-1 text-xs text-slate-500">
+                  Unconverted click records are purged after this. Converted clicks are
+                  kept regardless — they are the evidence behind an attribution.
+                </p>
+              </div>
             </div>
           </div>
         </div>

@@ -20,16 +20,22 @@ import { primaryBtn, ghostBtn, Spinner } from './tokens';
 // In Phase 2 this value comes from the JWT / session cookie.
 
 
-const MOCK_REF_CODE = 'DLR-AF7X92';
-const MOCK_LINK     = `https://dollara.com/?ref=${MOCK_REF_CODE}`;
 
 
 
-export default function StepTrackingLink({ payoutMethod, docFile, onBack, onFinish, loading }) {
+
+export default function StepTrackingLink({ affiliate, payoutMethod, docFile, onBack, onFinish, loading }) {
+  // The partner's real code and tracking URL, from the session. The comment on
+  // the constant this replaces said it would come from the session in phase 2 —
+  // this is that.
+  const refCode = affiliate?.code ?? '—';
+  const trackingLink = affiliate
+    ? `${affiliate.tracking_base_url}${affiliate.code}`
+    : '';
   const [copied, setCopied] = useState(false);
 
   const copyLink = () => {
-    navigator.clipboard.writeText(MOCK_LINK).then(() => {
+    navigator.clipboard.writeText(trackingLink).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -63,7 +69,7 @@ export default function StepTrackingLink({ payoutMethod, docFile, onBack, onFini
           Your Referral Code
         </span>
         <span className="text-sm font-black text-brand-700 font-display tracking-widest">
-          {MOCK_REF_CODE}
+          {refCode}
         </span>
       </div>
 
@@ -80,7 +86,7 @@ export default function StepTrackingLink({ payoutMethod, docFile, onBack, onFini
           <input
             type="text"
             readOnly
-            value={MOCK_LINK}
+            value={trackingLink}
             className="flex-1 px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 text-sm font-mono shadow-sm cursor-default"
           />
 

@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Check, ArrowUpRight, CreditCard, Globe } from 'lucide-react';
+import { AlertCircle, X, Check, ArrowUpRight, CreditCard, Globe } from 'lucide-react';
+import { affiliateApi } from '../../../../../services/affiliateApi';
+import { inr } from '../../../../../lib/format';
 
 const METHOD_ICONS = {
   bank: CreditCard,
@@ -9,29 +11,44 @@ const METHOD_ICONS = {
   crypto: Globe,
 };
 
-export default function RequestPayoutModal({ methods, balance, minimumThreshold, onClose }) {
+export default function RequestPayoutModal({
+  methods,
+  balance,
+  minimumThreshold,
+  onClose,
+  onRequested,
+}) {
   const [amount, setAmount] = useState(balance);
   const [methodId, setMethodId] = useState(
-    methods.find((m) => m.isPrimary)?.id || methods[0]?.id
+    methods.find((m) => m.is_primary)?.id || methods[0]?.id,
   );
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [error, setError] = useState('');
 
   const selectedMethod = methods.find((m) => m.id === methodId);
   const canSubmit = amount >= minimumThreshold && amount > 0 && amount <= balance;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit || submitting) return;
 
     setSubmitting(true);
-    // simulate request
-    await new Promise((r) => setTimeout(r, 1200));
-    setSubmitting(false);
-    setDone(true);
-
-    // close after a short delay so user sees the success state
-    setTimeout(onClose, 1400);
+    setError('');
+    try {
+      await affiliateApi('/api/v1/affiliate/payouts/request', {
+        method: 'POST',
+        body: JSON.stringify({ amount, methodId }),
+      });
+      setDone(true);
+      // Brief success state, then let the page refetch the new balance.
+      setTimeout(() => onRequested?.(), 1400);
+    } catch (err) {
+      // The server enforces the threshold, the open-request rule and the
+      // available balance; whichever one rejected says so here.
+      setError(err.message || 'Could not submit your payout request.');
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -81,7 +98,7 @@ export default function RequestPayoutModal({ methods, balance, minimumThreshold,
                   Available
                 </p>
                 <p className="mt-2 text-3xl font-black text-slate-900 dark:text-slate-100">
-                  ${balance.toLocaleString()}
+                  {inr(balance)}
                 </p>
               </div>
               <div className="rounded-2xl bg-slate-50 dark:bg-slate-950/30 p-4">
@@ -89,7 +106,7 @@ export default function RequestPayoutModal({ methods, balance, minimumThreshold,
                   Minimum
                 </p>
                 <p className="mt-2 text-3xl font-black text-slate-900 dark:text-slate-100">
-                  ${minimumThreshold.toLocaleString()}
+                  {inr(minimumThreshold)}
                 </p>
               </div>
               <div className="rounded-2xl bg-slate-50 dark:bg-slate-950/30 p-4">
@@ -129,7 +146,7 @@ export default function RequestPayoutModal({ methods, balance, minimumThreshold,
                 >
                   {methods.map((method) => (
                     <option key={method.id} value={method.id}>
-                      {method.label} — {method.details}
+                      {method.label || method.method_type.toUpperCase()} — {method.masked_details}
                     </option>
                   ))}
                 </select>
@@ -146,6 +163,13 @@ export default function RequestPayoutModal({ methods, balance, minimumThreshold,
                 Requests above your available balance will be rejected.
               </p>
             </div>
+
+            {error && (
+              <div className="mb-3 flex items-start gap-2 rounded-xl border border-danger-400/40 bg-danger-500/10 px-3 py-2.5 text-xs text-danger-600">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
 
             <button
               type="submit"

@@ -14,7 +14,7 @@ import { inputClasses, labelClasses, primaryBtn, ghostBtn } from './tokens';
 
 
 
-export default function StepPayout({ method, setMethod, details, updateDetail, onNext, onBack }) {
+export default function StepPayout({ method, setMethod, details, updateDetail, onNext, onBack, loading }) {
   return (
     <div className="animate-fade-up space-y-6">
 
@@ -155,7 +155,7 @@ export default function StepPayout({ method, setMethod, details, updateDetail, o
           <ArrowLeft className="w-4 h-4" />
           <span>Back</span>
         </button>
-        <button type="button" onClick={onNext} className={primaryBtn}>
+        <button type="button" onClick={onNext} disabled={loading} className={primaryBtn}>
           <span>Save & Continue</span>
           <ArrowRight className="w-4 h-4" />
         </button>

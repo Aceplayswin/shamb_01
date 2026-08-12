@@ -10,8 +10,21 @@ export default function EarningsFilters({
   search,
   onSearchChange
 }) {
-  const types = ['All', 'Revenue Share', 'CPA', 'Override'];
-  const statuses = ['All', 'Pending', 'Approved', 'Paid', 'Clawed Back'];
+  // Values are the API's enum keys; labels are what the partner reads.
+  const types = [
+    { value: 'All', label: 'All types' },
+    { value: 'revenue_share', label: 'Revenue Share' },
+    { value: 'cpa', label: 'CPA' },
+    { value: 'override', label: 'Override' },
+    { value: 'clawback', label: 'Clawback' },
+  ];
+  const statuses = [
+    { value: 'all', label: 'All statuses' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'approved', label: 'Approved' },
+    { value: 'paid', label: 'Paid' },
+    { value: 'clawed_back', label: 'Clawed back' },
+  ];
 
   const selectCls = 'px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-brand-500 transition-colors';
 
@@ -24,7 +37,7 @@ export default function EarningsFilters({
           type="text"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search by period / tx ref..."
+          placeholder="Search by entry or referral id…"
           className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 transition-colors"
         />
       </div>
@@ -38,7 +51,7 @@ export default function EarningsFilters({
           <span className="text-[10px] font-bold text-slate-400 uppercase">Type:</span>
           <select value={typeFilter} onChange={(e) => onTypeChange(e.target.value)} className={selectCls}>
             {types.map((t) => (
-              <option key={t} value={t}>{t}</option>
+              <option key={t.value} value={t.value}>{t.label}</option>
             ))}
           </select>
         </div>
@@ -50,7 +63,7 @@ export default function EarningsFilters({
           <span className="text-[10px] font-bold text-slate-400 uppercase">Status:</span>
           <select value={statusFilter} onChange={(e) => onStatusChange(e.target.value)} className={selectCls}>
             {statuses.map((s) => (
-              <option key={s} value={s.toLowerCase().replace(' ', '_')}>{s}</option>
+              <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </select>
 

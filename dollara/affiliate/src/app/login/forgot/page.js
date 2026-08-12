@@ -1,47 +1,60 @@
 'use client';
 
 import { useState } from 'react';
-import Swal from 'sweetalert2';
-import { Mail, Send, KeyRound } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { CheckCircle2, Mail, Send, KeyRound } from 'lucide-react';
 
 import AuthShell, { inputClasses, labelClasses, primaryBtn, Spinner } from '../_components/AuthShell';
+import { requestPasswordReset } from '../../../services/affiliateApi';
 
 export default function ForgotPasswordPage() {
 
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
+  const router = useRouter();
 
-
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
 
-
-
-
-    // Simulate password reset email dispatch — wire to real API in Phase 2
-
-
-
-
-    setTimeout(() => {
-      setLoading(false);
-      Swal.fire({
-        title: 'Reset Link Sent!',
-        text: 'If that email is registered, you will receive password reset instructions shortly.',
-        icon: 'success',
-        background: '#FFFFFF',
-        color: '#0F172A',
-        confirmButtonColor: '#E2B13C',
-      }).then(() => {
-        window.location.href = '/login';
-      });
-    }, 1000);
+    try {
+      await requestPasswordReset(email.trim());
+    } catch {
+      // Swallowed on purpose. The endpoint always reports success so that this
+      // form cannot be used to discover which addresses are registered, and
+      // showing a network error here would leak the same thing by accident.
+    }
+    setLoading(false);
+    setSent(true);
   };
 
-
-
+  if (sent) {
+    return (
+      <AuthShell backHref="/login" backLabel="Back to Login">
+        <div className="animate-fade-up text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-600">
+            <CheckCircle2 className="h-6 w-6" />
+          </div>
+          <h1 className="font-display text-2xl font-extrabold text-slate-900">
+            Check your inbox
+          </h1>
+          <p className="mx-auto mt-3 max-w-sm text-sm text-slate-500">
+            If <span className="font-semibold text-slate-700">{email}</span> is
+            registered as a partner account, reset instructions are on their way.
+          </p>
+          <button
+            type="button"
+            onClick={() => router.push('/login')}
+            className={`${primaryBtn} mt-8`}
+          >
+            Back to sign in
+          </button>
+        </div>
+      </AuthShell>
+    );
+  }
 
   return (
     <AuthShell backHref="/login" backLabel="Back to Login">
@@ -59,7 +72,7 @@ export default function ForgotPasswordPage() {
 
           <p className="text-xs text-slate-500 mt-2">
 
-            Enter your registered email and we'll send you a secure recovery link
+            Enter your registered email and we&apos;ll send you a secure recovery link
 
           </p>
         </div>

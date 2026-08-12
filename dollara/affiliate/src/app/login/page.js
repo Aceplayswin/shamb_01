@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import Swal from 'sweetalert2';
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { AlertCircle, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import AuthShell, { inputClasses, labelClasses, primaryBtn, Spinner } from './_components/AuthShell';
+import { affiliateLogin, getAffiliateToken } from '../../services/affiliateApi';
 
 
 
@@ -20,25 +21,38 @@ export default function LoginPage() {
 
   const [loading, setLoading] = useState(false);
 
+  const [error, setError] = useState('');
 
+  const router = useRouter();
 
-  const handleSubmit = (e) => {
+  // Already signed in — skip the form rather than making them log in twice.
+  useEffect(() => {
+    if (getAffiliateToken()) router.replace('/dashboard');
+  }, [router]);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
+    setError('');
 
+    try {
+      const result = await affiliateLogin(email.trim(), password);
 
-
-    // Simulate API auth check — replace with real API call in Phase 2
-
-    setTimeout(() => {
-
+      // Three possible destinations: the second factor, onboarding, or the
+      // console. Which one depends entirely on the server's answer — the client
+      // never assumes.
+      if (result.twoFactorRequired) {
+        router.push('/login/2fa');
+        return;
+      }
+      router.replace(result.onboardingComplete === false ? '/onboarding' : '/dashboard');
+    } catch (err) {
+      // Shown inline rather than in a modal: the message usually says what to
+      // fix ("still under review", "suspended"), and a dialog buries that.
+      setError(err.message || 'Could not sign you in. Please try again.');
       setLoading(false);
-
-      // After success, redirect to 2FA verification
-
-      window.location.href = '/login/2fa';
-    }, 1200);
-
+    }
   };
 
   return (
@@ -58,6 +72,13 @@ export default function LoginPage() {
 
 
         {/* Form */}
+
+        {error && (
+          <div className="mb-5 flex items-start gap-2 rounded-xl border border-danger-400/40 bg-danger-500/10 px-4 py-3 text-sm text-danger-600">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
 
@@ -141,7 +162,7 @@ export default function LoginPage() {
               onChange={(e) => setRememberMe(e.target.checked)}
               className="rounded border-slate-300 text-brand-500 focus:ring-brand-500 h-4 w-4"
             />
-            <span>Remember me</span>
+            <span>Keep me signed in on this device</span>
           </label>
 
 
@@ -160,7 +181,7 @@ export default function LoginPage() {
 
         
         <div className="mt-8 pt-6 border-t border-slate-100 text-center text-xs text-slate-500">
-          Don't have a partner account?{' '}
+          Don&apos;t have a partner account?{' '}
           <Link href="/apply" className="font-bold text-brand-600 hover:text-brand-800 transition-colors">
             Apply Now
           </Link>

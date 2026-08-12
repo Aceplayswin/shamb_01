@@ -123,10 +123,27 @@ LOGGING = {
             'level': 'WARNING',
             'encoding': 'utf-8',
         },
+        # Affiliate program: attribution decisions, commission runs and signed
+        # partner requests. Separate from games.log because these are money
+        # decisions about third parties and get read during payout disputes.
+        'affiliate_file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': str(LOG_DIR / 'affiliate.log'),
+            'maxBytes': 10 * 1024 * 1024,
+            'backupCount': 10,
+            'formatter': 'game',
+            'level': 'INFO',
+            'encoding': 'utf-8',
+        },
     },
     'loggers': {
         'games': {
             'handlers': ['games_file', 'games_error_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'affiliate': {
+            'handlers': ['affiliate_file'],
             'level': 'INFO',
             'propagate': False,
         },
@@ -209,3 +226,12 @@ GAME_BIG_WIN_THRESHOLD = os.getenv('GAME_BIG_WIN_THRESHOLD', '1000')
 # How long a stake may sit unresolved before the sweep force-settles it, so a
 # provider that never reports a result cannot pin a bet on "Pending" forever.
 GAME_PENDING_STAKE_MAX_HOURS = os.getenv('GAME_PENDING_STAKE_MAX_HOURS', '72')
+
+# Public base URLs of this deployment's own surfaces. The affiliate program
+# needs both: it builds tracking links against the API (which owns /r/<code>)
+# and redirects the resulting click to the player site.
+API_URL = os.getenv('API_URL', '').rstrip('/') or f'http://localhost:{API_PORT}'
+WEB_URL = os.getenv('WEB_URL', '').rstrip('/') or 'http://localhost:3000'
+# The partner portal. Needed server-side because sub-affiliate invite links are
+# built by the API and point at that portal's apply form.
+AFFILIATE_URL = os.getenv('AFFILIATE_URL', '').rstrip('/') or 'http://localhost:3003'

@@ -1,59 +1,137 @@
 'use client';
 
-import { useState } from 'react';
-import { mockAffiliateProfile } from '../../../../lib/mockData';
-import { Check, Shield, Globe } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Check, Shield, Loader2 } from 'lucide-react';
+import { affiliateApi } from '../../../../services/affiliateApi';
+import { useAffiliate } from '../../../../context/AffiliateContext';
+import { useAffiliateData } from '../../../../hooks/useAffiliateData';
+import { DataState } from '../../../../components/ui/DataState';
+import { toast } from '../../../../lib/toast';
+import TwoFactorModal from './_components/TwoFactorModal';
 
-
+/**
+ * Account settings.
+ *
+ * Everything on this page previously mutated local state and stopped there —
+ * "Save changes" only left edit mode, the password form set a message reading
+ * "(mock)", and the 2FA toggle flipped a boolean with no secret behind it.
+ */
 export default function ProfileSettingsPage() {
-  const [profile, setProfile] = useState(mockAffiliateProfile);
+  const { refresh } = useAffiliate();
+  const { data, loading, error, reload } = useAffiliateData(
+    '/api/v1/affiliate/profile',
+    [],
+  );
+
+  const [form, setForm] = useState(null);
   const [editing, setEditing] = useState(false);
-  const [passwords, setPasswords] = useState({
-    current: '',
-    newPass: '',
-    confirm: '',
-  });
+  const [saving, setSaving] = useState(false);
+  const [passwords, setPasswords] = useState({ current: '', newPass: '', confirm: '' });
   const [pwdMsg, setPwdMsg] = useState('');
+  const [pwdBusy, setPwdBusy] = useState(false);
   const [show2faModal, setShow2faModal] = useState(false);
-  const [twoFaAction, setTwoFaAction] = useState(null);
-  const [twoFaMsg, setTwoFaMsg] = useState('');
 
+  // Seed the editable copy from the server once it arrives.
+  useEffect(() => {
+    if (data) {
+      setForm({
+        companyName: data.company_name || '',
+        contactName: data.name || '',
+        contactEmail: data.email || '',
+        contactPhone: data.phone || '',
+        timezone: data.timezone || 'Asia/Kolkata',
+        currency: data.currency || 'INR',
+        notificationPreferences: data.notification_prefs || {
+          referrals: true,
+          deposits: true,
+          commission: true,
+          payouts: true,
+          keyRotation: true,
+        },
+      });
+    }
+  }, [data]);
 
-  // simple helpers for inputs
-  const handleChange = (field) => (e) =>
-    setProfile({ ...profile, [field]: e.target.value });
-
-  const handleToggle = (key) => () =>
-    setProfile({ ...profile, [key]: !profile[key] });
-
-  const handleNotifToggle = (key) => () =>
-    setProfile({
-      ...profile,
-      notificationPreferences: {
-        ...profile.notificationPreferences,
-        [key]: !profile.notificationPreferences[key],
-      },
-    });
-
-
-  const saveProfile = () => {
-    // just leave edit mode for now (mock)
-    setEditing(false);
+  const profile = form ?? {
+    companyName: '', contactName: '', contactEmail: '', contactPhone: '',
+    timezone: '', currency: '', notificationPreferences: {},
   };
 
-  const changePassword = () => {
+  const handleChange = (field) => (e) =>
+    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+
+  const handleNotifToggle = (key) => () =>
+    setForm((prev) => ({
+      ...prev,
+      notificationPreferences: {
+        ...prev.notificationPreferences,
+        [key]: !prev.notificationPreferences[key],
+      },
+    }));
+
+  const saveProfile = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await affiliateApi('/api/v1/affiliate/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          companyName: profile.companyName,
+          contactName: profile.contactName,
+          contactPhone: profile.contactPhone,
+          timezone: profile.timezone,
+          notificationPreferences: profile.notificationPreferences,
+        }),
+      });
+      toast.success('Profile updated');
+      setEditing(false);
+      reload();
+      // The sidebar and header read the name from context.
+      refresh();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const changePassword = async () => {
+    setPwdMsg('');
     if (!passwords.current || !passwords.newPass) {
-      setPwdMsg('Please fill both fields');
+      setPwdMsg('Please fill in both fields.');
       return;
     }
-
     if (passwords.newPass !== passwords.confirm) {
-      setPwdMsg('New passwords do not match');
+      setPwdMsg('The new passwords do not match.');
+      return;
+    }
+    if (passwords.newPass.length < 8) {
+      setPwdMsg('Choose a password of at least 8 characters.');
       return;
     }
 
-    setPwdMsg('Password changed (mock)');
-    setPasswords({ current: '', newPass: '', confirm: '' });
+    setPwdBusy(true);
+    try {
+      await affiliateApi('/api/v1/affiliate/profile/password', {
+        method: 'POST',
+        body: JSON.stringify({
+          currentPassword: passwords.current,
+          newPassword: passwords.newPass,
+        }),
+      });
+      toast.success('Password changed');
+      setPasswords({ current: '', newPass: '', confirm: '' });
+    } catch (err) {
+      setPwdMsg(err.message || 'Could not change your password.');
+    } finally {
+      setPwdBusy(false);
+    }
+  };
+
+  const handle2faChanged = () => {
+    setShow2faModal(false);
+    reload();
+    refresh();
   };
 
 
@@ -71,15 +149,34 @@ export default function ProfileSettingsPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => setEditing((s) => !s)}
-          className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-950/70 text-sm font-semibold text-slate-900 dark:text-slate-100"
-        >
-          {editing ? 'Cancel' : 'Edit'}
-        </button>
+        <div className="flex items-center gap-2">
+          {editing && (
+            <button
+              type="button"
+              onClick={saveProfile}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-400 to-brand-600 px-4 py-2 text-sm font-bold text-black disabled:opacity-60"
+            >
+              {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Save changes
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              // Cancelling restores the server copy rather than keeping edits.
+              if (editing) reload();
+              setEditing((prev) => !prev);
+            }}
+            className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-950/70 text-sm font-semibold text-slate-900 dark:text-slate-100"
+          >
+            {editing ? 'Cancel' : 'Edit'}
+          </button>
+        </div>
       </div>
 
 
+      <DataState loading={loading && !form} error={error} onRetry={reload}>
       <div className="grid gap-4 lg:grid-cols-2">
 
         {/* company / contact */}
@@ -111,11 +208,13 @@ export default function ProfileSettingsPage() {
 
             <label className="text-xs">
               Contact email
+              {/* This is the sign-in identity. Changing it is a support action,
+                  not a self-service one, so the field is always read-only. */}
               <input
                 value={profile.contactEmail}
-                onChange={handleChange('contactEmail')}
-                disabled={!editing}
-                className="mt-2 w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/80 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                disabled
+                title="Contact support to change your sign-in email"
+                className="mt-2 w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/80 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-70"
               />
             </label>
 
@@ -142,14 +241,15 @@ export default function ProfileSettingsPage() {
                 <option>Asia/Kolkata</option>
               </select>
 
+              {/* Currency is set by the programme, not the partner — the update
+                  endpoint ignores it, so an editable control would silently
+                  discard the change. */}
               <select
                 value={profile.currency}
-                onChange={handleChange('currency')}
-                disabled={!editing}
-                className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/80 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                disabled
+                title="Commission is paid in the programme currency"
+                className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/80 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-70"
               >
-                <option>USD</option>
-                <option>EUR</option>
                 <option>INR</option>
                 <option>GBP</option>
               </select>
@@ -225,9 +325,12 @@ export default function ProfileSettingsPage() {
 
             <div className="flex items-center gap-3">
               <button
+                type="button"
                 onClick={changePassword}
-                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-950/70 text-sm font-semibold text-slate-900 dark:text-slate-100"
+                disabled={pwdBusy}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-950/70 text-sm font-semibold text-slate-900 dark:text-slate-100 disabled:opacity-60"
               >
+                {pwdBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 Change password
               </button>
               <div className="text-sm text-slate-500">{pwdMsg}</div>
@@ -242,27 +345,21 @@ export default function ProfileSettingsPage() {
                     Two-factor authentication
                   </div>
                   <div className="text-xs text-slate-500">
-                    {profile.twoFactorEnabled ? 'Enabled' : 'Disabled'}
+                    {data?.two_factor_enabled
+                      ? 'Enabled — a code is required at every sign-in'
+                      : 'Disabled — your password alone protects this account'}
                   </div>
                 </div>
 
                 <button
-                  onClick={() => {
-                    setTwoFaAction(
-                      profile.twoFactorEnabled ? 'disable' : 'enable'
-                    );
-                    setShow2faModal(true);
-                  }}
+                  type="button"
+                  onClick={() => setShow2faModal(true)}
                   className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-sm text-slate-900 dark:text-slate-100"
                 >
-                  {profile.twoFactorEnabled ? 'Disable' : 'Enable'}
+                  {data?.two_factor_enabled ? 'Disable' : 'Enable'}
                 </button>
               </div>
             </div>
-
-            {twoFaMsg && (
-              <div className="text-xs text-sky-500 mt-2">{twoFaMsg}</div>
-            )}
           </div>
 
 
@@ -318,51 +415,14 @@ export default function ProfileSettingsPage() {
 
         {/* 2fa confirm modal */}
         {show2faModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div
-              className="absolute inset-0 bg-black/50"
-              onClick={() => setShow2faModal(false)}
-            />
-
-            <div className="relative bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-md border border-slate-200 dark:border-slate-800">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                Confirm {twoFaAction === 'disable' ? 'disable' : 'enable'}{' '}
-                two-factor
-              </h3>
-
-              <p className="text-xs text-slate-500 mt-2">
-                Are you sure you want to{' '}
-                {twoFaAction === 'disable' ? 'disable' : 'enable'} two-factor
-                authentication for your account?
-              </p>
-
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  onClick={() => setShow2faModal(false)}
-                  className="px-3 py-2 rounded-xl border text-sm"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  onClick={() => {
-                    const newVal = twoFaAction === 'enable';
-                    setProfile({ ...profile, twoFactorEnabled: newVal });
-                    setTwoFaMsg(
-                      `Two-factor ${newVal ? 'enabled' : 'disabled'}`
-                    );
-                    setShow2faModal(false);
-                    setTimeout(() => setTwoFaMsg(''), 3000);
-                  }}
-                  className="px-3 py-2 rounded-xl bg-brand-600 text-white text-sm"
-                >
-                  {twoFaAction === 'disable' ? 'Disable' : 'Enable'}
-                </button>
-              </div>
-            </div>
-          </div>
+          <TwoFactorModal
+            mode={data?.two_factor_enabled ? 'disable' : 'enable'}
+            onClose={() => setShow2faModal(false)}
+            onChanged={handle2faChanged}
+          />
         )}
       </div>
+      </DataState>
 
     </div>
   );

@@ -3,6 +3,7 @@ from django.urls import include, path
 from django.views.static import serve as serve_media
 from strawberry.django.views import GraphQLView
 
+from core import affiliate_views
 from core.graphql_schema import schema
 from core.views import games_callback, health, landing
 from core.webhook_views import super_admin_data_webhook
@@ -15,6 +16,9 @@ urlpatterns = [
     path('', landing),
     # Machine-readable status for programmatic health checks.
     path('health', health),
+    # Affiliate tracking link target. Deliberately short and outside /api/v1 —
+    # this URL is printed on creatives and pasted into chat.
+    path('r/<str:link_code>', affiliate_views.tracking_redirect),
     # Winco/Huidu legacy callback path (https://api.host/game/) — same handler as
     # /api/v1/games/callback. Set GAME_CALLBACK_PATH=/game/ for shared agency accounts.
     path('game/', games_callback),
@@ -28,6 +32,9 @@ urlpatterns = [
     path('api/v1/webhooks/super-admin/data/<str:resource>', super_admin_data_webhook),
     # Per-tenant feature API (auth, wallet, games, admin, ai).
     path('api/v1/', include('core.urls')),
+    # Affiliate program. Mounted after core.urls — Django tries includes in order
+    # and falls through on no match, so core/urls.py needs no change.
+    path('api/v1/', include('core.affiliate_urls')),
     path('graphql', GraphQLView.as_view(schema=schema)),
     # Admin-uploaded images. Served by Django directly (no nginx/object storage
     # in this stack yet) so this must stay enabled outside DEBUG too — unlike
