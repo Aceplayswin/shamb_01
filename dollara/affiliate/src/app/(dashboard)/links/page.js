@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { Link2, Image, Smartphone, Plus } from 'lucide-react';
-import { mockTrackingLinks } from '../../../lib/mockData';
+import { useAffiliateData } from '../../../hooks/useAffiliateData';
+import { toast } from '../../../lib/toast';
 import LinkDirectoryTab from './_components/LinkDirectoryTab';
 import CreativeGalleryTab from './_components/CreativeGalleryTab';
 import DeepLinkBuilderTab from './_components/DeepLinkBuilderTab';
@@ -26,23 +27,22 @@ const TABS = [
 export default function LinksPage() {
   
   const [activeTab, setActiveTab] = useState('links');
-  const [links, setLinks] = useState(mockTrackingLinks);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [qrLink, setQrLink] = useState(null);
 
+  const { data, loading, error, reload } = useAffiliateData(
+    '/api/v1/affiliate/links?limit=100',
+    [],
+  );
+  const links = data?.records ?? [];
 
-  const handleCreated = (newLink) => {
-    const entry = {
-      id: `lnk-${String(links.length + 1).padStart(3, '0')}`,
-      ...newLink,
-      clicks: 0,
-      signups: 0,
-      ftds: 0,
-      commission: 0,
-      created: new Date().toISOString().split('T')[0],
-    };
-    setLinks((prev) => [entry, ...prev]);
+  // Refetch instead of splicing into local state. The old version invented an
+  // id from the array length and kept the row client-side only, so it collided
+  // after any delete and vanished on refresh.
+  const handleCreated = () => {
     setShowCreateModal(false);
+    reload();
+    toast.success('Tracking link created');
   };
 
 
@@ -113,11 +113,17 @@ export default function LinksPage() {
 
       {/* Tab content */}
       {activeTab === 'links' && (
-        <LinkDirectoryTab links={links} onShowQr={(link) => setQrLink(link)} />
+        <LinkDirectoryTab
+          links={links}
+          loading={loading}
+          error={error}
+          onReload={reload}
+          onShowQr={(link) => setQrLink(link)}
+        />
       )}
 
       {activeTab === 'creatives' && <CreativeGalleryTab />}
-      {activeTab === 'deeplink' && <DeepLinkBuilderTab />}
+      {activeTab === 'deeplink' && <DeepLinkBuilderTab links={links} />}
 
 
 

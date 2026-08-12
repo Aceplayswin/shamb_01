@@ -1,29 +1,54 @@
 'use client';
 
 import { useState } from 'react';
-import { Copy, Check, QrCode, Search, ExternalLink } from 'lucide-react';
+import { Archive, Copy, Check, Link2, QrCode, Search } from 'lucide-react';
+import { affiliateApi } from '../../../../services/affiliateApi';
+import { DataState } from '../../../../components/ui/DataState';
+import { confirmDialog, toast } from '../../../../lib/toast';
+import { inr, num } from '../../../../lib/format';
 
-export default function LinkDirectoryTab({ links, onShowQr }) {
+export default function LinkDirectoryTab({ links, loading, error, onReload, onShowQr }) {
   const [search, setSearch] = useState('');
   const [copiedId, setCopiedId] = useState(null);
+  const [busyId, setBusyId] = useState(null);
 
-
-
-
-
-
-  const filtered = links.filter((l) =>
-    l.name.toLowerCase().includes(search.toLowerCase()) ||
-    l.sub.toLowerCase().includes(search.toLowerCase())
+  const needle = search.trim().toLowerCase();
+  const filtered = links.filter(
+    (l) =>
+      l.name.toLowerCase().includes(needle)
+      || (l.sub_id || '').toLowerCase().includes(needle)
+      || l.code.toLowerCase().includes(needle),
   );
 
-
   const handleCopy = (link) => {
-    const url = `https://dollara.com${link.target}?ref=DLR-AF7X92&sub=${link.sub}`;
-    navigator.clipboard.writeText(url).then(() => {
+    // The tracking URL the server minted, so it always points at the real
+    // redirect endpoint rather than a hand-built player-site URL.
+    navigator.clipboard.writeText(link.tracking_url).then(() => {
       setCopiedId(link.id);
       setTimeout(() => setCopiedId(null), 2000);
     });
+  };
+
+  const handleArchive = async (link) => {
+    const ok = await confirmDialog({
+      title: `Archive "${link.name}"?`,
+      text: 'The link stops accepting new clicks. Referrals it already brought in '
+        + 'keep earning, and its history stays on your reports.',
+      confirmText: 'Archive link',
+      danger: true,
+    });
+    if (!ok) return;
+
+    setBusyId(link.id);
+    try {
+      await affiliateApi(`/api/v1/affiliate/links/${link.id}`, { method: 'DELETE' });
+      toast.success('Link archived');
+      onReload();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setBusyId(null);
+    }
   };
 
 
@@ -44,6 +69,15 @@ export default function LinkDirectoryTab({ links, onShowQr }) {
 
 
       {/* Table */}
+      <DataState
+        loading={loading}
+        error={error}
+        onRetry={onReload}
+        empty={!links.length}
+        emptyTitle="No tracking links yet"
+        emptyHint="Create your first link and share it to start attributing traffic."
+        emptyIcon={Link2}
+      >
       
       <div className="glass rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-slate-200/60 dark:border-slate-800/80 shadow-sm dark:shadow-none overflow-hidden transition-colors duration-300">
         
@@ -79,24 +113,31 @@ export default function LinkDirectoryTab({ links, onShowQr }) {
                     
                     <td className="p-4">
                       <span className="font-bold text-slate-900 dark:text-slate-100 block">{link.name}</span>
-                      <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono block mt-0.5">sub={link.sub}</span>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono block mt-0.5">
+                        {link.sub_id ? `sub=${link.sub_id}` : link.code}
+                        {!link.is_active && (
+                          <span className="ml-1.5 rounded bg-slate-200 px-1.5 py-0.5 text-slate-500 dark:bg-slate-700 dark:text-slate-400">
+                            archived
+                          </span>
+                        )}
+                      </span>
                     </td>
                    
                     <td className="p-4">
                     
-                      <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-semibold">{link.target}</span>
+                      <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-semibold">{link.target_path}</span>
                    
                     </td>
                    
                    
-                    <td className="p-4 font-semibold text-slate-700 dark:text-slate-300">{link.clicks.toLocaleString()}</td>
-                    <td className="p-4 font-semibold text-slate-700 dark:text-slate-300">{link.signups.toLocaleString()}</td>
-                    <td className="p-4 font-semibold text-slate-700 dark:text-slate-300">{link.ftds.toLocaleString()}</td>
+                    <td className="p-4 font-semibold text-slate-700 dark:text-slate-300">{num(link.clicks)}</td>
+                    <td className="p-4 font-semibold text-slate-700 dark:text-slate-300">{num(link.signups)}</td>
+                    <td className="p-4 font-semibold text-slate-700 dark:text-slate-300">{num(link.ftds)}</td>
                    
                     <td className="p-4">
                       <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold border border-emerald-100 dark:border-emerald-900/30">{convRate}%</span>
                     </td>
-                    <td className="p-4 font-bold text-brand-600 dark:text-brand-400 font-display">${link.commission.toLocaleString()}</td>
+                    <td className="p-4 font-bold text-brand-600 dark:text-brand-400 font-display">{inr(link.commission)}</td>
                    
                     <td className="p-4 text-right">
                       <div className="flex justify-end gap-1.5">
@@ -122,6 +163,17 @@ export default function LinkDirectoryTab({ links, onShowQr }) {
                         >
                           <QrCode className="w-3.5 h-3.5" />
                         </button>
+
+                        {link.is_active && (
+                          <button
+                            onClick={() => handleArchive(link)}
+                            disabled={busyId === link.id}
+                            className="w-7 h-7 rounded-lg border bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-danger-300 hover:text-danger-500 flex items-center justify-center transition-all disabled:opacity-50"
+                            title="Archive link"
+                          >
+                            <Archive className="w-3.5 h-3.5" />
+                          </button>
+                        )}
 
 
                       </div>
@@ -151,6 +203,7 @@ export default function LinkDirectoryTab({ links, onShowQr }) {
         </div>
      
       </div>
+      </DataState>
    
     </div>
 

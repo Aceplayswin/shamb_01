@@ -1,9 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { ChevronDown, ChevronRight, UserPlus, Calendar } from 'lucide-react';
+import { fmtDateShort, inr, num } from '../../../../lib/format';
 
 const STATUS_DOT = {
+  approved: 'bg-emerald-500',
+  pending: 'bg-amber-500',
+  info_requested: 'bg-amber-500',
+  rejected: 'bg-red-500',
+  suspended: 'bg-red-500',
   active:  'bg-emerald-500',
   dormant: 'bg-amber-500',
 };
@@ -56,13 +62,14 @@ export default function SubAffiliateTable({ items }) {
               const isExpanded = !!expandedIds[sub.id];
               const hasChildren = sub.children && sub.children.length > 0;
               return (
-                <>
-
-
+                // Fragment.key, not a key on the inner <tr>: a bare <> cannot
+                // carry one, so this list was effectively unkeyed and React
+                // re-created every row on each render.
+                <Fragment key={sub.id}>
 
                   {/* Primary Row */}
 
-                  <tr key={sub.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                  <tr className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="p-4">
                       {hasChildren ? (
                         <button
@@ -75,9 +82,9 @@ export default function SubAffiliateTable({ items }) {
                     </td>
                     <td className="p-4 font-bold text-slate-900 dark:text-slate-100">
                       {sub.name}
-                      <span className="block text-[10px] text-slate-400 dark:text-slate-500 font-mono mt-0.5">{sub.id}</span>
+                      <span className="block text-[10px] text-slate-400 dark:text-slate-500 font-mono mt-0.5">{sub.code}</span>
                     </td>
-                    <td className="p-4 text-slate-600 dark:text-slate-300 font-medium">{sub.joinedDate}</td>
+                    <td className="p-4 text-slate-600 dark:text-slate-300 font-medium">{fmtDateShort(sub.joined_at)}</td>
                     <td className="p-4">
                       <span className="font-semibold text-slate-700 dark:text-slate-300">{sub.signups}
                         
@@ -92,18 +99,18 @@ export default function SubAffiliateTable({ items }) {
                          FTDs
                          
                          </span>
-                      <span className="block text-[9px] text-slate-400 mt-0.5">{sub.clicks.toLocaleString()} 
+                      <span className="block text-[9px] text-slate-400 mt-0.5">{num(sub.clicks)} 
                         clicks
                         
                         </span>
                         
                     </td>
-                    <td className="p-4 font-bold text-slate-800 dark:text-slate-200">${sub.subCommission.toLocaleString()}</td>
-                    <td className="p-4 font-semibold text-slate-500 dark:text-slate-400">{sub.overrideRate}</td>
+                    <td className="p-4 font-bold text-slate-800 dark:text-slate-200">{inr(sub.sub_commission)}</td>
+                    <td className="p-4 font-semibold text-slate-500 dark:text-slate-400">{sub.override_rate}%</td>
                     <td className="p-4 font-extrabold text-emerald-600 dark:text-emerald-400 font-display">
 
 
-                      +${sub.overrideEarned.toFixed(2)}
+                      +{inr(sub.override_earned)}
                     </td>
 
 
@@ -146,11 +153,11 @@ export default function SubAffiliateTable({ items }) {
                                     {c.name}
                                   </p>
                                   <p className="text-[9px] text-slate-400 dark:text-slate-500 flex items-center gap-1 mt-0.5">
-                                    <Calendar className="w-3 h-3" /> Joined {c.joinedDate}
+                                    <Calendar className="w-3 h-3" /> Joined {fmtDateShort(c.joined_at)}
                                   </p>
                                 </div>
                                 <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-bold">
-                                  {c.recruits}
+                                  {num(c.recruits)} referred
                                 </span>
                               </div>
                             ))}
@@ -164,7 +171,7 @@ export default function SubAffiliateTable({ items }) {
 
 
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>

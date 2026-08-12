@@ -2,17 +2,20 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Users, Eye, Trash2 } from 'lucide-react';
+import { Users, Eye, Trash2, PlayCircle } from 'lucide-react';
 import {
   AdminShell,
   DataTable,
   StatusBadge,
   Button,
+  ErrorState,
   confirmDialog,
   toast,
   fmtDate,
+  inr,
+  useAdminData,
 } from '@/components/admin/AdminShell';
-import { mockAffiliates } from '@/lib/affiliateMockData';
+import { adminApi } from '@/services/adminApi';
 
 const TIER_COLORS = {
   Bronze:   'border-orange-500/30 bg-orange-500/15 text-orange-400',
@@ -23,46 +26,100 @@ const TIER_COLORS = {
 
 export default function AffiliateListPage() {
   const router = useRouter();
-  const [items, setItems] = useState(mockAffiliates);
-  const [loading, setLoading] = useState(false);
+  const { data, loading, error, reload, setData } = useAdminData(
+    '/api/v1/admin/affiliates?limit=200',
+    [],
+  );
+  const [running, setRunning] = useState(false);
+
+  const items = data?.records ?? [];
 
   const toggleStatus = async (row) => {
-    const isSuspending = row.status === 'active';
-    const actionText = isSuspending ? 'suspend' : 'reactivate';
-    
+    const isSuspending = row.status === 'approved';
+    const nextStatus = isSuspending ? 'suspended' : 'approved';
+
     const ok = await confirmDialog({
       title: `${isSuspending ? 'Suspend' : 'Reactivate'} affiliate?`,
-      text: `Are you sure you want to ${actionText} ${row.name}?`,
+      text: isSuspending
+        ? `${row.name} will be signed out and their tracking links stop attributing new signups. `
+          + 'Commission already earned is unaffected.'
+        : `${row.name} regains access and their links start attributing again.`,
       confirmText: isSuspending ? 'Suspend' : 'Reactivate',
-      icon: 'question',
+      danger: isSuspending,
     });
-    
     if (!ok) return;
 
-    // Mock toggle action
-    setItems((prev) => prev.map((app) => app.id === row.id ? { ...app, status: isSuspending ? 'suspended' : 'active' } : app));
-    toast.success(`Affiliate ${isSuspending ? 'suspended' : 'reactivated'}`);
+    try {
+      await adminApi(`/api/v1/admin/affiliates/${row.id}/status`, {
+        method: 'POST',
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      toast.success(`Affiliate ${isSuspending ? 'suspended' : 'reactivated'}`);
+      // Optimistic, with a reload on failure — the pattern used across the console.
+      setData((prev) => ({
+        ...prev,
+        records: prev.records.map((a) =>
+          a.id === row.id ? { ...a, status: nextStatus } : a,
+        ),
+      }));
+    } catch (e) {
+      toast.error(e.message);
+      reload();
+    }
   };
 
   const deleteAffiliate = async (row) => {
     const ok = await confirmDialog({
       title: 'Delete affiliate?',
-      text: `Are you sure you want to completely remove ${row.name}? This action cannot be undone.`,
+      text: `This permanently removes ${row.name} along with their links, referrals `
+        + 'and ledger. It is refused while they are owed unpaid commission.',
       confirmText: 'Delete permanently',
-      icon: 'warning',
+      danger: true,
     });
-    
     if (!ok) return;
 
-    // Mock delete action
-    setItems((prev) => prev.filter((app) => app.id !== row.id));
-    toast.success('Affiliate deleted');
+    try {
+      await adminApi(`/api/v1/admin/affiliates/${row.id}`, { method: 'DELETE' });
+      toast.success('Affiliate deleted');
+      reload();
+    } catch (e) {
+      // The API refuses while commission is outstanding and says so.
+      toast.error(e.message);
+    }
+  };
+
+  /** Same entry point as the nightly command, so the two cannot diverge. */
+  const runCommissions = async () => {
+    const ok = await confirmDialog({
+      title: 'Run commissions now?',
+      text: 'Calculates yesterday\'s commission for every approved affiliate. '
+        + 'Safe to run more than once — entries already approved or paid are never rewritten.',
+      confirmText: 'Run now',
+    });
+    if (!ok) return;
+
+    setRunning(true);
+    try {
+      const result = await adminApi('/api/v1/admin/affiliates/commissions/run', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      toast.success(
+        `${result.entries_written} entries written, ${result.entries_skipped} skipped, `
+        + `${inr(result.total_amount)} total`,
+      );
+      reload();
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setRunning(false);
+    }
   };
 
   const formatCommission = (r) => {
     if (r.commission_type === 'revenue_share') return `${r.commission_rate}% Rev Share`;
-    if (r.commission_type === 'cpa') return `$${r.cpa_amount} CPA`;
-    return `${r.commission_rate}% + $${r.cpa_amount} Hybrid`;
+    if (r.commission_type === 'cpa') return `${inr(r.cpa_amount)} CPA`;
+    return `${r.commission_rate}% + ${inr(r.cpa_amount)} Hybrid`;
   };
 
   const columns = [
@@ -82,17 +139,16 @@ export default function AffiliateListPage() {
       render: (r) => <StatusBadge status={r.status} />,
       filter: 'select',
       filterOptions: [
-        { value: 'active', label: 'Active' },
+        { value: 'approved', label: 'Approved' },
         { value: 'suspended', label: 'Suspended' },
-        { value: 'blocked', label: 'Blocked' },
       ],
     },
     {
-      key: 'tier',
+      key: 'tier_label',
       label: 'Tier',
       render: (r) => (
-        <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${TIER_COLORS[r.tier] || TIER_COLORS.Bronze}`}>
-          {r.tier}
+        <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${TIER_COLORS[r.tier_label] || TIER_COLORS.Bronze}`}>
+          {r.tier_label}
         </span>
       ),
       filter: 'select',
@@ -122,7 +178,14 @@ export default function AffiliateListPage() {
     {
       key: 'total_earnings',
       label: 'Earnings',
-      render: (r) => <span className="font-semibold text-emerald-400">${r.total_earnings.toLocaleString()}</span>,
+      render: (r) => (
+        <div>
+          <p className="font-semibold text-emerald-400">{inr(r.total_earnings)}</p>
+          {r.pending_earnings > 0 && (
+            <p className="text-xs text-slate-500">{inr(r.pending_earnings)} pending</p>
+          )}
+        </div>
+      ),
     },
     {
       key: 'joined_at',
@@ -139,7 +202,7 @@ export default function AffiliateListPage() {
             View
           </Button>
           <Button variant="ghost" size="sm" onClick={() => toggleStatus(r)}>
-            {r.status === 'active' ? 'Suspend' : 'Reactivate'}
+            {r.status === 'approved' ? 'Suspend' : 'Reactivate'}
           </Button>
           <Button variant="ghost" size="sm" icon={Trash2} onClick={() => deleteAffiliate(r)} className="text-slate-400 hover:text-rose-400" />
         </div>
@@ -147,10 +210,23 @@ export default function AffiliateListPage() {
     },
   ];
 
+  if (error) {
+    return (
+      <AdminShell title="Affiliates" subtitle="Partner accounts">
+        <ErrorState message={error} onRetry={reload} />
+      </AdminShell>
+    );
+  }
+
   return (
-    <AdminShell 
-      title="Affiliates" 
-      subtitle={`${items.length} partners`}
+    <AdminShell
+      title="Affiliates"
+      subtitle={`${data?.summary?.active ?? 0} active · ${inr(data?.summary?.total_earnings ?? 0)} lifetime commission`}
+      actions={
+        <Button icon={PlayCircle} busy={running} onClick={runCommissions}>
+          Run commissions now
+        </Button>
+      }
     >
       <DataTable
         columns={columns}

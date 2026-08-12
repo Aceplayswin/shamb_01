@@ -25,7 +25,7 @@ const TERMS = [
 
 
 
-export default function StepTerms({ agreed, setAgreed, onNext }) {
+export default function StepTerms({ agreed, setAgreed, onNext, loading }) {
   return (
     <div className="animate-fade-up space-y-6">
 
@@ -88,7 +88,7 @@ export default function StepTerms({ agreed, setAgreed, onNext }) {
       <div className="flex gap-3">
         <button
           type="button"
-          disabled={!agreed}
+          disabled={!agreed || loading}
           onClick={onNext}
           className={primaryBtn}
         >

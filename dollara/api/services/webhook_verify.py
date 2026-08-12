@@ -6,8 +6,15 @@ is the product (dollara) side: it rebuilds the **same** canonical signing-string
 from the request it received and verifies the ``X-SA-Signature`` against the
 stored public key before any tenant data is read.
 
-The signing-string construction here MUST stay byte-for-byte identical to the
-Super Admin side, so it is a faithful copy of the reference verifier shipped at
+The crypto primitives now live in :mod:`services.signing`, shared with the
+affiliate partner API. What stays here is everything specific to *this* trust
+domain: the ``X-SA-*`` header names, the skew window, and the mounted base path.
+An affiliate key must never verify a Super Admin request, so the two domains
+keep separate header constants and separate key resolvers rather than sharing a
+parser with a mode flag.
+
+The signing-string construction MUST stay byte-for-byte identical to the Super
+Admin side and to the reference verifier shipped at
 ``super_admin/api/docs/product_verifier_reference.py``. Keeping the contract in
 one shape on both sides is what stops the two halves silently drifting.
 
@@ -17,13 +24,8 @@ Scheme: RSA-PSS, MGF1(SHA-256), salt length = digest length, over
 
 from __future__ import annotations
 
-import base64
-import hashlib
-import time
-
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
+from services.signing import (SignatureError, build_signing_string, check_skew,
+                              header, verify_signature)
 
 # --- Wire header names. Must match services/crypto_keys.py on the Super Admin side. ---
 HEADER_KEY_ID = 'X-SA-Key-Id'
@@ -39,37 +41,12 @@ SIGNATURE_MAX_SKEW_SECONDS = 300
 # string, so both sides must agree on it exactly.
 WEBHOOK_BASE_PATH = '/api/v1/webhooks/super-admin'
 
-
-class SignatureError(Exception):
-    """Raised when an incoming Super Admin request fails verification."""
-
-
-def _body_hash(body: bytes | None) -> str:
-    """Hex SHA-256 of the raw request body (empty string hashes the empty body)."""
-    return hashlib.sha256(body or b'').hexdigest()
-
-
-def build_signing_string(*, method: str, path: str, key_id: str, timestamp: str,
-                         nonce: str, body: bytes | None) -> bytes:
-    """Canonical string both sides sign/verify. Order and separators are the
-    contract — do not reorder. ``path`` is the request path including the query
-    string, no scheme/host."""
-    return '\n'.join([
-        method.upper(),
-        path,
-        key_id,
-        timestamp,
-        nonce,
-        _body_hash(body),
-    ]).encode()
-
-
-def _header(headers, name: str) -> str:
-    # Tolerate dict / Django HttpHeaders / case differences.
-    if name in headers:
-        return headers[name]
-    lowered = {k.lower(): v for k, v in headers.items()}
-    return lowered.get(name.lower(), '')
+# Re-exported so existing importers of this module keep working unchanged.
+__all__ = [
+    'HEADER_KEY_ID', 'HEADER_TIMESTAMP', 'HEADER_NONCE', 'HEADER_SIGNATURE',
+    'HEADER_PRODUCT', 'SIGNATURE_MAX_SKEW_SECONDS', 'WEBHOOK_BASE_PATH',
+    'SignatureError', 'build_signing_string', 'verify_incoming',
+]
 
 
 def verify_incoming(*, public_pem: str, method: str, path: str, headers,
@@ -80,42 +57,27 @@ def verify_incoming(*, public_pem: str, method: str, path: str, headers,
     received (the same string Super Admin signed). Raises :class:`SignatureError`
     on any problem (missing headers, stale timestamp, bad signature).
     """
-    key_id = _header(headers, HEADER_KEY_ID)
-    timestamp = _header(headers, HEADER_TIMESTAMP)
-    nonce = _header(headers, HEADER_NONCE)
-    signature_b64 = _header(headers, HEADER_SIGNATURE)
+    key_id = header(headers, HEADER_KEY_ID)
+    timestamp = header(headers, HEADER_TIMESTAMP)
+    nonce = header(headers, HEADER_NONCE)
+    signature_b64 = header(headers, HEADER_SIGNATURE)
 
     if not (key_id and timestamp and nonce and signature_b64):
         raise SignatureError('Missing one or more X-SA-* signing headers')
 
-    try:
-        skew = abs(int(time.time()) - int(timestamp))
-    except ValueError:
-        raise SignatureError('Invalid timestamp')
-    if skew > SIGNATURE_MAX_SKEW_SECONDS:
-        raise SignatureError('Request timestamp outside allowed window (replay?)')
+    check_skew(timestamp, SIGNATURE_MAX_SKEW_SECONDS)
 
     message = build_signing_string(
         method=method, path=path, key_id=key_id,
         timestamp=timestamp, nonce=nonce, body=body,
     )
-    try:
-        public_key = serialization.load_pem_public_key(public_pem.encode())
-        public_key.verify(
-            base64.b64decode(signature_b64),
-            message,
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH,
-            ),
-            hashes.SHA256(),
-        )
-    except (InvalidSignature, ValueError, TypeError):
-        raise SignatureError('Signature verification failed')
+    verify_signature(public_pem=public_pem, message=message, signature_b64=signature_b64)
 
     # NOTE: For full replay protection, also store-and-reject seen (key_id, nonce)
     # pairs for SIGNATURE_MAX_SKEW_SECONDS. The timestamp window above bounds the
     # exposure; a nonce store would close it. Left out here to match the reference
     # contract and because dollara's cache is per-process (not shared across
-    # workers) — add a shared store before relying on it for replay defence.
+    # workers). The affiliate contract, which is a lower-trust externally
+    # distributed surface, does implement one — see core/affiliate_auth.py, which
+    # persists nonces in a table precisely because the cache cannot be trusted.
     return key_id

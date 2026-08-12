@@ -1,4 +1,5 @@
 import { Inter, Outfit } from 'next/font/google';
+import { AttributionCapture } from '@/components/AttributionCapture';
 import { AuthHydrate } from '@/components/AuthHydrate';
 import { ThemeHydrate, themeInitScript } from '@/components/ThemeHydrate';
 import { BrandProvider } from '@/hooks/useBranding';
@@ -50,6 +51,10 @@ export default function RootLayout({ children }) {
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="font-sans antialiased">
+        {/* Captures ?ref/&sub/&clk from an affiliate tracking link. Renders
+            nothing, needs no context, and must run on every route because a
+            tracking link can point at any landing page. */}
+        <AttributionCapture />
         <InstallProvider>
           <ThemeHydrate>
             <BrandProvider>

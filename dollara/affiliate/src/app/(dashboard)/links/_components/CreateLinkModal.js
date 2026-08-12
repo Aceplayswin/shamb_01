@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { X } from 'lucide-react';
-import { LANDING_PAGES } from '../../../../lib/mockData';
+import { AlertCircle, X } from 'lucide-react';
+import { affiliateApi } from '../../../../services/affiliateApi';
+import { useAffiliate } from '../../../../context/AffiliateContext';
+import { useAffiliateData } from '../../../../hooks/useAffiliateData';
 
 
 
@@ -14,17 +16,38 @@ export default function CreateLinkModal({ onClose, onCreated }) {
   const [sub, setSub] = useState('');
   const [target, setTarget] = useState('/');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
+  const { me } = useAffiliate();
+  // Landing pages come from the API so the dropdown cannot drift from the
+  // routes the player site actually serves.
+  const { data: pagesData } = useAffiliateData('/api/v1/affiliate/landing-pages', []);
+  const landingPages = pagesData?.records ?? [{ value: '/', label: 'Homepage' }];
 
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name.trim() || !sub.trim()) return;
+    if (saving) return;
+    if (!name.trim()) {
+      setError('Give this link a campaign name.');
+      return;
+    }
+
     setSaving(true);
-    setTimeout(() => {
-      onCreated({ name: name.trim(), sub: sub.trim().toLowerCase().replace(/\s+/g, '-'), target });
+    setError('');
+    try {
+      const created = await affiliateApi('/api/v1/affiliate/links/create', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: name.trim(),
+          subId: sub.trim().toLowerCase().replace(/\s+/g, '-') || undefined,
+          targetPath: target,
+        }),
+      });
+      onCreated(created);
+    } catch (err) {
+      setError(err.message || 'Could not create the link.');
       setSaving(false);
-    }, 800);
+    }
   };
 
 
@@ -78,7 +101,7 @@ export default function CreateLinkModal({ onClose, onCreated }) {
           <div>
             <label className={labelCls}>Target Landing Page</label>
             <select value={target} onChange={(e) => setTarget(e.target.value)} className={inputCls}>
-              {LANDING_PAGES.map((p) => (
+              {landingPages.map((p) => (
                 <option key={p.value} value={p.value}>{p.label} — {p.value}</option>
               ))}
             </select>
@@ -89,16 +112,26 @@ export default function CreateLinkModal({ onClose, onCreated }) {
           <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
             <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Link Preview</p>
             <p className="text-xs font-mono text-brand-600 dark:text-brand-400 break-all">
-              https://dollara.com{target}?ref=DLR-AF7X92&sub={sub || '...'}
+              {me?.web_url ?? ''}{target}?ref={me?.code ?? '…'}
+              {sub ? `&sub=${sub.trim().toLowerCase().replace(/\s+/g, '-')}` : ''}
             </p>
           </div>
 
 
 
 
+          {error && (
+            <div className="flex items-start gap-2 rounded-xl border border-danger-400/40 bg-danger-500/10 px-3 py-2.5 text-xs text-danger-600">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
           <button
             type="submit"
-            disabled={saving || !name.trim() || !sub.trim()}
+            /* sub-id is optional — the server defaults it, and requiring it here
+               blocked the common case of one plain link per campaign. */
+            disabled={saving || !name.trim()}
             className="w-full py-3 rounded-xl bg-gradient-to-r from-brand-400 to-brand-600 text-black font-bold text-sm shadow-sm hover:shadow-md hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
           >
             {saving ? (

@@ -15,7 +15,7 @@ const DOC_TYPES = [
   { value: 'UtilityBill',    label: 'Utility Bill (Proof of Address)' },
 ];
 
-export default function StepKYC({ docType, setDocType, docFile, setDocFile, onNext, onBack }) {
+export default function StepKYC({ docType, setDocType, docFile, setDocFile, onNext, onBack, loading }) {
   const [dragOver, setDragOver] = useState(false);
 
   const handleDrop = (e) => {
@@ -102,7 +102,7 @@ export default function StepKYC({ docType, setDocType, docFile, setDocFile, onNe
           <ArrowLeft className="w-4 h-4" />
           <span>Back</span>
         </button>
-        <button type="button" onClick={onNext} className={primaryBtn}>
+        <button type="button" onClick={onNext} disabled={loading} className={primaryBtn}>
           <span>Submit & Continue</span>
           <ArrowRight className="w-4 h-4" />
         </button>

@@ -10,28 +10,52 @@ import {
   toast,
   confirmDialog
 } from '@/components/admin/AdminShell';
-import { mockFraudFlags, mockAuditLog } from '@/lib/affiliateMockData';
-import { ShieldAlert, History, AlertTriangle, EyeOff } from 'lucide-react';
+import { ErrorState, fmtDate, inr, useAdminData } from '@/components/admin/AdminShell';
+import { adminApi } from '@/services/adminApi';
+import { ShieldAlert, History, AlertTriangle, EyeOff, PlayCircle } from 'lucide-react';
 
 export default function FraudAuditPage() {
-  const [flags, setFlags] = useState(mockFraudFlags);
   const [activeTab, setActiveTab] = useState('fraud');
 
-  const handleDismiss = (id) => {
-    setFlags(prev => prev.map(f => f.id === id ? { ...f, status: 'dismissed' } : f));
-    toast.success('Flag dismissed');
-  };
+  const fraudQuery = useAdminData('/api/v1/admin/affiliates/fraud-flags?limit=200', []);
+  const auditQuery = useAdminData('/api/v1/admin/affiliates/audit?limit=200', []);
+  const runsQuery = useAdminData('/api/v1/admin/affiliates/commissions/runs?limit=50', []);
 
-  const handleSuspend = async (id, name) => {
-    const ok = await confirmDialog({
-      title: 'Suspend Affiliate',
-      text: `Are you sure you want to suspend the affiliate account for ${name}?`,
-      confirmText: 'Suspend',
-      icon: 'warning'
-    });
-    if (ok) {
-      setFlags(prev => prev.map(f => f.id === id ? { ...f, status: 'suspended' } : f));
-      toast.success('Affiliate suspended');
+  const flags = fraudQuery.data?.records ?? [];
+  const auditRows = auditQuery.data?.records ?? [];
+  const runs = runsQuery.data?.records ?? [];
+  const openCount = fraudQuery.data?.summary?.open ?? 0;
+
+  const resolveFlag = async (row, status) => {
+    if (status === 'actioned') {
+      const ok = await confirmDialog({
+        title: 'Suspend this affiliate?',
+        text: `${row.affiliate_name} loses access and their links stop attributing. `
+          + 'The flag is recorded as actioned.',
+        confirmText: 'Suspend',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+
+    try {
+      // Actioning a flag suspends the account as well; dismissing only clears
+      // the flag, which is what unblocks the commission auto-approval.
+      if (status === 'actioned') {
+        await adminApi(`/api/v1/admin/affiliates/${row.affiliate_id}/status`, {
+          method: 'POST',
+          body: JSON.stringify({ status: 'suspended' }),
+        });
+      }
+      await adminApi(`/api/v1/admin/affiliates/fraud-flags/${row.id}/resolve`, {
+        method: 'POST',
+        body: JSON.stringify({ status }),
+      });
+      toast.success(status === 'actioned' ? 'Affiliate suspended' : 'Flag dismissed');
+      fraudQuery.reload();
+      auditQuery.reload();
+    } catch (err) {
+      toast.error(err.message);
     }
   };
 
@@ -50,7 +74,7 @@ export default function FraudAuditPage() {
         <Link href={`/affiliates/${r.affiliate_id}`} className="font-medium text-blue-400 hover:underline">
           {r.affiliate_name}
         </Link>
-        <p className="text-xs text-slate-500">{r.affiliate_id}</p>
+        <p className="text-xs text-slate-500">{r.affiliate_code}</p>
       </div>
     )},
     { key: 'reason', label: 'Flag Reason', render: (r) => (
@@ -61,18 +85,18 @@ export default function FraudAuditPage() {
         {r.risk_level}
       </span>
     )},
-    { key: 'timestamp', label: 'Detected At', render: (r) => (
-      <span className="text-slate-400 text-sm">{new Date(r.timestamp).toLocaleString()}</span>
+    { key: 'created_at', label: 'Detected At', render: (r) => (
+      <span className="text-sm text-slate-400">{fmtDate(r.created_at)}</span>
     )},
     { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} /> },
     { key: 'actions', label: '', render: (r) => (
       r.status === 'open' && (
         <div className="flex justify-end gap-2">
-          <Button variant="danger" size="sm" onClick={() => handleSuspend(r.id, r.affiliate_name)}>
+          <Button variant="danger" size="sm" onClick={() => resolveFlag(r, 'actioned')}>
             <ShieldAlert size={16} />
             Suspend
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => handleDismiss(r.id)}>
+          <Button variant="secondary" size="sm" onClick={() => resolveFlag(r, 'dismissed')}>
             <EyeOff size={16} />
             Dismiss
           </Button>
@@ -82,20 +106,65 @@ export default function FraudAuditPage() {
   ];
 
   const auditColumns = [
-    { key: 'timestamp', label: 'Time', render: (r) => (
-      <span className="text-slate-400 text-sm whitespace-nowrap">{new Date(r.timestamp).toLocaleString()}</span>
+    { key: 'created_at', label: 'Time', render: (r) => (
+      <span className="whitespace-nowrap text-sm text-slate-400">{fmtDate(r.created_at)}</span>
     )},
-    { key: 'admin_user', label: 'Admin User', render: (r) => (
-      <span className="font-medium text-emerald-400">@{r.admin_user}</span>
+    { key: 'actor_label', label: 'Actor', render: (r) => (
+      <div>
+        <span className="font-medium text-emerald-400">
+          {r.actor_label || r.actor_type}
+        </span>
+        <p className="text-xs capitalize text-slate-500">{r.actor_type}</p>
+      </div>
     )},
     { key: 'action', label: 'Action Taken', render: (r) => (
       <span className="text-slate-200">{r.action}</span>
     )},
     { key: 'target', label: 'Target', render: (r) => (
-      <span className="text-amber-400 text-sm">{r.target}</span>
+      <span className="text-sm text-amber-400">
+        {r.target || r.affiliate_name || '—'}
+      </span>
     )},
-    { key: 'ip', label: 'Admin IP', render: (r) => (
-      <span className="text-slate-500 font-mono text-xs">{r.ip}</span>
+    { key: 'ip', label: 'IP', render: (r) => (
+      <span className="font-mono text-xs text-slate-500">{r.ip || '—'}</span>
+    )},
+  ];
+
+  // Third tab: what the commission engine has actually done. Without it, a
+  // "Run now" click reports a toast and then leaves no trace anyone can review.
+  const runColumns = [
+    { key: 'started_at', label: 'Started', render: (r) => (
+      <span className="whitespace-nowrap text-sm text-slate-400">{fmtDate(r.started_at)}</span>
+    )},
+    { key: 'period_start', label: 'Period', render: (r) => (
+      <span className="text-slate-300">
+        {r.period_start === r.period_end
+          ? r.period_start
+          : `${r.period_start} → ${r.period_end}`}
+      </span>
+    )},
+    { key: 'trigger_source', label: 'Triggered by', render: (r) => (
+      <span className="capitalize text-slate-400">{r.triggered_by_label}</span>
+    )},
+    { key: 'entries_written', label: 'Written', render: (r) => (
+      <span className="font-semibold text-white">{r.entries_written}</span>
+    )},
+    { key: 'entries_skipped', label: 'Skipped', render: (r) => (
+      <span className="text-slate-400" title="Already approved or paid — never rewritten">
+        {r.entries_skipped}
+      </span>
+    )},
+    { key: 'entries_approved', label: 'Auto-approved', render: (r) => (
+      <span className="text-slate-400">{r.entries_approved}</span>
+    )},
+    { key: 'total_amount', label: 'Total', render: (r) => (
+      <span className="font-semibold text-emerald-400">{inr(r.total_amount)}</span>
+    )},
+    { key: 'status', label: 'Status', render: (r) => (
+      <div>
+        <StatusBadge status={r.status === 'completed' ? 'completed' : r.status} />
+        {r.error && <p className="mt-1 max-w-xs text-xs text-rose-400">{r.error}</p>}
+      </div>
     )},
   ];
 
@@ -118,9 +187,9 @@ export default function FraudAuditPage() {
         >
           <AlertTriangle size={16} />
           Fraud Alerts
-          {flags.filter(f => f.status === 'open').length > 0 && (
-            <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full ml-1">
-              {flags.filter(f => f.status === 'open').length}
+          {openCount > 0 && (
+            <span className="ml-1 rounded-full bg-red-500 px-2 py-0.5 text-xs text-white">
+              {openCount}
             </span>
           )}
         </button>
@@ -133,23 +202,73 @@ export default function FraudAuditPage() {
           }`}
         >
           <History size={16} />
-          Admin Audit Log
+          Audit Log
+        </button>
+        <button
+          onClick={() => setActiveTab('runs')}
+          className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm transition-colors ${
+            activeTab === 'runs'
+              ? 'border-emerald-500 text-emerald-400'
+              : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
+          }`}
+        >
+          <PlayCircle size={16} />
+          Commission Runs
         </button>
       </div>
 
-      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-        {activeTab === 'fraud' ? (
+      {activeTab === 'fraud' &&
+        (fraudQuery.error ? (
+          <ErrorState message={fraudQuery.error} onRetry={fraudQuery.reload} />
+        ) : (
           <DataTable
             columns={fraudColumns}
             rows={flags}
+            loading={fraudQuery.loading}
+            searchable
+            searchKeys={['affiliate_name', 'reason', 'rule_key']}
+            searchPlaceholder="Search flags…"
+            noun="flag"
+            pageSize={20}
+            emptyIcon={AlertTriangle}
+            emptyMessage="No fraud flags"
+            emptyHint="Self-referrals, IP velocity spikes and disposable emails land here."
           />
+        ))}
+
+      {activeTab === 'audit' &&
+        (auditQuery.error ? (
+          <ErrorState message={auditQuery.error} onRetry={auditQuery.reload} />
         ) : (
           <DataTable
             columns={auditColumns}
-            rows={mockAuditLog}
+            rows={auditRows}
+            loading={auditQuery.loading}
+            searchable
+            searchKeys={['action', 'actor_label', 'target', 'affiliate_name']}
+            searchPlaceholder="Search the audit trail…"
+            noun="entry"
+            pageSize={25}
+            emptyIcon={History}
+            emptyMessage="No activity recorded yet"
           />
-        )}
-      </div>
+        ))}
+
+      {activeTab === 'runs' &&
+        (runsQuery.error ? (
+          <ErrorState message={runsQuery.error} onRetry={runsQuery.reload} />
+        ) : (
+          <DataTable
+            columns={runColumns}
+            rows={runs}
+            loading={runsQuery.loading}
+            noun="run"
+            pageSize={20}
+            emptyIcon={PlayCircle}
+            emptyMessage="No commission runs yet"
+            emptyHint="Run the nightly command, or use “Run commissions now” on the affiliate list."
+          />
+        ))}
 
     </AdminShell>
   );

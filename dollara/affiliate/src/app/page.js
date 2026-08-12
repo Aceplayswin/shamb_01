@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { fetchProgram } from '../services/affiliateApi';
+import { inr } from '../lib/format';
 import {
   TrendingUp,
   DollarSign,
@@ -27,20 +29,31 @@ export default function LandingPage() {
 
 
   const [players, setPlayers] = useState(150);
-  const [avgDeposit, setAvgDeposit] = useState(250);
+  const [avgDeposit, setAvgDeposit] = useState(5000);
   const [dealType, setDealType] = useState('revshare');                 // 'revshare' | 'cpa'
 
+  // Programme terms come from the API, so the calculator quotes the rates the
+  // platform actually pays. They were hardcoded at 45% / $120, which drifted the
+  // moment anyone changed the real defaults in admin.
+  const [programme, setProgramme] = useState(null);
 
+  useEffect(() => {
+    fetchProgram()
+      .then(setProgramme)
+      .catch(() => {
+        // The calculator is a nice-to-have on a marketing page — if the API is
+        // unreachable it falls back to the defaults below rather than breaking
+        // the page for someone who just wants to click "Apply".
+      });
+  }, []);
 
-  // Rough estimate only — revshare is 45% of total deposits, CPA is a flat
-  // $120 per player regardless of deposit size. Not meant to be exact,
-  // just enough to give visitors a sense of scale.
+  const revShareRate = programme?.default_commission_rate ?? 30;
+  const cpaAmount = programme?.default_cpa_amount ?? 500;
 
-
-
+  // Rough estimate only, enough to give visitors a sense of scale.
   const estimatedEarnings = dealType === 'revshare'
-    ? Math.round(players * avgDeposit * 0.45)
-    : players * 120;
+    ? Math.round((players * avgDeposit * revShareRate) / 100)
+    : players * cpaAmount;
 
 
 
@@ -57,7 +70,7 @@ export default function LandingPage() {
     },
     {
       q: 'When are commission payouts processed?',
-      a: 'We process payouts weekly every Monday via Crypto (USDT), Bank Transfer, or UPI with a low $50 minimum threshold.'
+      a: 'We process payouts on a regular cycle via Bank Transfer, UPI or Crypto (USDT). The minimum threshold is shown on your payouts screen once you are approved.'
     },
     {
       q: 'Is there a negative balance carryover?',
@@ -128,7 +141,7 @@ export default function LandingPage() {
           </h1>
 
           <p className="mt-5 text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            Up to <span className="text-slate-950 font-semibold">45% Revenue Share</span>
+            Up to <span className="text-slate-950 font-semibold">{revShareRate}% Revenue Share</span>
             · Zero negative carryover · Weekly payouts every Monday
           </p>
 
@@ -173,7 +186,7 @@ export default function LandingPage() {
 
             <div className="grid grid-cols-4 gap-2 mt-2">
               {[
-                { label: 'Rev Share', value: 'Up to 45%', color: 'text-brand-600' },
+                { label: 'Rev Share', value: `Up to ${revShareRate}%`, color: 'text-brand-600' },
                 { label: 'Payouts', value: 'Weekly', color: 'text-emerald-600' },
                 { label: 'Carryover', value: 'None', color: 'text-slate-900' },
                 { label: 'Cookie', value: '30 Days', color: 'text-sky-600' },
@@ -315,11 +328,11 @@ export default function LandingPage() {
               <div className="mt-5 p-1 rounded-lg bg-slate-200/60 border border-slate-300/40 inline-flex w-full">
                 <button onClick={() => setDealType('revshare')}
                   className={`flex-1 py-2 rounded-md text-xs font-bold transition-all ${dealType === 'revshare' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}>
-                  45% Rev Share
+                  {revShareRate}% Rev Share
                 </button>
                 <button onClick={() => setDealType('cpa')}
                   className={`flex-1 py-2 rounded-md text-xs font-bold transition-all ${dealType === 'cpa' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}>
-                  $120 CPA
+                  {inr(cpaAmount)} CPA
                 </button>
               </div>
             </div>
@@ -349,7 +362,7 @@ export default function LandingPage() {
                 <div>
                   <div className="flex justify-between text-sm mb-1.5">
                     <span className="text-slate-600">Avg. deposit</span>
-                    <span className="font-bold text-brand-600 font-display">${avgDeposit}</span>
+                    <span className="font-bold text-brand-600 font-display">{inr(avgDeposit)}</span>
                   </div>
                   <input type="range" min="50"
                     max="1000" step="25"
@@ -366,7 +379,7 @@ export default function LandingPage() {
                 <div>
                   <div className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">Monthly Earnings</div>
                   <div className="text-3xl font-extrabold text-brand-600 font-display mt-1">
-                    ${estimatedEarnings.toLocaleString()}
+                    {inr(estimatedEarnings)}
                   </div>
                 </div>
                 <Link href="/apply" className="px-5 py-2.5 text-xs font-bold text-black bg-gradient-to-r from-brand-400 to-brand-500 rounded-lg shadow-md hover:scale-105 transition-all shrink-0">
@@ -391,7 +404,7 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-3 gap-5">
             {[
               {
-                icon: TrendingUp, title: 'Revenue Share', highlight: 'Up to 45%',
+                icon: TrendingUp, title: 'Revenue Share', highlight: `Up to ${revShareRate}%`,
                 points: ['Lifetime recurring income', 'No negative carryover', 'Tiered scaling']
               },
 

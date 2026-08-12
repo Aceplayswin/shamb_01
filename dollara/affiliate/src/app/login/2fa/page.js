@@ -1,14 +1,17 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import Swal from 'sweetalert2';
-import { ShieldCheck } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { AlertCircle, ShieldCheck } from 'lucide-react';
 import AuthShell, { primaryBtn, Spinner } from '../_components/AuthShell';
+import { affiliateVerify2fa, getChallengeToken } from '../../../services/affiliateApi';
 
 export default function TwoFactorPage() {
 
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const router = useRouter();
 
 
 
@@ -21,26 +24,39 @@ export default function TwoFactorPage() {
   // Focus the first box as soon as the page loads
 
   useEffect(() => {
-
+    // Landing here without a live challenge means the password step was never
+    // completed (or the tab was reopened), so there is nothing to verify.
+    if (!getChallengeToken()) {
+      router.replace('/login');
+      return;
+    }
     refs[0].current?.focus();
-
-  },
-   []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
 
 
   const handleChange = (index, value) => {
+    if (isNaN(value)) return; // digits only
 
-    if (isNaN(value)) return;          // digits only
+    // Pasting the whole code should fill every box, not just the one focused.
+    if (value.length > 1) {
+      const digits = value.replace(/\D/g, '').slice(0, 6).split('');
+      if (digits.length) {
+        const filled = ['', '', '', '', '', ''];
+        digits.forEach((d, i) => {
+          filled[i] = d;
+        });
+        setOtp(filled);
+        refs[Math.min(digits.length, 5)].current?.focus();
+        return;
+      }
+    }
 
     const next = [...otp];
-
-    next[index] = value.slice(-1);       // keep only the last char typed
-
+    next[index] = value.slice(-1); // keep only the last char typed
     setOtp(next);
-
     if (value && index < 5) refs[index + 1].current.focus();
-
   };
 
 
@@ -59,51 +75,28 @@ export default function TwoFactorPage() {
 
 
 
-  const handleSubmit = (e) => {
-
-
+  const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (otp.join('').length < 6) {
-      alert('Please enter all 6 digits.');
+    const code = otp.join('');
+    if (code.length < 6) {
+      setError('Enter all 6 digits.');
       return;
     }
 
     setLoading(true);
-
-
-
-    // Simulate token check — wire up to real endpoint in Phase 2
-
-    setTimeout(() => {
+    setError('');
+    try {
+      const result = await affiliateVerify2fa(code);
+      router.replace(result.onboardingComplete === false ? '/onboarding' : '/dashboard');
+    } catch (err) {
+      // A wrong code is a normal event, not an exception worth a modal. Clear
+      // the boxes and refocus so retrying is one action.
+      setError(err.message || 'That code is not valid.');
+      setOtp(['', '', '', '', '', '']);
+      refs[0].current?.focus();
       setLoading(false);
-      Swal.fire({
-        title: 'Authentication Success!',
-        text: 'Access granted. Redirecting to your dashboard...',
-        icon: 'success',
-        timer: 1500,
-        showConfirmButton: false,
-        background: '#FFFFFF',
-        color: '#0F172A',
-      }).then(() => {
-        window.location.href = '/dashboard';
-      });
-    }, 1000);
+    }
   };
-
-
-
-  const handleResend = () => {
-    Swal.fire({
-      text: 'A new verification code has been dispatched.',
-      icon: 'info',
-      timer: 1500,
-      showConfirmButton: false,
-      background: '#FFFFFF',
-      color: '#0F172A',
-    });
-  };
-
 
 
   return (
@@ -120,13 +113,20 @@ export default function TwoFactorPage() {
           </div>
           <h1 className="text-2xl font-extrabold text-slate-900 font-display">Security Check</h1>
           <p className="text-xs text-slate-500 mt-2">
-            Enter the 6-digit authentication code sent to your device
+            Open your authenticator app and enter the current 6-digit code
           </p>
         </div>
 
 
 
         {/* OTP digit boxes */}
+
+        {error && (
+          <div className="mb-5 flex items-start gap-2 rounded-xl border border-danger-400/40 bg-danger-500/10 px-4 py-3 text-sm text-danger-600">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="flex justify-between gap-2 max-w-xs mx-auto">
@@ -157,17 +157,14 @@ export default function TwoFactorPage() {
 
         {/* Footer actions */}
 
-        <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-between text-xs font-semibold">
-          <a href="/login" className="text-slate-500 hover:text-slate-800 transition-colors">
+        <div className="mt-8 pt-6 border-t border-slate-100 text-center text-xs">
+          <a href="/login" className="font-semibold text-slate-500 transition-colors hover:text-slate-800">
             Back to Login
           </a>
-          <button
-            type="button"
-            onClick={handleResend}
-            className="text-brand-600 hover:text-brand-800 transition-colors"
-          >
-            Resend Code
-          </button>
+          <p className="mt-3 text-slate-400">
+            Codes refresh every 30 seconds in your authenticator app. Lost access to
+            your device? Contact support to recover your account.
+          </p>
         </div>
 
         

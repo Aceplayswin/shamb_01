@@ -1,33 +1,72 @@
 'use client';
 
-import { useState } from 'react';
-import { X, Download, FileSpreadsheet, FileText, CheckCircle } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { X, Download, FileSpreadsheet, CheckCircle, AlertCircle } from 'lucide-react';
+import { affiliateDownload } from '../../../../../services/affiliateApi';
 
 export default function StatementsModal({ onClose }) {
   const [period, setPeriod] = useState('current');
-  const [format, setFormat] = useState('pdf');
   const [exporting, setExporting] = useState(false);
   const [done, setDone] = useState(false);
+  const [error, setError] = useState('');
 
-  const periods = [
-    { value: 'current', label: 'Current Month (Aug 2026)' },
-    { value: 'last',    label: 'Last Month (Jul 2026)' },
-    { value: 'ytd',     label: 'Year to Date (2026)' },
-  ];
+  // Period labels are computed, not written in — the previous hardcoded
+  // "Aug 2026 / Jul 2026" would have been wrong in every other month.
+  const periods = useMemo(() => {
+    const now = new Date();
+    const monthName = (d) => d.toLocaleString('en-IN', { month: 'short', year: 'numeric' });
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    return [
+      { value: 'current', label: `Current month (${monthName(now)})` },
+      { value: 'last', label: `Last month (${monthName(lastMonth)})` },
+      { value: 'ytd', label: `Year to date (${now.getFullYear()})` },
+      { value: 'all', label: 'All time' },
+    ];
+  }, []);
 
+  const rangeFor = (value) => {
+    const now = new Date();
+    const iso = (d) => d.toISOString().slice(0, 10);
+    if (value === 'current') {
+      return { from: iso(new Date(now.getFullYear(), now.getMonth(), 1)), to: iso(now) };
+    }
+    if (value === 'last') {
+      const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const last = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { from: iso(first), to: iso(last) };
+    }
+    if (value === 'ytd') {
+      return { from: iso(new Date(now.getFullYear(), 0, 1)), to: iso(now) };
+    }
+    return { from: '2000-01-01', to: iso(now) };
+  };
 
-
-
-  const handleExport = (e) => {
+  /**
+   * Fetch the statement and save it.
+   *
+   * This used to be two nested setTimeouts and a success screen — it produced
+   * no file whatsoever. The blob dance is required rather than a plain
+   * `<a download>` because the endpoint needs the Authorization header.
+   */
+  const handleExport = async (e) => {
     e.preventDefault();
+    if (exporting) return;
     setExporting(true);
-    setTimeout(() => {
-      setExporting(false);
+    setError('');
+
+    const { from, to } = rangeFor(period);
+    try {
+      await affiliateDownload(
+        `/api/v1/affiliate/earnings/export?from=${from}&to=${to}`,
+        `statement-${from}-to-${to}.csv`,
+      );
       setDone(true);
-      setTimeout(() => {
-        onClose();
-      }, 1500);
-    }, 1800);
+      setTimeout(onClose, 1500);
+    } catch (err) {
+      setError(err.message || 'Could not prepare your statement.');
+    } finally {
+      setExporting(false);
+    }
   };
 
 
@@ -87,38 +126,23 @@ export default function StatementsModal({ onClose }) {
             {/* Format choice */}
             <div>
               <label className={labelCls}>File Format</label>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setFormat('pdf')}
-                  className={`flex-1 py-3 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-1.5 transition-all ${
-                    format === 'pdf'
-                      ? 'bg-rose-50 dark:bg-rose-950/20 border-rose-300 dark:border-rose-900/40 text-rose-700 dark:text-rose-400'
-                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'
-                  }`}
-                >
-
-
-
-                  <FileText className="w-5 h-5 text-rose-500" /> PDF Document
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormat('csv')}
-                  className={`flex-1 py-3 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-1.5 transition-all ${
-                    format === 'csv'
-                      ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-400'
-                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'
-                  }`}
-                >
-
-
-
-                  <FileSpreadsheet className="w-5 h-5 text-emerald-500" /> CSV Spreadsheet
-                </button>
+              <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-400">
+                <span className="flex items-center gap-2">
+                  <FileSpreadsheet className="h-5 w-5 text-emerald-500" />
+                  CSV spreadsheet
+                </span>
+                <span className="mt-1 block font-normal text-emerald-600/80 dark:text-emerald-500/80">
+                  Opens in Excel, Sheets or any accounting package.
+                </span>
               </div>
             </div>
 
+            {error && (
+              <div className="flex items-start gap-2 rounded-xl border border-danger-400/40 bg-danger-500/10 px-3 py-2.5 text-xs text-danger-600">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
 
             {/* Export button */}
 

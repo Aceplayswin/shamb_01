@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
-import Swal from 'sweetalert2';
-import { DollarSign, ArrowLeft, CheckCircle2, Send, ShieldCheck, ArrowRight } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { AlertCircle, DollarSign, ArrowLeft, CheckCircle2, Eye, EyeOff, Send, ShieldCheck, ArrowRight, Users } from 'lucide-react';
+import { fetchProgram, submitApplication } from '../../services/affiliateApi';
 
 // Blank slate for the form — kept outside the component so we're not
 // recreating this object on every render
@@ -11,6 +12,12 @@ import { DollarSign, ArrowLeft, CheckCircle2, Send, ShieldCheck, ArrowRight } fr
 const initialForm = {
   fullName: '',
   email: '',
+  // The applicant sets their own password here — approval turns the record into
+  // a login, and a staff-generated password would have to be transmitted
+  // somehow, which is worse.
+  password: '',
+  confirmPassword: '',
+  phone: '',
   companyName: '',
   trafficSource: 'SEO',
   expectedVolume: '10-50',
@@ -21,62 +28,91 @@ const initialForm = {
 
 
 export default function ApplyPage() {
+  return (
+    <Suspense fallback={null}>
+      <ApplyForm />
+    </Suspense>
+  );
+}
+
+function ApplyForm() {
 
   // Which step of the wizard we're on (1 = account, 2 = personal, 3 = payment)
 
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState(initialForm);
-
-  // Flips to true once the user hits submit, swaps the whole form out for the
-  // "thanks, pending approval" screen
-
   const [submitted, setSubmitted] = useState(false);
+  const [result, setResult] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
-  // Generic field updater so we don't have to write a new onChange handler
-  // for every single input
-
+  // A sub-affiliate invite carries these. The previous build generated invite
+  // URLs with exactly these parameters and then never read them here, so every
+  // invite silently produced an unlinked, direct application.
+  const searchParams = useSearchParams();
+  const parentCode = searchParams.get('parent_affiliate_code');
+  const overrideRate = searchParams.get('override_rate');
 
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+    setError('');
   };
 
   const goNext = () => {
-
-
-    // Step 1 is the only step with required fields, so that's the only
-    // place we block navigation. Steps 2/3 are fine to skip through.
-
-
-    if (step === 1 && (!formData.fullName || !formData.email)) {
-      alert('Please fill out all required fields.');
-      return;
+    // Step 1 holds the credentials, so it is the only step that blocks.
+    if (step === 1) {
+      if (!formData.fullName.trim() || !formData.email.trim()) {
+        setError('Your name and email address are both required.');
+        return;
+      }
+      if (!formData.email.includes('@')) {
+        setError('Enter a valid email address.');
+        return;
+      }
+      if (formData.password.length < 8) {
+        setError('Choose a password of at least 8 characters.');
+        return;
+      }
+      if (formData.password !== formData.confirmPassword) {
+        setError('The two passwords do not match.');
+        return;
+      }
     }
+    setError('');
     setStep((s) => s + 1);
   };
 
   const goBack = () => setStep((s) => s - 1);
 
-  const onSubmit = (e) => {
+  const onSubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
+    setError('');
 
-    // NOTE: this isn't hitting an API right now — it's just a UI-only
-    // success state. Wire this up to the real endpoint when the backend
-    // route is ready.
-
-
-    Swal.fire({
-      icon: 'success',
-      title: 'Application Submitted!',
-      text: 'Your application has been received and is currently Pending Approval. Our team will review it within 24 hours.',
-      background: '#FFFFFF',
-      color: '#0F172A',
-      confirmButtonColor: '#E2B13C',
-      customClass: {
-        popup: 'border border-slate-200 rounded-2xl shadow-xl bg-white',
-      },
-    });
-
-    setSubmitted(true);
+    try {
+      const response = await submitApplication({
+        fullName: formData.fullName.trim(),
+        email: formData.email.trim(),
+        password: formData.password,
+        phone: formData.phone.trim() || undefined,
+        companyName: formData.companyName.trim() || undefined,
+        trafficSource: formData.trafficSource,
+        expectedVolume: formData.expectedVolume,
+        paymentPreference: formData.paymentPreference,
+        notes: formData.notes.trim() || undefined,
+        // Carried through from the invite link, so the recruiting partner is
+        // actually credited as the parent.
+        parentAffiliateCode: parentCode || undefined,
+        overrideRate: overrideRate || undefined,
+      });
+      setResult(response);
+      setSubmitted(true);
+    } catch (err) {
+      setError(err.message || 'We could not submit your application. Please try again.');
+      setSubmitting(false);
+    }
   };
 
   // ── Success screen ──
@@ -102,8 +138,18 @@ export default function ApplyPage() {
 
               <p className="text-sm text-slate-600 mt-2 max-w-md mx-auto">
                 Thank you for applying, <span className="text-slate-900 font-semibold">{formData.fullName}</span>! We
-                sent a confirmation receipt to <span className="text-brand-600 font-medium">{formData.email}</span>.
-                                        </p>
+                have your application against <span className="text-brand-600 font-medium">{formData.email}</span>.
+                You can sign in with that address once a reviewer approves it.
+              </p>
+
+              {result?.code && (
+                <p className="mt-4 text-xs text-slate-500">
+                  Your partner code will be{' '}
+                  <span className="rounded bg-slate-100 px-2 py-1 font-mono font-semibold text-slate-800">
+                    {result.code}
+                  </span>
+                </p>
+              )}
 
 
               {/* Quick recap of what they submitted — mostly reassurance, not meant to be exhaustive */}
@@ -126,6 +172,12 @@ export default function ApplyPage() {
                   <span>Payout Method:</span>
                   <span className="text-slate-900 font-medium">{formData.paymentPreference}</span>
                 </div>
+                {result?.parentName && (
+                  <div className="flex justify-between">
+                    <span>Referred By:</span>
+                    <span className="text-slate-900 font-medium">{result.parentName}</span>
+                  </div>
+                )}
               </div>
 
               <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
@@ -171,9 +223,34 @@ export default function ApplyPage() {
               you're on */}
 
 
+          {parentCode && (
+            <div className="mb-5 flex items-start gap-2 rounded-xl border border-brand-500/30 bg-brand-500/10 px-4 py-3 text-sm text-slate-700">
+              <Users className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+              <span>
+                You were invited by partner{' '}
+                <span className="font-semibold text-slate-900">{parentCode}</span>
+                {overrideRate ? ` at a ${overrideRate}% network rate` : ''}. Your
+                application will be linked to them.
+              </span>
+            </div>
+          )}
+
+          {error && (
+            <div className="mb-5 flex items-start gap-2 rounded-xl border border-danger-400/40 bg-danger-500/10 px-4 py-3 text-sm text-danger-600">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
           <form onSubmit={onSubmit} className="space-y-6">
             {step === 1 && (
-              <StepAccountDetails formData={formData} updateField={updateField} onNext={goNext} />
+              <StepAccountDetails
+                formData={formData}
+                updateField={updateField}
+                onNext={goNext}
+                showPassword={showPassword}
+                setShowPassword={setShowPassword}
+              />
             )}
 
             {step === 2 && (
@@ -186,7 +263,12 @@ export default function ApplyPage() {
             )}
 
             {step === 3 && (
-              <StepPaymentMethod formData={formData} updateField={updateField} onBack={goBack} />
+              <StepPaymentMethod
+                formData={formData}
+                updateField={updateField}
+                onBack={goBack}
+                submitting={submitting}
+              />
             )}
           </form>
         </div>
@@ -266,7 +348,7 @@ const labelClasses = 'block text-xs font-semibold text-slate-500 uppercase track
 // Step 1 — just name + email, the bare minimum to create an account
 
 
-function StepAccountDetails({ formData, updateField, onNext }) {
+function StepAccountDetails({ formData, updateField, onNext, showPassword, setShowPassword }) {
   return (
     <div className="space-y-6 animate-fade-up">
       <div>
@@ -291,6 +373,57 @@ function StepAccountDetails({ formData, updateField, onNext }) {
           onChange={(e) => updateField('email', e.target.value)}
           className={inputClasses}
         />
+        <p className="mt-1.5 text-xs text-slate-400">
+          This becomes your sign-in address once the application is approved.
+        </p>
+      </div>
+
+      <div>
+        <label className={labelClasses}>Phone Number</label>
+        <input
+          type="tel"
+          placeholder="+91 98765 43210"
+          value={formData.phone}
+          onChange={(e) => updateField('phone', e.target.value)}
+          className={inputClasses}
+        />
+      </div>
+
+      <div className="grid gap-6 sm:grid-cols-2">
+        <div>
+          <label className={labelClasses}>Password *</label>
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              required
+              minLength={8}
+              placeholder="At least 8 characters"
+              value={formData.password}
+              onChange={(e) => updateField('password', e.target.value)}
+              className={inputClasses}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-4 top-3.5 text-slate-400 transition-colors hover:text-slate-600"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label className={labelClasses}>Confirm Password *</label>
+          <input
+            type={showPassword ? 'text' : 'password'}
+            required
+            placeholder="Re-enter your password"
+            value={formData.confirmPassword}
+            onChange={(e) => updateField('confirmPassword', e.target.value)}
+            className={inputClasses}
+          />
+        </div>
       </div>
 
       <button
@@ -398,7 +531,7 @@ function StepPersonalDetails({ formData, updateField, onNext, onBack }) {
 
 
 
-function StepPaymentMethod({ formData, updateField, onBack }) {
+function StepPaymentMethod({ formData, updateField, onBack, submitting }) {
   return (
     <div className="space-y-6 animate-fade-up">
       <div>
@@ -424,10 +557,11 @@ function StepPaymentMethod({ formData, updateField, onBack }) {
         </button>
         <button
           type="submit"
-          className="flex-1 py-4 text-base font-bold text-black bg-gradient-to-r from-brand-400 via-brand-500 to-brand-600 hover:from-brand-300 hover:to-brand-500 rounded-xl shadow-md hover:scale-[1.01] transition-all flex items-center justify-center space-x-2"
+          disabled={submitting}
+          className="flex-1 py-4 text-base font-bold text-black bg-gradient-to-r from-brand-400 via-brand-500 to-brand-600 hover:from-brand-300 hover:to-brand-500 rounded-xl shadow-md hover:scale-[1.01] transition-all flex items-center justify-center space-x-2 disabled:opacity-60 disabled:hover:scale-100"
         >
           <Send className="w-5 h-5" />
-          <span>Submit Application</span>
+          <span>{submitting ? 'Submitting…' : 'Submit Application'}</span>
         </button>
                                  </div>
     </div>

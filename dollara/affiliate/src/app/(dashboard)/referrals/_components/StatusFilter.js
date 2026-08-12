@@ -16,7 +16,7 @@ export default function StatusFilter({ current, onChange, counts }) {
     <div className="flex items-center gap-1.5 flex-wrap">
       {statuses.map(({ key, label, color }) => {
         const isActive = current === key;
-        const count = key === 'all' ? counts.total : (counts[key] || 0);
+        const count = counts[key] ?? 0;
         return (
 
 

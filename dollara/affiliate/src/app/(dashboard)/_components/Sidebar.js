@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useAffiliate } from '../../../context/AffiliateContext';
+import { confirmDialog } from '../../../lib/toast';
 
 import {
   LayoutDashboard, Link2, Users, GitBranch, TrendingUp,
@@ -20,7 +22,7 @@ const NAV = [
   { label: 'Payouts',          icon: Wallet,          href: '/finance/payouts' },
   { label: 'Reports',          icon: BarChart2,       href: '/reports' },
   { label: 'API & Integration',icon: Key,             href: '/settings/api' },
-  { label: 'Notifications',    icon: Bell,            href: '/notifications', badge: 3 },
+  { label: 'Notifications',    icon: Bell,            href: '/notifications', badgeKey: 'unread' },
   { label: 'Support',          icon: LifeBuoy,        href: '/support' },
   { label: 'Profile & Settings',icon: Settings,       href: '/settings/profile' },
 ];
@@ -29,6 +31,20 @@ const NAV = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { me, unread, logout } = useAffiliate();
+
+  const handleLogout = async () => {
+    const ok = await confirmDialog({
+      title: 'Sign out?',
+      text: 'You will need to sign in again to reach your partner console.',
+      confirmText: 'Sign out',
+    });
+    // Clears the stored token, which the old handler did not — it only changed
+    // the URL, leaving the session live for anyone who pressed Back.
+    if (ok) logout();
+  };
+
+  const initial = (me?.name || '?').trim().charAt(0).toUpperCase();
 
   return (
 
@@ -58,7 +74,8 @@ export default function Sidebar() {
       {/* Nav links */}
       <nav className="flex-1 px-3 py-4 space-y-0.5">
 
-        {NAV.map(({ label, icon: Icon, href, badge }) => {
+        {NAV.map(({ label, icon: Icon, href, badgeKey }) => {
+          const badge = badgeKey === 'unread' ? unread : null;
           const active = pathname === href || pathname?.startsWith(href + '/');
 
           return (
@@ -111,26 +128,27 @@ export default function Sidebar() {
 
         <div className="flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
 
-          <div className="flex items-center space-x-2.5">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center text-black font-bold text-xs shadow-sm">
-              A
+          <div className="flex min-w-0 items-center space-x-2.5">
+            <div className="w-7 h-7 shrink-0 rounded-full bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center text-black font-bold text-xs shadow-sm">
+              {initial}
             </div>
 
-            <div>
-
-
-              <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">Alex Morgan</p>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500">DLR-AF7X92</p>
-
+            <div className="min-w-0">
+              <p className="truncate text-xs font-semibold text-slate-900 dark:text-slate-100">
+                {me?.name ?? 'Loading…'}
+              </p>
+              <p className="truncate text-[10px] text-slate-400 dark:text-slate-500">
+                {me?.code ?? '—'}
+              </p>
             </div>
           </div>
 
 
           <button
             type="button"
-            onClick={() => { window.location.href = '/login'; }}
+            onClick={handleLogout}
             title="Log out"
-            className="text-slate-400 hover:text-red-500 transition-colors"
+            className="shrink-0 text-slate-400 hover:text-red-500 transition-colors"
           >
 
             <LogOut className="w-4 h-4" />

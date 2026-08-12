@@ -1,37 +1,57 @@
 'use client';
 
 import { useState } from 'react';
-import { mockSupportTickets } from '../../../lib/mockData';
+import { LifeBuoy, Loader2, AlertCircle } from 'lucide-react';
+import { affiliateApi } from '../../../services/affiliateApi';
+import { useAffiliateData } from '../../../hooks/useAffiliateData';
+import { DataState } from '../../../components/ui/DataState';
+import { toast } from '../../../lib/toast';
+import { fmtDateShort, label as humanize } from '../../../lib/format';
 
+const CATEGORIES = [
+  { value: 'payout', label: 'Payout' },
+  { value: 'commission', label: 'Commission' },
+  { value: 'tracking', label: 'Tracking & links' },
+  { value: 'account', label: 'Account' },
+  { value: 'api', label: 'API & integration' },
+  { value: 'other', label: 'Other' },
+];
 
 export default function SupportPage() {
-  const [tickets, setTickets] = useState(mockSupportTickets);
+  const { data, loading, error, reload } = useAffiliateData(
+    '/api/v1/affiliate/support/tickets?limit=50',
+    [],
+  );
   const [form, setForm] = useState({
     subject: '',
     message: '',
     priority: 'normal',
+    category: 'other',
   });
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
 
-  // create a new ticket and stick it at the top of the list
-  const submitTicket = (e) => {
+  const tickets = data?.records ?? [];
+
+  const submitTicket = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
+    setFormError('');
 
-    const id = `T-${Date.now().toString().slice(-6)}`;
-
-    const newTicket = {
-      id,
-      subject: form.subject,
-      message: form.message,
-      status: 'open',
-      createdAt: new Date().toISOString().slice(0, 10),
-      source: 'affiliate',
-      priority: form.priority,
-    };
-
-    setTickets((prev) => [newTicket, ...prev]);
-
-    // clear the form
-    setForm({ subject: '', message: '', priority: 'normal' });
+    try {
+      await affiliateApi('/api/v1/affiliate/support/tickets', {
+        method: 'POST',
+        body: JSON.stringify(form),
+      });
+      toast.success('Ticket created — support will reply by email');
+      setForm({ subject: '', message: '', priority: 'normal', category: 'other' });
+      reload();
+    } catch (err) {
+      setFormError(err.message || 'Could not create that ticket.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
 
@@ -45,7 +65,7 @@ export default function SupportPage() {
             Support
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Ticket list and new ticket submission (mock).
+Raise an issue with the partner team and track its progress.
           </p>
         </div>
       </div>
@@ -77,7 +97,17 @@ export default function SupportPage() {
               rows={6}
             />
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
+                className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/80 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+              >
+                {CATEGORIES.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
+
               <select
                 value={form.priority}
                 onChange={(e) => setForm({ ...form, priority: e.target.value })}
@@ -90,11 +120,20 @@ export default function SupportPage() {
 
               <button
                 type="submit"
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-brand-400 to-brand-600 text-black font-semibold"
+                disabled={submitting}
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-400 to-brand-600 px-4 py-2 font-semibold text-black disabled:opacity-60"
               >
+                {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
                 Create ticket
               </button>
             </div>
+
+            {formError && (
+              <div className="flex items-start gap-2 rounded-xl border border-danger-400/40 bg-danger-500/10 px-3 py-2.5 text-xs text-danger-600">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{formError}</span>
+              </div>
+            )}
           </form>
         </section>
 
@@ -105,27 +144,46 @@ export default function SupportPage() {
             Recent tickets
           </h2>
 
-          <div className="mt-3 divide-y">
-            {tickets.map((t) => (
-              <div key={t.id} className="py-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-semibold">{t.subject}</div>
-                    <div className="text-xs text-slate-500">
-                      {t.createdAt} • {t.status}
+          <DataState
+            loading={loading}
+            error={error}
+            onRetry={reload}
+            empty={!tickets.length}
+            emptyTitle="No tickets yet"
+            emptyHint="Anything you raise appears here with its current status."
+            emptyIcon={LifeBuoy}
+          >
+            <div className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
+              {tickets.map((t) => (
+                <div key={t.id} className="py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold text-slate-900 dark:text-slate-100">
+                        {t.subject}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        #{t.id} • {fmtDateShort(t.created_at)} • {humanize(t.status)}
+                      </div>
                     </div>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold capitalize ${
+                        t.priority === 'high'
+                          ? 'bg-rose-500/10 text-rose-600'
+                          : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                      }`}
+                    >
+                      {t.priority}
+                    </span>
                   </div>
-                  <div className="text-xs text-slate-500">
-                    {t.priority ?? 'normal'}
-                  </div>
-                </div>
 
-                <div className="mt-2 text-sm text-slate-600">
-                  {t.message}
+                  <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                    {humanize(t.category)} · {t.message_count}{' '}
+                    {t.message_count === 1 ? 'message' : 'messages'}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </DataState>
         </section>
 
       </div>

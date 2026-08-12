@@ -602,3 +602,11 @@ class AiCallLog(models.Model):
 
     class Meta:
         db_table = 'ai_call_logs'
+
+
+# Affiliate program models live in their own module (a separate trust boundary,
+# and ~18 models that would otherwise double this file). Re-exported here so
+# `from core.models import Affiliate` keeps working alongside every other model.
+# The import is last and one-directional: core/affiliate_models.py imports
+# nothing from here, using lazy 'core.User' references instead.
+from core.affiliate_models import *  # noqa: E402,F401,F403

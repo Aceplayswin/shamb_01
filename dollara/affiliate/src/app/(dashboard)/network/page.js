@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { Share2, Search, Plus } from 'lucide-react';
-import { mockSubAffiliates } from '../../../lib/mockData';
+import { useEffect, useState } from 'react';
+import { GitBranch, Search, Plus } from 'lucide-react';
+import { useAffiliateData } from '../../../hooks/useAffiliateData';
+import { DataState } from '../../../components/ui/DataState';
 import OverrideSummary from './_components/OverrideSummary';
 import SubAffiliateTable from './_components/SubAffiliateTable';
 import InviteSubModal from './_components/InviteSubModal';
@@ -13,18 +14,21 @@ import InviteSubModal from './_components/InviteSubModal';
 
 export default function NetworkPage() {
   const [search, setSearch] = useState('');
+  const [applied, setApplied] = useState('');
   const [showInviteModal, setShowInviteModal] = useState(false);
 
-
-
-
-  const filtered = useMemo(() => {
-    if (!search.trim()) return mockSubAffiliates;
-    return mockSubAffiliates.filter((sub) =>
-      sub.name.toLowerCase().includes(search.toLowerCase()) ||
-      sub.id.toLowerCase().includes(search.toLowerCase())
-    );
+  useEffect(() => {
+    const timer = setTimeout(() => setApplied(search.trim()), 300);
+    return () => clearTimeout(timer);
   }, [search]);
+
+  const { data, loading, error, reload } = useAffiliateData(
+    `/api/v1/affiliate/network${applied ? `?q=${encodeURIComponent(applied)}` : ''}`,
+    [applied],
+  );
+
+  const subs = data?.records ?? [];
+  const summary = data?.summary;
 
 
 
@@ -68,7 +72,7 @@ export default function NetworkPage() {
 
 
       {/* Overview stats */}
-      <OverrideSummary items={mockSubAffiliates} />
+      <OverrideSummary summary={summary} loading={loading} />
 
 
 
@@ -93,7 +97,19 @@ export default function NetworkPage() {
       </div>
 
       {/* Network Tree/Table */}
-      <SubAffiliateTable items={filtered} />
+      <DataState
+        loading={loading}
+        error={error}
+        onRetry={reload}
+        empty={!subs.length}
+        emptyTitle={applied ? 'No sub-affiliates match that search' : 'No sub-affiliates yet'}
+        emptyHint={applied
+          ? 'Try a different name or partner code.'
+          : 'Invite a partner to build your network — you earn an override on what they generate.'}
+        emptyIcon={GitBranch}
+      >
+        <SubAffiliateTable items={subs} />
+      </DataState>
 
 
 

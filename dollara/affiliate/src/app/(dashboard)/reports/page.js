@@ -2,7 +2,10 @@
 
 import { useMemo, useState } from 'react';
 import { Download, BarChart3, Globe2, Link2, Users } from 'lucide-react';
-import { mockReferrals, mockSubAffiliates, mockTopLinks } from '../../../lib/mockData';
+import { useAffiliateData } from '../../../hooks/useAffiliateData';
+import { affiliateDownload } from '../../../services/affiliateApi';
+import { inr, num } from '../../../lib/format';
+import { toast } from '../../../lib/toast';
 
 
 // quick helper for the preset buttons
@@ -31,159 +34,82 @@ function inDateRange(value, from, to) {
   return true;
 }
 
-function makeCsvLine(values) {
-  return values.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(',');
-}
-
-
 export default function ReportsPage() {
   const [range, setRange] = useState({ from: '', to: '' });
   const [breakdown, setBreakdown] = useState('link');
   const [busy, setBusy] = useState(false);
 
+  // The API's breakdown keys. The UI kept its own camelCase name for one of
+  // them, so map at the boundary rather than renaming every call site.
+  const apiBreakdown = breakdown === 'subAffiliate' ? 'sub_affiliate' : breakdown;
 
-  const filteredLinks = useMemo(
-    () => mockTopLinks.filter((item) => inDateRange(item.created, range.from, range.to)),
-    [range],
+  const query = useMemo(() => {
+    const params = new URLSearchParams({ breakdown: apiBreakdown });
+    if (range.from) params.set('from', range.from);
+    if (range.to) params.set('to', range.to);
+    return params.toString();
+  }, [apiBreakdown, range.from, range.to]);
+
+  const { data, loading, error, reload } = useAffiliateData(
+    `/api/v1/affiliate/reports?${query}`,
+    [query],
   );
 
-  const filteredSubAffiliates = useMemo(
-    () => mockSubAffiliates.filter((item) => inDateRange(item.joinedDate, range.from, range.to)),
-    [range],
-  );
+  const records = data?.records ?? [];
 
-  const filteredReferrals = useMemo(
-    () => mockReferrals.filter((item) => inDateRange(item.signupDate, range.from, range.to)),
-    [range],
-  );
-
-
-  // group referrals by country
-  const countryBreakdown = useMemo(() => {
-    const map = new Map();
-
-    filteredReferrals.forEach((referral) => {
-      const current = map.get(referral.country) ?? {
-        country: referral.country,
-        referrals: 0,
-        signups: 0,
-        ftds: 0,
-        commission: 0,
-      };
-
-      current.referrals += 1;
-      current.signups += referral.signups ? 1 : 0;
-      current.ftds += referral.ftdAmount ? 1 : 0;
-      current.commission += referral.commission;
-
-      map.set(referral.country, current);
-    });
-
-    return Array.from(map.values()).sort((a, b) => b.commission - a.commission);
-  }, [filteredReferrals]);
-
-
-  // totals for the cards at the top
   const summary = useMemo(() => {
-    if (breakdown === 'link') {
-      return {
-        primary: 'Link performance',
-        totalA: filteredLinks.reduce((sum, item) => sum + item.clicks, 0),
-        totalB: filteredLinks.reduce((sum, item) => sum + item.signups, 0),
-        totalC: filteredLinks.reduce((sum, item) => sum + item.ftds, 0),
-        totalD: filteredLinks.reduce((sum, item) => sum + item.commission, 0),
-      };
-    }
-
-    if (breakdown === 'subAffiliate') {
-      return {
-        primary: 'Sub-affiliate network',
-        totalA: filteredSubAffiliates.reduce((sum, item) => sum + item.clicks, 0),
-        totalB: filteredSubAffiliates.reduce((sum, item) => sum + item.signups, 0),
-        totalC: filteredSubAffiliates.reduce((sum, item) => sum + item.ftds, 0),
-        totalD: filteredSubAffiliates.reduce((sum, item) => sum + item.subCommission, 0),
-      };
-    }
-
-    // country view
-    return {
-      primary: 'Country performance',
-      totalA: countryBreakdown.reduce((sum, item) => sum + item.referrals, 0),
-      totalB: countryBreakdown.reduce((sum, item) => sum + item.signups, 0),
-      totalC: countryBreakdown.reduce((sum, item) => sum + item.ftds, 0),
-      totalD: countryBreakdown.reduce((sum, item) => sum + item.commission, 0),
+    const totals = data?.summary ?? { clicks: 0, signups: 0, ftds: 0, commission: 0 };
+    const titles = {
+      link: 'Link performance',
+      subAffiliate: 'Sub-affiliate network',
+      country: 'Country performance',
     };
-  }, [breakdown, filteredLinks, filteredSubAffiliates, countryBreakdown]);
+    return {
+      primary: titles[breakdown],
+      totalA: totals.clicks,
+      // A real aggregate from the server. The previous client-side version read
+      // a `signups` field that did not exist on referral rows, so this column
+      // and its card were always zero.
+      totalB: totals.signups,
+      totalC: totals.ftds,
+      totalD: totals.commission,
+    };
+  }, [data, breakdown]);
 
-
-  // rows that go into the table
-  const rows = useMemo(() => {
-    if (breakdown === 'link') {
-      return filteredLinks.map((item) => ({
-        label: item.name,
+  const rows = useMemo(
+    () =>
+      records.map((item) => ({
+        label: item.label,
+        sub: item.sub_label,
         primary: item.clicks,
         secondary: item.signups,
         tertiary: item.ftds,
-        extra: `$${item.commission.toLocaleString()}`,
-      }));
-    }
+        extra: inr(item.commission),
+      })),
+    [records],
+  );
 
-    if (breakdown === 'subAffiliate') {
-      return filteredSubAffiliates.map((item) => ({
-        label: item.name,
-        primary: item.clicks,
-        secondary: item.signups,
-        tertiary: item.ftds,
-        extra: `$${item.subCommission.toLocaleString()}`,
-      }));
-    }
-
-    return countryBreakdown.map((item) => ({
-      label: item.country,
-      primary: item.referrals,
-      secondary: item.signups,
-      tertiary: item.ftds,
-      extra: `$${item.commission.toLocaleString()}`,
-    }));
-  }, [breakdown, filteredLinks, filteredSubAffiliates, countryBreakdown]);
-
-
-  const handleExport = () => {
+  /**
+   * Export the same breakdown the table is showing.
+   *
+   * Generated server-side so the file matches the figures exactly, and fetched
+   * as a blob because the endpoint needs the Authorization header.
+   */
+  const handleExport = async () => {
+    if (busy) return;
     setBusy(true);
-
     try {
-      const headerLabels = [
-        'Name',
-        breakdown === 'country' ? 'Referrals' : 'Clicks',
-        'Signups',
-        'FTDs',
-        'Commission',
-      ];
-
-      const csvRows = [makeCsvLine(headerLabels)];
-
-      rows.forEach((row) => {
-        csvRows.push(
-          makeCsvLine([row.label, row.primary, row.secondary, row.tertiary, row.extra])
-        );
-      });
-
-      const csv = csvRows.join('\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `affiliate-reports-${breakdown}-${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      const stamp = new Date().toISOString().slice(0, 10);
+      await affiliateDownload(
+        `/api/v1/affiliate/reports/export?${query}`,
+        `affiliate-report-${apiBreakdown}-${stamp}.csv`,
+      );
+    } catch (err) {
+      toast.error(err.message || 'Could not export this report.');
     } finally {
       setBusy(false);
     }
   };
-
 
   return (
     <div className="space-y-6 animate-fade-up">
@@ -334,7 +260,7 @@ export default function ReportsPage() {
           <p className="mt-3 text-3xl font-black font-display text-slate-900 dark:text-slate-100">
             {breakdown === 'country'
               ? `${summary.totalA} regions`
-              : `${summary.totalA.toLocaleString()}`}
+              : num(summary.totalA)}
           </p>
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
             {breakdown === 'country'
@@ -348,7 +274,7 @@ export default function ReportsPage() {
             Signups
           </p>
           <p className="mt-3 text-3xl font-black font-display text-slate-900 dark:text-slate-100">
-            {summary.totalB.toLocaleString()}
+            {num(summary.totalB)}
           </p>
         </div>
 
@@ -357,7 +283,7 @@ export default function ReportsPage() {
             FTDs
           </p>
           <p className="mt-3 text-3xl font-black font-display text-slate-900 dark:text-slate-100">
-            {summary.totalC.toLocaleString()}
+            {num(summary.totalC)}
           </p>
         </div>
 
@@ -366,7 +292,7 @@ export default function ReportsPage() {
             Revenue
           </p>
           <p className="mt-3 text-3xl font-black font-display text-slate-900 dark:text-slate-100">
-            ${summary.totalD.toLocaleString()}
+            {inr(summary.totalD)}
           </p>
         </div>
       </div>
@@ -419,15 +345,20 @@ export default function ReportsPage() {
                   >
                     <td className="p-4 font-semibold text-slate-900 dark:text-slate-100">
                       {row.label}
+                      {row.sub && (
+                        <span className="mt-0.5 block font-mono text-[10px] font-normal text-slate-400">
+                          {row.sub}
+                        </span>
+                      )}
                     </td>
                     <td className="p-4 text-slate-600 dark:text-slate-300">
-                      {row.primary.toLocaleString()}
+                      {num(row.primary)}
                     </td>
                     <td className="p-4 text-slate-600 dark:text-slate-300">
-                      {row.secondary.toLocaleString()}
+                      {num(row.secondary)}
                     </td>
                     <td className="p-4 text-slate-600 dark:text-slate-300">
-                      {row.tertiary.toLocaleString()}
+                      {num(row.tertiary)}
                     </td>
                     <td className="p-4 font-semibold text-slate-900 dark:text-slate-100">
                       {row.extra}
@@ -440,7 +371,11 @@ export default function ReportsPage() {
                     colSpan={5}
                     className="p-8 text-center text-sm text-slate-400 dark:text-slate-500"
                   >
-                    No data matches the selected date range.
+                    {loading
+                      ? 'Loading…'
+                      : error
+                        ? error
+                        : 'No data in the selected date range.'}
                   </td>
                 </tr>
               )}
