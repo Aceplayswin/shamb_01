@@ -158,19 +158,17 @@ function NavLink({ href, label, icon: Icon, exact, onNavigate }) {
     <Link
       href={href}
       onClick={onNavigate}
-      className={`group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
-        active
+      className={`group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${active
           ? 'bg-indigo-500/10 text-white'
           : 'text-slate-400 hover:bg-slate-800/70 hover:text-white'
-      }`}
+        }`}
     >
       {active && (
         <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-indigo-400" />
       )}
       <Icon
-        className={`h-[18px] w-[18px] shrink-0 transition ${
-          active ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'
-        }`}
+        className={`h-[18px] w-[18px] shrink-0 transition ${active ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'
+          }`}
       />
       {label}
     </Link>
@@ -179,6 +177,7 @@ function NavLink({ href, label, icon: Icon, exact, onNavigate }) {
 
 function SidebarContent({ onNavigate }) {
   const branding = useBranding();
+  const brandName = branding.product_name;
   return (
     <>
       <Link
@@ -186,9 +185,14 @@ function SidebarContent({ onNavigate }) {
         onClick={onNavigate}
         className="flex shrink-0 items-center gap-3 border-b border-slate-800 px-5 py-[1.15rem]"
       >
-        <span className="grid h-9 w-9 place-items-center rounded-lg bg-indigo-600">
-          <Sparkles className="h-5 w-5 text-white" strokeWidth={2.5} />
-        </span>
+        {branding.logo_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={branding.logo_url} alt={brandName} className="h-9 w-9 rounded-lg object-contain" />
+        ) : (
+          <span className="grid h-9 w-9 place-items-center rounded-lg bg-indigo-600">
+            <Sparkles className="h-5 w-5 text-white" strokeWidth={2.5} />
+          </span>
+        )}
         <span>
           <span className="block font-display text-base font-bold leading-none text-white">
             {branding.product_name}
@@ -369,9 +373,8 @@ export function StatCard({ label, value, icon: Icon, accent = 'brand', hint, tre
       </div>
       {trend != null && (
         <p
-          className={`mt-3 inline-flex items-center gap-1 text-xs font-semibold ${
-            trend >= 0 ? 'text-emerald-400' : 'text-rose-400'
-          }`}
+          className={`mt-3 inline-flex items-center gap-1 text-xs font-semibold ${trend >= 0 ? 'text-emerald-400' : 'text-rose-400'
+            }`}
         >
           {trend >= 0 ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           {Math.abs(trend)}% vs prev.
@@ -487,14 +490,12 @@ export function Toggle({ checked, onChange, label }) {
       className="flex items-center gap-2.5 text-sm text-slate-300"
     >
       <span
-        className={`relative h-6 w-10 rounded-full transition ${
-          checked ? 'bg-indigo-500' : 'bg-slate-700'
-        }`}
+        className={`relative h-6 w-10 rounded-full transition ${checked ? 'bg-indigo-500' : 'bg-slate-700'
+          }`}
       >
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${
-            checked ? 'left-[1.125rem]' : 'left-0.5'
-          }`}
+          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${checked ? 'left-[1.125rem]' : 'left-0.5'
+            }`}
         />
       </span>
       {label}
@@ -657,15 +658,13 @@ export function FilterDrawer({ open, onClose, title = 'Filters', subtitle, onCle
   return createPortal(
     <div className="fixed inset-0 z-[70]">
       <div
-        className={`absolute inset-0 bg-black/70 transition-opacity duration-200 ${
-          visible ? 'opacity-100' : 'opacity-0'
-        }`}
+        className={`absolute inset-0 bg-black/70 transition-opacity duration-200 ${visible ? 'opacity-100' : 'opacity-0'
+          }`}
         onClick={onClose}
       />
       <aside
-        className={`absolute inset-y-0 right-0 flex w-full max-w-sm flex-col border-l border-slate-800 bg-slate-900 shadow-2xl shadow-black/60 transition-transform duration-300 ease-out ${
-          visible ? 'translate-x-0' : 'translate-x-full'
-        }`}
+        className={`absolute inset-y-0 right-0 flex w-full max-w-sm flex-col border-l border-slate-800 bg-slate-900 shadow-2xl shadow-black/60 transition-transform duration-300 ease-out ${visible ? 'translate-x-0' : 'translate-x-full'
+          }`}
       >
         <div className="flex shrink-0 items-start gap-3 border-b border-slate-800 px-5 py-4">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-indigo-500/10 text-indigo-400 ring-1 ring-inset ring-indigo-500/20">
@@ -957,11 +956,10 @@ export function Pagination({
               key={p}
               type="button"
               onClick={() => onPage(p)}
-              className={`grid h-8 min-w-[2rem] place-items-center rounded-lg border px-2 text-sm font-semibold transition ${
-                p === page
+              className={`grid h-8 min-w-[2rem] place-items-center rounded-lg border px-2 text-sm font-semibold transition ${p === page
                   ? 'border-indigo-500 bg-indigo-600 text-white'
                   : 'border-slate-700 text-slate-300 hover:border-slate-600 hover:bg-slate-800'
-              }`}
+                }`}
             >
               {p + 1}
             </button>
@@ -1057,14 +1055,14 @@ export function DataTable({
     () =>
       serialNumber
         ? [
-            {
-              key: '__sl_no',
-              label: 'Sl. No.',
-              sortable: false,
-              render: (_r, i) => <span className="text-slate-400">{i + 1}</span>,
-            },
-            ...columns,
-          ]
+          {
+            key: '__sl_no',
+            label: 'Sl. No.',
+            sortable: false,
+            render: (_r, i) => <span className="text-slate-400">{i + 1}</span>,
+          },
+          ...columns,
+        ]
         : columns,
     [serialNumber, columns],
   );
@@ -1218,9 +1216,9 @@ export function DataTable({
   const clearAll =
     onFilterClear || filterableCols.length > 0
       ? () => {
-          setColFilters({});
-          onFilterClear?.();
-        }
+        setColFilters({});
+        onFilterClear?.();
+      }
       : undefined;
 
   const filterBody = (
@@ -1311,11 +1309,10 @@ export function DataTable({
               <button
                 type="button"
                 onClick={() => setShowFilters(true)}
-                className={`relative inline-flex shrink-0 items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition ${
-                  showFilters || filterActiveResolved
+                className={`relative inline-flex shrink-0 items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition ${showFilters || filterActiveResolved
                     ? 'border-indigo-500 bg-indigo-500/10 text-indigo-300'
                     : 'border-slate-700 text-slate-200 hover:border-slate-600 hover:bg-slate-800'
-                }`}
+                  }`}
               >
                 <SlidersHorizontal className="h-4 w-4" /> Filters
                 {filterActiveResolved && (
@@ -1348,9 +1345,8 @@ export function DataTable({
                       <th
                         key={col.key}
                         onClick={sortable ? () => toggleSort(col) : undefined}
-                        className={`whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 ${alignCls} ${
-                          sortable ? 'cursor-pointer select-none transition hover:text-slate-300' : ''
-                        }`}
+                        className={`whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 ${alignCls} ${sortable ? 'cursor-pointer select-none transition hover:text-slate-300' : ''
+                          }`}
                       >
                         <span className="inline-flex items-center gap-1.5">
                           {col.label}
@@ -1379,13 +1375,12 @@ export function DataTable({
                     {displayColumns.map((col) => (
                       <td
                         key={col.key}
-                        className={`px-4 py-3.5 align-middle text-slate-200 ${
-                          col.align === 'right'
+                        className={`px-4 py-3.5 align-middle text-slate-200 ${col.align === 'right'
                             ? 'text-right'
                             : col.align === 'center'
                               ? 'text-center'
                               : ''
-                        }`}
+                          }`}
                       >
                         {col.render
                           ? col.render(row, safePage * perPage + i)
