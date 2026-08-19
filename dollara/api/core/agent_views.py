@@ -105,6 +105,92 @@ def login(request):
 
 
 # ---------------------------------------------------------------------------
+# Public: the agent programme (landing page + applications)
+# ---------------------------------------------------------------------------
+
+@require_http_methods(['GET'])
+def program_overview(request):
+    return JsonResponse(svc.get_program_overview())
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def apply(request):
+    try:
+        body = _json_body(request)
+        return JsonResponse(svc.apply_as_agent(
+            username=body.get('username'),
+            password=body.get('password'),
+            name=body.get('name'),
+            email=body.get('email'),
+            phone=body.get('phone'),
+            company_name=body.get('companyName'),
+            market_region=body.get('marketRegion'),
+            expected_volume=body.get('expectedVolume'),
+            experience=body.get('experience'),
+            notes=body.get('notes'),
+            parent_code=body.get('parentCode'),
+            ip=svc.client_ip(request),
+        ), status=201)
+    except (ValueError, json.JSONDecodeError) as e:
+        return _error_response(e)
+
+
+@require_http_methods(['GET'])
+def apply_status(request):
+    return JsonResponse(svc.application_status(request.GET.get('email', '')))
+
+
+# ---------------------------------------------------------------------------
+# Panel: the review queue for applications addressed to this agent
+# ---------------------------------------------------------------------------
+
+@require_agent(allow_locked=True)
+@require_http_methods(['GET'])
+def applications(request):
+    return JsonResponse(svc.list_applications(
+        request.agent,
+        status=request.GET.get('status'),
+        page=_int_param(request, 'page', 0),
+        per_page=_int_param(request, 'perPage', 25),
+    ))
+
+
+@csrf_exempt
+@require_agent()
+@require_http_methods(['POST'])
+def application_approve(request, application_id):
+    try:
+        body = _json_body(request)
+        return JsonResponse(svc.approve_application(
+            request.agent, application_id,
+            level=body.get('level'),
+            partnership=body.get('partnership'),
+            commission_rate=body.get('commissionRate'),
+            credit=body.get('credit', 0),
+            ip=svc.client_ip(request),
+        ))
+    except (ValueError, json.JSONDecodeError) as e:
+        return _error_response(e)
+
+
+@csrf_exempt
+@require_agent(allow_locked=True)
+@require_http_methods(['POST'])
+def application_decide(request, application_id):
+    try:
+        body = _json_body(request)
+        return JsonResponse(svc.decide_application(
+            request.agent, application_id,
+            decision=body.get('decision'),
+            reason=body.get('reason'),
+            ip=svc.client_ip(request),
+        ))
+    except (ValueError, json.JSONDecodeError) as e:
+        return _error_response(e)
+
+
+# ---------------------------------------------------------------------------
 # Panel: identity
 # ---------------------------------------------------------------------------
 

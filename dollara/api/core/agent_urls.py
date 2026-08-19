@@ -13,6 +13,11 @@ from django.urls import path
 from core import agent_views as views
 
 urlpatterns = [
+    # --- Public: programme info and applications ---
+    path('agent/program', views.program_overview),
+    path('agent/apply', views.apply),
+    path('agent/apply/status', views.apply_status),
+
     # --- Public: authentication ---
     path('agent/auth/login', views.login),
 
@@ -24,6 +29,11 @@ urlpatterns = [
     path('agent/dashboard', views.dashboard),
     path('agent/sport-analysis', views.sport_analysis),
     path('agent/sport-analysis/events/<int:event_id>', views.event_book),
+
+    # --- Panel: application review queue ---
+    path('agent/applications', views.applications),
+    path('agent/applications/<int:application_id>/approve', views.application_approve),
+    path('agent/applications/<int:application_id>/decide', views.application_decide),
 
     # --- Panel: clients (downline agents) ---
     path('agent/clients', views.clients),

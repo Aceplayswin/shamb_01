@@ -410,7 +410,15 @@ CREATE TABLE IF NOT EXISTS agents (
   unsettled_pl DECIMAL(18,2) DEFAULT 0,
   pending_commission DECIMAL(18,2) DEFAULT 0,
   is_active BOOLEAN DEFAULT TRUE,
-  status ENUM('active', 'suspended', 'locked', 'closed') NOT NULL DEFAULT 'active',
+  -- Application lifecycle and operational status share one column. The first
+  -- three values are the states before an account exists in the tree; the rest
+  -- are what it can be afterwards. DEFAULT is 'active' because an upline
+  -- opening an account through the panel creates a live one — only the public
+  -- apply flow writes 'pending'.
+  status ENUM(
+    'pending', 'info_requested', 'active', 'rejected',
+    'suspended', 'locked', 'closed'
+  ) NOT NULL DEFAULT 'active',
   -- Two independent locks, exactly as the panel's Actions column offers them:
   -- bet_locked still lets the account log in and read; user_locked does not.
   bet_locked BOOLEAN DEFAULT FALSE,
@@ -420,6 +428,19 @@ CREATE TABLE IF NOT EXISTS agents (
   currency VARCHAR(10) DEFAULT 'INR',
   contact_email VARCHAR(255),
   contact_phone VARCHAR(20),
+  -- What the public application form captures. `requested_parent_code` keeps
+  -- what the applicant actually typed even when it resolves to nothing, so an
+  -- approver can see a mistyped or stale upline code instead of just a NULL.
+  company_name VARCHAR(150),
+  market_region VARCHAR(80),
+  expected_volume VARCHAR(40),
+  experience VARCHAR(40),
+  application_notes TEXT,
+  requested_parent_code VARCHAR(20),
+  rejection_reason VARCHAR(500),
+  applied_at DATETIME,
+  approved_at DATETIME,
+  approved_by BIGINT UNSIGNED,
   last_login_at DATETIME,
   last_login_ip VARCHAR(45),
   created_by BIGINT UNSIGNED,
@@ -427,7 +448,9 @@ CREATE TABLE IF NOT EXISTS agents (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_agents_parent (parent_agent_id),
   INDEX idx_agents_path (tree_path),
-  INDEX idx_agents_status (status)
+  INDEX idx_agents_status (status),
+  INDEX idx_agents_email (contact_email),
+  INDEX idx_agents_requested_parent (requested_parent_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- External marketing partners with their own portal (dollara/affiliate, :3003).
@@ -1143,7 +1166,10 @@ INSERT INTO platform_settings (id, setting_key, setting_value, updated_at) VALUE
   (4, 'min_withdrawal', '500', '2026-06-26 06:58:40'),
   (5, 'auto_approve_withdrawal_limit', '10000', '2026-06-26 06:58:40'),
   (6, 'game_status', '{\"enabled\": true}', '2026-06-26 06:58:40'),
-  (7, 'affiliate_program', '{\"default_commission_type\": \"revenue_share\", \"default_commission_rate\": 30, \"default_cpa_amount\": 500, \"default_override_rate\": 5, \"default_hybrid_cpa_days\": 30, \"cpa_min_deposit\": 500, \"cookie_window_days\": 30, \"attribution_model\": \"last_click\", \"min_payout_threshold\": 5000, \"payout_cycle\": \"monthly\", \"auto_approve_days\": 7, \"max_override_depth\": 3, \"deduct_bonus_from_ngr\": true, \"negative_ngr_carry_forward\": true, \"fraud_max_referrals_per_ip\": 5, \"fraud_block_disposable_emails\": true, \"fraud_flag_self_referral\": true, \"click_retention_days\": 180, \"currency\": \"INR\"}', '2026-08-12 00:00:00')
+  (7, 'affiliate_program', '{\"default_commission_type\": \"revenue_share\", \"default_commission_rate\": 30, \"default_cpa_amount\": 500, \"default_override_rate\": 5, \"default_hybrid_cpa_days\": 30, \"cpa_min_deposit\": 500, \"cookie_window_days\": 30, \"attribution_model\": \"last_click\", \"min_payout_threshold\": 5000, \"payout_cycle\": \"monthly\", \"auto_approve_days\": 7, \"max_override_depth\": 3, \"deduct_bonus_from_ngr\": true, \"negative_ngr_carry_forward\": true, \"fraud_max_referrals_per_ip\": 5, \"fraud_block_disposable_emails\": true, \"fraud_flag_self_referral\": true, \"click_retention_days\": 180, \"currency\": \"INR\"}', '2026-08-12 00:00:00'),
+  -- Agent programme: what a newly approved agent is opened with, and what the
+  -- public landing page quotes. Read by core/agent_services.get_program_settings.
+  (8, 'agent_program', '{\"default_level\": \"agent\", \"default_partnership\": 25, \"default_commission_rate\": 2, \"default_opening_credit\": 0, \"min_partnership\": 0, \"max_partnership\": 100, \"review_hours\": 24, \"currency\": \"INR\"}', '2026-08-19 00:00:00')
 ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value);
 
 INSERT INTO bonuses (id, name, display_title, description, bonus_type, value_type, value_amount, min_deposit, max_bonus_cap, referrer_reward, wagering_multiplier, credit_target, status, start_date, end_date, claim_method, promo_code, per_user_limit, total_budget, total_awarded, total_claims, bonus_validity_days, allowed_countries, excluded_countries, created_at, updated_at) VALUES
@@ -1658,6 +1684,26 @@ CALL _dollara_add_column('agents', 'updated_at',        "updated_at DATETIME DEF
 -- queries in core/agent_services.py see them instead of silently skipping them.
 UPDATE agents SET tree_path = CONCAT('/', id, '/') WHERE tree_path IS NULL OR tree_path = '';
 
+-- agents: the public application flow (landing page -> apply -> upline review).
+-- An application IS the agent row in 'pending' status; `tree_path` stays NULL
+-- until approval attaches it, which is what keeps a pending row invisible to
+-- every scoped report.
+ALTER TABLE agents
+  MODIFY status ENUM(
+    'pending', 'info_requested', 'active', 'rejected',
+    'suspended', 'locked', 'closed'
+  ) NOT NULL DEFAULT 'active';
+CALL _dollara_add_column('agents', 'company_name',          "company_name VARCHAR(150) AFTER name");
+CALL _dollara_add_column('agents', 'market_region',         "market_region VARCHAR(80)");
+CALL _dollara_add_column('agents', 'expected_volume',       "expected_volume VARCHAR(40)");
+CALL _dollara_add_column('agents', 'experience',            "experience VARCHAR(40)");
+CALL _dollara_add_column('agents', 'application_notes',     "application_notes TEXT");
+CALL _dollara_add_column('agents', 'requested_parent_code', "requested_parent_code VARCHAR(20)");
+CALL _dollara_add_column('agents', 'rejection_reason',      "rejection_reason VARCHAR(500)");
+CALL _dollara_add_column('agents', 'applied_at',            "applied_at DATETIME");
+CALL _dollara_add_column('agents', 'approved_at',           "approved_at DATETIME");
+CALL _dollara_add_column('agents', 'approved_by',           "approved_by BIGINT UNSIGNED");
+
 -- wallets: the sportsbook's own promotional bucket, alongside the casino one.
 CALL _dollara_add_column('wallets', 'sports_bonus_balance',
   "sports_bonus_balance DECIMAL(18,2) DEFAULT 0 AFTER bonus_balance");
@@ -1700,6 +1746,11 @@ CALL _dollara_add_index('agents',        'idx_agents_parent',    'parent_agent_i
 CALL _dollara_add_index('agents',        'idx_agents_path',      'tree_path');
 CALL _dollara_add_index('agents',        'idx_agents_status',    'status');
 CALL _dollara_add_index('user_settings', 'idx_us_agent',         'agent_id');
+
+-- The applications queue filters on who was named as upline, and the public
+-- status check resolves by contact_email.
+CALL _dollara_add_index('agents', 'idx_agents_email',            'contact_email');
+CALL _dollara_add_index('agents', 'idx_agents_requested_parent', 'requested_parent_code');
 
 DROP PROCEDURE IF EXISTS _dollara_add_index;
 
