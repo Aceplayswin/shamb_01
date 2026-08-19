@@ -255,6 +255,12 @@ def _sports_totals(player_ids, start, end) -> dict:
         commission=_money('commission'),
         count=Count('id'),
     )
+    # Member wins are the losing side of the book, summed on their own rather
+    # than clamped off the net. Netting first would report a player who won 500
+    # and lost 400 as having won 100, which is not what "Sports Wins" means.
+    exchange_wins = bets.filter(profit_loss__lt=0).aggregate(
+        total=_money('profit_loss')
+    )['total']
     rounds = (
         GameRound.objects.filter(user_id__in=player_ids, created_at__range=(start, end))
         .filter(game__category__in=SPORTS_CATEGORIES)
@@ -265,7 +271,7 @@ def _sports_totals(player_ids, start, end) -> dict:
     # Exchange P&L is already house-signed; aggregator rounds are stake - win.
     house_pl = Decimal(exchange['pl']) + Decimal(rounds['bets']) - Decimal(rounds['wins'])
     # "Wins" on this panel means what the members took off the house.
-    wins = Decimal(rounds['wins']) + max(-Decimal(exchange['pl']), ZERO)
+    wins = Decimal(rounds['wins']) - Decimal(exchange_wins)
     return {
         'bets': _q(stake),
         'wins': _q(wins),
@@ -486,6 +492,16 @@ def _player_stats_rows(player_ids, start, end, limit: int = 50) -> list[dict]:
         .values('user_id')
         .annotate(stake=_money('stake'), pl=_money('profit_loss'))
     }
+    # Winning bets only, for the same reason as in _sports_totals: the Wins
+    # column is a gross figure, not the net position dressed up as one.
+    exchange_wins = {
+        row['user_id']: row['won']
+        for row in SportBet.objects
+        .filter(user_id__in=player_ids, placed_at__range=(start, end),
+                profit_loss__lt=0)
+        .values('user_id')
+        .annotate(won=_money('profit_loss'))
+    }
 
     active_ids = set(casino) | set(sports_rounds) | set(exchange)
     if not active_ids:
@@ -507,7 +523,9 @@ def _player_stats_rows(player_ids, start, end, limit: int = 50) -> list[dict]:
         casino_wins = Decimal(c.get('wins') or 0)
         sports_bets = Decimal(sr.get('bets') or 0) + Decimal(ex.get('stake') or 0)
         exchange_pl = Decimal(ex.get('pl') or 0)
-        sports_wins = Decimal(sr.get('wins') or 0) + max(-exchange_pl, ZERO)
+        sports_wins = (
+            Decimal(sr.get('wins') or 0) - Decimal(exchange_wins.get(user.id) or 0)
+        )
         sports_pl = (
             Decimal(sr.get('bets') or 0) - Decimal(sr.get('wins') or 0) + exchange_pl
         )
@@ -866,10 +884,15 @@ def create_client(agent: Agent, *, username, password, name, level,
     credit = Decimal(str(credit or 0))
     if credit < 0:
         raise ValueError('Opening credit cannot be negative')
-    if credit > agent.available_credit:
-        raise ValueError('Opening credit exceeds your available credit')
 
     with tenant_atomic():
+        # Locked, and the credit check re-run inside the lock: two accounts
+        # opened at the same instant would otherwise both pass a check made
+        # against the same stale balance and overdraw it.
+        me = Agent.objects.select_for_update().get(id=agent.id)
+        if credit > me.available_credit:
+            raise ValueError('Opening credit exceeds your available credit')
+
         try:
             child = Agent.objects.create(
                 code=_generate_code(),
@@ -897,15 +920,15 @@ def create_client(agent: Agent, *, username, password, name, level,
         child.save(update_fields=['tree_path', 'updated_at'])
 
         if credit > 0:
-            agent.balance = Decimal(agent.balance or 0) - credit
-            agent.save(update_fields=['balance', 'updated_at'])
+            me.balance = Decimal(me.balance or 0) - credit
+            me.save(update_fields=['balance', 'updated_at'])
             AgentTransfer.objects.create(
-                agent_id=agent.id,
+                agent_id=me.id,
                 counterparty_type=AgentTransfer.CounterpartyType.AGENT,
                 counterparty_id=child.id,
                 direction=AgentTransfer.Direction.DOWN,
                 amount=credit,
-                agent_balance_after=agent.balance,
+                agent_balance_after=me.balance,
                 counterparty_balance_after=child.balance,
                 remark='Opening credit',
                 performed_by=agent.id,
@@ -1048,10 +1071,13 @@ def create_player(agent: Agent, *, username, password, full_name=None,
     credit = Decimal(str(credit or 0))
     if credit < 0:
         raise ValueError('Opening credit cannot be negative')
-    if credit > agent.available_credit:
-        raise ValueError('Opening credit exceeds your available credit')
 
     with tenant_atomic():
+        # Same lock-then-check as create_client, for the same reason.
+        me = Agent.objects.select_for_update().get(id=agent.id)
+        if credit > me.available_credit:
+            raise ValueError('Opening credit exceeds your available credit')
+
         try:
             user = User.objects.create(
                 username=username,
@@ -1067,15 +1093,15 @@ def create_player(agent: Agent, *, username, password, full_name=None,
         UserSetting.objects.create(user=user, agent_id=agent.id, phone_verified=False)
 
         if credit > 0:
-            agent.balance = Decimal(agent.balance or 0) - credit
-            agent.save(update_fields=['balance', 'updated_at'])
+            me.balance = Decimal(me.balance or 0) - credit
+            me.save(update_fields=['balance', 'updated_at'])
             AgentTransfer.objects.create(
-                agent_id=agent.id,
+                agent_id=me.id,
                 counterparty_type=AgentTransfer.CounterpartyType.PLAYER,
                 counterparty_id=user.id,
                 direction=AgentTransfer.Direction.DOWN,
                 amount=credit,
-                agent_balance_after=agent.balance,
+                agent_balance_after=me.balance,
                 counterparty_balance_after=credit,
                 remark='Opening credit',
                 performed_by=agent.id,
@@ -1155,14 +1181,17 @@ def transfer_credit(agent: Agent, *, counterparty_type, counterparty_id,
                 raise ValueError('Amount exceeds available credit')
             source.balance = Decimal(source.balance or 0) - amount
             target.balance = Decimal(target.balance or 0) + amount
-            if direction == 'down':
-                target.credit_reference = Decimal(target.credit_reference or 0) + amount
-            else:
-                target.credit_reference = max(
-                    Decimal(target.credit_reference or 0) - amount, ZERO
-                )
-            source.save(update_fields=['balance', 'updated_at'])
-            target.save(update_fields=['balance', 'credit_reference', 'updated_at'])
+
+            # credit_reference means "what my upline has extended to me", so it
+            # always moves on the CHILD — up or down. Moving it on `target`
+            # would credit the parent's own reference when pulling money back.
+            delta = amount if direction == 'down' else -amount
+            child.credit_reference = max(
+                Decimal(child.credit_reference or 0) + delta, ZERO
+            )
+
+            me.save(update_fields=['balance', 'updated_at'])
+            child.save(update_fields=['balance', 'credit_reference', 'updated_at'])
             counterparty_balance = child.balance
         else:
             prefs = assert_player_in_downline(agent, counterparty_id)
@@ -1346,11 +1375,18 @@ def _credit_summary(agent: Agent, start, end) -> dict:
     }
 
 
+# Columns that count things rather than measure money. Summed as integers so a
+# grand total of one bet exports as "1", not "1.0".
+COUNT_COLUMNS = frozenset({'totalBets', 'players'})
+
+
 def _grand_total(rows: list[dict], keys: list[str]) -> dict:
-    total = {key: 0.0 for key in keys}
-    for row in rows:
-        for key in keys:
-            total[key] = _q(Decimal(str(total[key])) + Decimal(str(row.get(key) or 0)))
+    total = {}
+    for key in keys:
+        running = sum(
+            (Decimal(str(row.get(key) or 0)) for row in rows), Decimal('0')
+        )
+        total[key] = int(running) if key in COUNT_COLUMNS else _q(running)
     return total
 
 
