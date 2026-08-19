@@ -26,6 +26,7 @@ revenue. :func:`_casino_totals` and :func:`_sports_totals` own that split.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import secrets
@@ -41,7 +42,8 @@ from core.agent_models import (Agent, AgentAuditLog, AgentSettlement,
                                AgentTransfer, SportBet, SportEvent,
                                SportMarket)
 from core.auth_jwt import sign_token
-from core.models import Game, GameRound, Transaction, User, UserSetting, Wallet
+from core.models import (Game, GameRound, PlatformSetting, Transaction, User,
+                         UserSetting, Wallet)
 from core.services import _check_password, hash_password
 from tenants.state import get_current_tenant_id, tenant_atomic
 
@@ -56,6 +58,22 @@ CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 SPORTS_CATEGORIES = (Game.Category.SPORTS, Game.Category.VIRTUAL_SPORTS)
 
 USERNAME_RE = re.compile(r'^[A-Za-z0-9_.]{4,30}$')
+EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
+SETTINGS_KEY = 'agent_program'
+
+# Used only when the platform_settings row is missing entirely (a database that
+# predates migration 004). Every read merges the stored row over these.
+DEFAULT_PROGRAM_SETTINGS = {
+    'default_level': 'agent',
+    'default_partnership': 25,
+    'default_commission_rate': 2,
+    'default_opening_credit': 0,
+    'min_partnership': 0,
+    'max_partnership': 100,
+    'review_hours': 24,
+    'currency': 'INR',
+}
 
 MONEY = DecimalField(max_digits=20, decimal_places=2)
 
@@ -313,6 +331,14 @@ def login(username: str, password: str, *, ip=None) -> dict:
 
     # Status is checked only after the password, so a wrong password and a
     # suspended account are indistinguishable to someone probing usernames.
+    if agent.status == Agent.Status.PENDING:
+        raise ValueError('Your application is still under review.')
+    if agent.status == Agent.Status.INFO_REQUESTED:
+        raise ValueError(
+            'We need more information before approving your application.'
+        )
+    if agent.status == Agent.Status.REJECTED:
+        raise ValueError('Your application was not approved.')
     if agent.status == Agent.Status.CLOSED or not agent.is_active:
         raise ValueError('This account has been closed.')
     if agent.status == Agent.Status.SUSPENDED:
@@ -344,6 +370,7 @@ def _validate_password(password: str) -> None:
 
 def get_identity(agent: Agent) -> dict:
     """What the panel's header and its credit strip read on every page."""
+    # tree_path-based, so applications (which have none) are already excluded.
     children = downline_ids(agent, include_self=False)
     player_count = UserSetting.objects.filter(
         agent_id__in=downline_ids(agent)
@@ -811,8 +838,14 @@ def list_clients(agent: Agent, *, search=None, status=None,
 
     The panel's Clients screen is one level of the tree, not the whole subtree:
     an agent manages who it created, and drills down by opening one of them.
+
+    Applications are excluded even though a pending one carries this agent as
+    its `parent_id` — that link routes it to the right review queue, it is not a
+    statement that it is an account yet. They appear on the Applications screen.
     """
-    qs = Agent.objects.filter(parent_id=agent.id)
+    qs = Agent.objects.filter(parent_id=agent.id).exclude(
+        status__in=Agent.APPLICATION_STATUSES
+    )
     if search:
         qs = qs.filter(
             Q(username__icontains=search) | Q(name__icontains=search)
@@ -1174,6 +1207,10 @@ def transfer_credit(agent: Agent, *, counterparty_type, counterparty_id,
             child = Agent.objects.select_for_update().filter(id=counterparty_id).first()
             if not child or child.parent_id != me.id:
                 raise ValueError('That account is not directly below you')
+            # A pending application carries a parent_id for queue routing, but
+            # it is not an account and must not be able to hold credit.
+            if child.is_application:
+                raise ValueError('That application has not been approved yet')
             source, target = (me, child) if direction == 'down' else (child, me)
             # Whoever the credit leaves must have it free of open bets, which
             # is the same test in both directions.
@@ -1280,6 +1317,8 @@ def settle(agent: Agent, *, counterparty_type, counterparty_id, amount,
             child = Agent.objects.select_for_update().filter(id=counterparty_id).first()
             if not child or child.parent_id != me.id:
                 raise ValueError('That account is not directly below you')
+            if child.is_application:
+                raise ValueError('That application has not been approved yet')
             pl_before = Decimal(child.unsettled_pl or 0)
             child.unsettled_pl = pl_before - amount
             child.settled_pl = Decimal(child.settled_pl or 0) + amount
@@ -1940,3 +1979,359 @@ def _csv_cell(value):
     if isinstance(value, datetime):
         return value.strftime('%Y-%m-%d %H:%M')
     return value
+
+
+# ---------------------------------------------------------------------------
+# The agent programme: public landing page, applications, and their review
+#
+# An application IS an agent row in `pending` status, not a row in a separate
+# table. Approving it therefore mutates one record instead of copying a dozen
+# fields between two — and a pending row is invisible to every report for free,
+# because `tree_path` stays NULL until approval attaches it to the tree and
+# every scoped query is a `tree_path` prefix match.
+# ---------------------------------------------------------------------------
+
+def get_program_settings() -> dict:
+    """Programme-wide configuration, merged over the defaults above.
+
+    Stored as one JSON row in ``platform_settings`` rather than its own table,
+    exactly like the affiliate programme: the admin console's existing settings
+    endpoints then manage it for free.
+    """
+    merged = dict(DEFAULT_PROGRAM_SETTINGS)
+    row = PlatformSetting.objects.filter(setting_key=SETTINGS_KEY).first()
+    if row and row.setting_value:
+        value = row.setting_value
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except (TypeError, ValueError):
+                value = {}
+        if isinstance(value, dict):
+            merged.update(value)
+    return merged
+
+
+def get_program_overview() -> dict:
+    """Public data for the landing page.
+
+    The page quotes the terms the programme actually opens accounts on, rather
+    than numbers typed into the marketing copy — those drift the moment anyone
+    changes the real defaults.
+    """
+    settings = get_program_settings()
+    return {
+        'defaultPartnership': _q(settings['default_partnership']),
+        'defaultCommissionRate': _q(settings['default_commission_rate']),
+        'defaultLevel': settings['default_level'],
+        'currency': settings['currency'],
+        'reviewHours': settings['review_hours'],
+        # What an agent can open beneath them at the default level, so the page
+        # can describe the hierarchy without hardcoding it.
+        'levels': [
+            {'value': value, 'label': labelText}
+            for value, labelText in Agent.Level.choices
+        ],
+    }
+
+
+def _normalize_email(value: str) -> str:
+    return (value or '').strip().lower()
+
+
+def apply_as_agent(*, username, password, name, email, phone=None,
+                   company_name=None, market_region=None, expected_volume=None,
+                   experience=None, notes=None, parent_code=None, ip=None) -> dict:
+    """Submit an application. Creates a `pending` agent that cannot log in.
+
+    The applicant chooses their own username and password. Approval turns the
+    record into a login as-is; the alternative — an upline generating
+    credentials — has to transmit them over some channel, which is worse.
+    """
+    username = (username or '').strip()
+    name = (name or '').strip()
+    email = _normalize_email(email)
+
+    if not USERNAME_RE.match(username):
+        raise ValueError(
+            'Username must be 4-30 characters, letters, numbers, dot or underscore'
+        )
+    if not name:
+        raise ValueError('Your name is required')
+    if not EMAIL_RE.match(email):
+        raise ValueError('A valid email address is required')
+    _validate_password(password)
+
+    # Checked before the insert for a clear message, and again by the unique
+    # index below — two applications submitted at the same instant would
+    # otherwise both pass this check.
+    if Agent.objects.filter(username=username).exists():
+        raise ValueError('That username is already taken')
+    if Agent.objects.filter(contact_email=email).exists():
+        raise ValueError('An application already exists for this email address')
+
+    parent = None
+    if parent_code:
+        parent = Agent.objects.filter(
+            code__iexact=parent_code.strip(), status=Agent.Status.ACTIVE
+        ).first()
+        # An unknown or inactive upline code downgrades to a direct application
+        # rather than rejecting it — the applicant did nothing wrong, and the
+        # code they typed is kept for the reviewer to see.
+        if not parent:
+            logger.info('agent apply: unknown parent code %s, treating as direct',
+                        parent_code)
+
+    settings = get_program_settings()
+    try:
+        with tenant_atomic():
+            agent = Agent.objects.create(
+                code=_generate_code(),
+                username=username,
+                password_hash=hash_password(password),
+                name=name[:100],
+                company_name=(company_name or '').strip()[:150] or None,
+                contact_email=email,
+                contact_phone=(phone or '').strip()[:20] or None,
+                # Proposed, not granted. Approval is what sets the real level,
+                # partnership and parent — otherwise an applicant could name
+                # their own terms by posting a different payload.
+                level=settings['default_level'],
+                status=Agent.Status.PENDING,
+                partnership=0,
+                commission_rate=0,
+                market_region=(market_region or '').strip()[:80] or None,
+                expected_volume=(expected_volume or '').strip()[:40] or None,
+                experience=(experience or '').strip()[:40] or None,
+                application_notes=(notes or '').strip() or None,
+                requested_parent_code=(parent_code or '').strip()[:20] or None,
+                currency=settings['currency'],
+                applied_at=timezone.now(),
+                # The RESOLVED upline, so the application lands in a real queue.
+                # An unresolved code leaves this NULL, which routes it to the
+                # root — a typo must not drop the application into a queue
+                # nobody owns. `requested_parent_code` above keeps whatever they
+                # actually typed, so the reviewer can still see the mistake.
+                #
+                # Deliberately still no tree_path: that is what keeps a pending
+                # row out of every report, and approval is what sets it.
+                parent=parent,
+            )
+    except IntegrityError as exc:
+        raise ValueError('That username is already taken') from exc
+
+    audit(agent.id, 'application.submitted', actor_id=agent.id, actor_label=name,
+          target_type=AgentAuditLog.TargetType.AGENT, target_id=agent.id,
+          metadata={'email': email,
+                    'requested_parent': parent.code if parent else None},
+          ip=ip)
+    return {
+        'agentId': agent.id,
+        'code': agent.code,
+        'username': agent.username,
+        'status': agent.status,
+        'uplineName': parent.name if parent else None,
+        'reviewHours': settings['review_hours'],
+    }
+
+
+def application_status(email: str) -> dict:
+    """Let an applicant check their own status.
+
+    An unknown address returns the same shape as a known one, so this endpoint
+    cannot be used to enumerate who has applied.
+    """
+    agent = Agent.objects.filter(contact_email=_normalize_email(email)).first()
+    if not agent:
+        return {'status': 'unknown', 'appliedAt': None, 'rejectionReason': None}
+    return {
+        'status': agent.status,
+        'statusLabel': agent.get_status_display(),
+        'appliedAt': agent.applied_at,
+        'approvedAt': agent.approved_at,
+        'rejectionReason': agent.rejection_reason,
+        # Only useful once approved, and harmless before: it is the code they
+        # would hand to their own downline.
+        'code': agent.code if agent.status == Agent.Status.ACTIVE else None,
+    }
+
+
+def list_applications(agent: Agent, *, status=None, page: int = 0,
+                      per_page: int = 25) -> dict:
+    """The applications this agent may review.
+
+    Two sources, deliberately: applications whose upline code resolved to this
+    agent, plus — for the top of the tree only — every application that resolved
+    to nobody. Without that second clause a direct application, or one naming a
+    code that no longer exists, would sit in a queue nobody owns.
+
+    Routed on the resolved `parent_id` rather than the typed
+    `requested_parent_code`, so a mistyped code reaches the root instead of
+    vanishing.
+    """
+    scope = Q(parent_id=agent.id)
+    if agent.parent_id is None:
+        scope |= Q(parent_id__isnull=True)
+
+    qs = Agent.objects.filter(scope, status__in=Agent.APPLICATION_STATUSES)
+    if status:
+        qs = qs.filter(status=status)
+
+    total = qs.count()
+    rows = qs.order_by('-applied_at')[page * per_page:(page + 1) * per_page]
+
+    return {
+        'total': total,
+        'page': page,
+        'perPage': per_page,
+        'canApprove': agent.can_create_below,
+        'rows': [
+            {
+                'id': row.id,
+                'code': row.code,
+                'username': row.username,
+                'name': row.name,
+                'companyName': row.company_name,
+                'email': row.contact_email,
+                'phone': row.contact_phone,
+                'marketRegion': row.market_region,
+                'expectedVolume': row.expected_volume,
+                'experience': row.experience,
+                'notes': row.application_notes,
+                'requestedParentCode': row.requested_parent_code,
+                'status': row.status,
+                'statusLabel': row.get_status_display(),
+                'rejectionReason': row.rejection_reason,
+                'appliedAt': row.applied_at,
+            }
+            for row in rows
+        ],
+    }
+
+
+def _assert_can_review(agent: Agent, application: Agent) -> None:
+    """Guard a decision against an application in someone else's queue.
+
+    Mirrors :func:`list_applications` exactly — anything the queue shows, its
+    owner may action, and nothing else. Two copies of this rule that could
+    disagree is how an agent ends up able to approve a row they cannot see.
+    """
+    if application.parent_id == agent.id:
+        return
+    if application.parent_id is None and agent.parent_id is None:
+        return
+    raise ValueError('That application was not addressed to you')
+
+
+def approve_application(agent: Agent, application_id: int, *, level=None,
+                        partnership=None, commission_rate=None, credit=0,
+                        ip=None) -> dict:
+    """Attach an application to the tree and make it a live account.
+
+    This is the only place a row acquires a ``tree_path``, which is what makes
+    approval — rather than submission — the moment an agent becomes visible to
+    the reports.
+    """
+    application = Agent.objects.filter(id=application_id).first()
+    if not application:
+        raise ValueError('That application does not exist')
+    if not application.is_application:
+        raise ValueError('That application has already been decided')
+
+    _assert_can_review(agent, application)
+
+    settings = get_program_settings()
+    level = level or settings['default_level']
+    if level not in agent.can_create_below:
+        raise ValueError('You cannot approve an account at that level')
+
+    partnership = Decimal(str(
+        settings['default_partnership'] if partnership is None else partnership
+    ))
+    if partnership < 0 or partnership > 100:
+        raise ValueError('Partnership must be between 0 and 100')
+    commission_rate = Decimal(str(
+        settings['default_commission_rate'] if commission_rate is None
+        else commission_rate
+    ))
+    credit = Decimal(str(credit or 0))
+    if credit < 0:
+        raise ValueError('Opening credit cannot be negative')
+
+    with tenant_atomic():
+        # Same lock-then-check as create_client: the credit test has to happen
+        # against a balance nobody else can move underneath it.
+        me = Agent.objects.select_for_update().get(id=agent.id)
+        if credit > me.available_credit:
+            raise ValueError('Opening credit exceeds your available credit')
+
+        application = Agent.objects.select_for_update().get(id=application_id)
+        if not application.is_application:
+            raise ValueError('That application has already been decided')
+
+        application.parent_id = me.id
+        application.level = level
+        application.depth = me.depth + 1
+        application.tree_path = f'{me.tree_path or f"/{me.id}/"}{application.id}/'
+        application.partnership = partnership
+        application.commission_rate = commission_rate
+        application.status = Agent.Status.ACTIVE
+        application.is_active = True
+        application.rejection_reason = None
+        application.approved_at = timezone.now()
+        application.approved_by = me.id
+        application.created_by = me.id
+        application.credit_reference = credit
+        application.balance = credit
+        application.save()
+
+        if credit > 0:
+            me.balance = Decimal(me.balance or 0) - credit
+            me.save(update_fields=['balance', 'updated_at'])
+            AgentTransfer.objects.create(
+                agent_id=me.id,
+                counterparty_type=AgentTransfer.CounterpartyType.AGENT,
+                counterparty_id=application.id,
+                direction=AgentTransfer.Direction.DOWN,
+                amount=credit,
+                agent_balance_after=me.balance,
+                counterparty_balance_after=application.balance,
+                remark='Opening credit on approval',
+                performed_by=agent.id,
+            )
+
+    audit(agent.id, 'application.approved', actor_id=agent.id,
+          actor_label=agent.name, target_type=AgentAuditLog.TargetType.AGENT,
+          target_id=application.id,
+          metadata={'level': level, 'partnership': str(partnership),
+                    'credit': str(credit)}, ip=ip)
+    return {
+        'id': application.id,
+        'code': application.code,
+        'username': application.username,
+        'status': application.status,
+    }
+
+
+def decide_application(agent: Agent, application_id: int, *, decision,
+                       reason=None, ip=None) -> dict:
+    """Reject an application, or send it back for more information."""
+    if decision not in ('rejected', 'info_requested'):
+        raise ValueError('Unknown decision')
+
+    application = Agent.objects.filter(id=application_id).first()
+    if not application:
+        raise ValueError('That application does not exist')
+    if not application.is_application:
+        raise ValueError('That application has already been decided')
+
+    _assert_can_review(agent, application)
+
+    application.status = decision
+    application.rejection_reason = (reason or '').strip()[:500] or None
+    application.save(update_fields=['status', 'rejection_reason', 'updated_at'])
+
+    audit(agent.id, f'application.{decision}', actor_id=agent.id,
+          actor_label=agent.name, target_type=AgentAuditLog.TargetType.AGENT,
+          target_id=application.id, metadata={'reason': reason}, ip=ip)
+    return {'id': application.id, 'status': application.status}

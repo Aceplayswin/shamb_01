@@ -55,10 +55,21 @@ class Agent(models.Model):
         AGENT = 'agent', 'Agent'
 
     class Status(models.TextChoices):
+        # The first three are the application lifecycle, before the account
+        # exists in the tree; the rest are what it can be once approved. One
+        # column because they are mutually exclusive in practice — a rejected
+        # application is never also suspended.
+        PENDING = 'pending', 'Pending review'
+        INFO_REQUESTED = 'info_requested', 'More information requested'
         ACTIVE = 'active', 'Active'
+        REJECTED = 'rejected', 'Rejected'
         SUSPENDED = 'suspended', 'Suspended'
         LOCKED = 'locked', 'Locked'
         CLOSED = 'closed', 'Closed'
+
+    # Statuses that mean "this is an application, not an account". Nothing in
+    # these states has a tree_path, so no report can see them.
+    APPLICATION_STATUSES = ('pending', 'info_requested', 'rejected')
 
     # Ordered top-down. An agent may only create accounts strictly below its
     # own level, which is a list-index comparison rather than a rules table.
@@ -109,6 +120,22 @@ class Agent(models.Model):
     currency = models.CharField(max_length=10, default='INR')
     contact_email = models.CharField(max_length=255, null=True, blank=True)
     contact_phone = models.CharField(max_length=20, null=True, blank=True)
+
+    # Application fields, written by the public apply flow and read by the
+    # upline's review queue. `requested_parent_code` keeps what the applicant
+    # typed even when it resolves to nothing, so an approver can tell a mistyped
+    # upline code from a genuinely direct application.
+    company_name = models.CharField(max_length=150, null=True, blank=True)
+    market_region = models.CharField(max_length=80, null=True, blank=True)
+    expected_volume = models.CharField(max_length=40, null=True, blank=True)
+    experience = models.CharField(max_length=40, null=True, blank=True)
+    application_notes = models.TextField(null=True, blank=True)
+    requested_parent_code = models.CharField(max_length=20, null=True, blank=True)
+    rejection_reason = models.CharField(max_length=500, null=True, blank=True)
+    applied_at = models.DateTimeField(null=True, blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.BigIntegerField(null=True, blank=True)
+
     last_login_at = models.DateTimeField(null=True, blank=True)
     last_login_ip = models.CharField(max_length=45, null=True, blank=True)
     created_by = models.BigIntegerField(null=True, blank=True)
@@ -131,6 +158,11 @@ class Agent(models.Model):
         moment one of those paths forgot.
         """
         return (self.balance or 0) - (self.exposure or 0)
+
+    @property
+    def is_application(self) -> bool:
+        """True while this row is still an application rather than an account."""
+        return self.status in self.APPLICATION_STATUSES
 
     @property
     def can_create_below(self) -> list[str]:

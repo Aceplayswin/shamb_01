@@ -38,17 +38,31 @@ npm run dev          # http://localhost:3004
 NEXT_PUBLIC_API_URL=http://localhost:5000
 ```
 
-There is no self sign-up. An agent account is opened by its upline, so the first one has
-to be inserted by hand (`agents` needs `username`, a bcrypt `password_hash`, `level`,
-and `tree_path` set to `/<its own id>/`).
+Prospective agents apply through the public landing page; existing agents can also open
+accounts directly from the panel. Either way the **first** account has to be inserted by
+hand, since there is nobody to approve it yet — `agents` needs `username`, a bcrypt
+`password_hash`, `level`, `status='active'`, and `tree_path` set to `/<its own id>/`.
+That first row is the root of the tree, and every unattributed application lands in its
+queue.
 
 ---
 
 ## Screens
 
+### Public (no session)
+
+| Route | What it does |
+|---|---|
+| `/` | Landing page. Programme terms are read from the API, not typed into the copy, so they cannot drift from the real defaults. |
+| `/apply` | Three-step application. Accepts `?ref=<AGENTCODE>` to prefill the upline. The applicant chooses their own username and password. |
+| `/apply/status` | Status lookup by email. An unknown address returns the same shape as a known one, so it cannot enumerate applicants. |
+
+### Panel (session required)
+
 | Route | What it does |
 |---|---|
 | `/login` | Username + password. No 2FA — agents are internal to the tree, unlike affiliates. |
+| `/applications` | Review queue: approve (setting level, partnership, commission and opening credit), request more information, or reject. |
 | `/dashboard` | Period picker, per-player casino/sports breakdown, headline tiles, seven ranked tables. |
 | `/sport-analysis` | The **live** book by sport → event → market. Not date-filtered: an unsettled bet from last week is still risk today. |
 | `/clients` | The agent accounts **directly** below this one. Create, credit, lock betting. |
@@ -104,7 +118,8 @@ dollara/agent/
 | Business logic | `dollara/api/core/agent_services.py` |
 | HTTP layer | `dollara/api/core/agent_views.py` |
 | Routes | `dollara/api/core/agent_urls.py` → mounted at `/api/v1/agent/…` |
-| Schema | `dollara/api/database/init.sql` + `database/migrations/003_agent_panel.sql` |
+| Schema | `dollara/api/database/init.sql` + `database/migrations/003_agent_panel.sql`, `004_agent_applications.sql` |
+| Programme defaults | `platform_settings` row `agent_program` (partnership, commission, review time) |
 
 Three rules run through the service layer and are worth knowing before changing it:
 
@@ -115,11 +130,20 @@ Three rules run through the service layer and are worth knowing before changing 
 3. **Casino vs sports.** Casino is `game_rounds` on a non-sports game; sports is
    `sport_bets` plus `game_rounds` on a sports-category game. `_casino_totals` and
    `_sports_totals` own that split.
+4. **An application is an agent row**, in `pending` status, with no `tree_path`. That
+   missing path is what keeps it out of every report — approval is the only thing that
+   sets one. A pending row does carry `parent_id`, but purely to route it to the right
+   review queue, so `list_clients`, `transfer_credit` and `settle` all exclude
+   `Agent.APPLICATION_STATUSES` explicitly. An upline code that resolves to nothing
+   leaves `parent_id` NULL and the application goes to the root's queue rather than
+   nobody's; whatever the applicant typed is kept in `requested_parent_code` so the
+   reviewer can see the mistake.
 
 ### Applying the schema
 
 ```bash
 mysql -u root <tenant_db> < dollara/api/database/migrations/003_agent_panel.sql
+mysql -u root <tenant_db> < dollara/api/database/migrations/004_agent_applications.sql
 ```
 
 Safe to re-run — every ALTER is guarded and every CREATE is `IF NOT EXISTS`. `deploy.sh`

@@ -45,6 +45,24 @@ def require_agent(allow_locked: bool = False):
                     {'error': 'Agent account not found. Please log in again.'},
                     status=401,
                 )
+            # An application has no account behind it yet. Checked before the
+            # operational statuses so a pending applicant is told to wait
+            # rather than being told their account is closed.
+            if agent.status == Agent.Status.PENDING:
+                return JsonResponse(
+                    {'error': 'Your application is still under review.',
+                     'application': True}, status=403
+                )
+            if agent.status == Agent.Status.INFO_REQUESTED:
+                return JsonResponse(
+                    {'error': 'We need more information before approving your '
+                              'application.', 'application': True}, status=403
+                )
+            if agent.status == Agent.Status.REJECTED:
+                return JsonResponse(
+                    {'error': 'Your application was not approved.',
+                     'application': True}, status=403
+                )
             if agent.status == Agent.Status.CLOSED or not agent.is_active:
                 return JsonResponse(
                     {'error': 'This account has been closed.'}, status=403

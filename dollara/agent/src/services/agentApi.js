@@ -105,6 +105,41 @@ export async function agentDownload(path, filename) {
   return true;
 }
 
+// --- Unauthenticated calls -------------------------------------------------
+
+async function publicGet(path) {
+  const res = await fetch(`${API_URL}${path}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? 'Request failed');
+  return data;
+}
+
+async function publicPost(path, body) {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? 'Request failed');
+  return data;
+}
+
+/** Programme terms for the landing page. */
+export function fetchProgram() {
+  return publicGet('/api/v1/agent/program');
+}
+
+export function submitApplication(payload) {
+  return publicPost('/api/v1/agent/apply', payload);
+}
+
+/** An applicant checking their own status. Unknown addresses return the same
+ *  shape as known ones, so this cannot be used to enumerate applicants. */
+export function fetchApplicationStatus(email) {
+  return publicGet(`/api/v1/agent/apply/status?email=${encodeURIComponent(email)}`);
+}
+
 /** Unauthenticated login. Stores the session on success. */
 export async function agentLogin(username, password) {
   const res = await fetch(`${API_URL}/api/v1/agent/auth/login`, {
