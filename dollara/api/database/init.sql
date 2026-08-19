@@ -64,7 +64,10 @@ CREATE TABLE IF NOT EXISTS wallets (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   user_id BIGINT UNSIGNED NOT NULL,
   main_balance DECIMAL(18,2) DEFAULT 0,
+  -- Casino promotional money. The sportsbook gets its own bucket below so
+  -- neither product can spend the other's promotional balance.
   bonus_balance DECIMAL(18,2) DEFAULT 0,
+  sports_bonus_balance DECIMAL(18,2) DEFAULT 0,
   exposure_balance DECIMAL(18,2) DEFAULT 0,
   locked_balance DECIMAL(18,2) DEFAULT 0,
   wagering_balance DECIMAL(18,2) DEFAULT 0,
@@ -366,18 +369,65 @@ CREATE TABLE IF NOT EXISTS game_callback_logs (
   INDEX idx_gcl_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Downline operators with their own portal (dollara/agent, :3004). A fourth
+-- trust boundary: not staff, not players, not marketing partners. They log in
+-- with `username`/`password_hash` and carry role='agent' in the JWT, so
+-- `request.auth.sub` is an `agents.id`.
+--
+-- Two columns carry the whole tree and are kept in step by core/agent_services:
+--   parent_agent_id -> the immediate upline, NULL for the root operator;
+--   tree_path       -> materialised path '/1/4/9/' INCLUDING this row's own id.
+-- The path exists because every report on that panel is "me and everything
+-- below me", and a recursive CTE per request is the one thing MySQL 5.7 (which
+-- some tenants still run) cannot do at all.
+--
+-- Money columns, in the language the panel prints them in:
+--   credit_reference -> notional credit the upline has extended (a limit, not cash)
+--   balance          -> chips actually held; rises when the upline pushes credit down
+--   exposure         -> currently at risk on unsettled bets
+--   available credit -> balance - exposure, derived on read, never stored
+--   partnership      -> % of downline P&L this agent keeps; the rest flows upline
 CREATE TABLE IF NOT EXISTS agents (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   user_id BIGINT UNSIGNED,
   code VARCHAR(20) UNIQUE NOT NULL,
+  username VARCHAR(50) UNIQUE,
+  password_hash VARCHAR(255),
   name VARCHAR(100) NOT NULL,
+  parent_agent_id BIGINT UNSIGNED,
+  level ENUM('super_admin', 'admin', 'super_master', 'master', 'agent') NOT NULL DEFAULT 'agent',
+  depth INT NOT NULL DEFAULT 1,
+  tree_path VARCHAR(255),
   commission_rate DECIMAL(5,2) DEFAULT 10,
   commission_type ENUM('revenue_share', 'cpa', 'hybrid') DEFAULT 'revenue_share',
+  credit_reference DECIMAL(18,2) DEFAULT 0,
+  balance DECIMAL(18,2) DEFAULT 0,
+  exposure DECIMAL(18,2) DEFAULT 0,
+  partnership DECIMAL(5,2) DEFAULT 0,
   total_players INT DEFAULT 0,
   total_commission DECIMAL(18,2) DEFAULT 0,
+  settled_pl DECIMAL(18,2) DEFAULT 0,
+  unsettled_pl DECIMAL(18,2) DEFAULT 0,
   pending_commission DECIMAL(18,2) DEFAULT 0,
   is_active BOOLEAN DEFAULT TRUE,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  status ENUM('active', 'suspended', 'locked', 'closed') NOT NULL DEFAULT 'active',
+  -- Two independent locks, exactly as the panel's Actions column offers them:
+  -- bet_locked still lets the account log in and read; user_locked does not.
+  bet_locked BOOLEAN DEFAULT FALSE,
+  user_locked BOOLEAN DEFAULT FALSE,
+  must_change_password BOOLEAN DEFAULT FALSE,
+  timezone VARCHAR(64) DEFAULT 'Asia/Kolkata',
+  currency VARCHAR(10) DEFAULT 'INR',
+  contact_email VARCHAR(255),
+  contact_phone VARCHAR(20),
+  last_login_at DATETIME,
+  last_login_ip VARCHAR(45),
+  created_by BIGINT UNSIGNED,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_agents_parent (parent_agent_id),
+  INDEX idx_agents_path (tree_path),
+  INDEX idx_agents_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- External marketing partners with their own portal (dollara/affiliate, :3003).
@@ -909,6 +959,164 @@ CREATE TABLE IF NOT EXISTS affiliate_commission_runs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------
+-- Agent panel (dollara/agent, :3004)
+--
+-- Everything below hangs off `agents` above. Shipped as migration
+-- database/migrations/003_agent_panel.sql for tenants that already exist.
+-- ---------------------------------------------------------------------------
+
+-- Credit movement between an agent and its downline — backs the Transfer
+-- Statement report. One row per transfer, written once and never updated.
+--
+-- Both sides are stored as (type, id) rather than two nullable FKs because a
+-- transfer is agent->agent as often as agent->player, and a single pair keeps
+-- the statement query to one index scan per side.
+--
+-- `direction` is recorded from the PERFORMING agent's point of view:
+--   'down' = credit pushed to the counterparty (the panel's "Balance Down")
+--   'up'   = credit pulled back from them      (the panel's "Balance Up")
+CREATE TABLE IF NOT EXISTS agent_transfers (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  agent_id BIGINT UNSIGNED NOT NULL,
+  counterparty_type ENUM('agent', 'player') NOT NULL,
+  counterparty_id BIGINT UNSIGNED NOT NULL,
+  direction ENUM('down', 'up') NOT NULL,
+  amount DECIMAL(18,2) NOT NULL,
+  agent_balance_after DECIMAL(18,2),
+  counterparty_balance_after DECIMAL(18,2),
+  remark VARCHAR(255),
+  performed_by BIGINT UNSIGNED,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_at_agent (agent_id, created_at),
+  INDEX idx_at_counterparty (counterparty_type, counterparty_id, created_at),
+  FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Settling zeroes the P&L accrued between two accounts and records what was
+-- agreed. `amount` is signed from the AGENT's side: positive means the
+-- counterparty owed the agent.
+CREATE TABLE IF NOT EXISTS agent_settlements (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  agent_id BIGINT UNSIGNED NOT NULL,
+  counterparty_type ENUM('agent', 'player') NOT NULL,
+  counterparty_id BIGINT UNSIGNED NOT NULL,
+  amount DECIMAL(18,2) NOT NULL,
+  pl_before DECIMAL(18,2) DEFAULT 0,
+  pl_after DECIMAL(18,2) DEFAULT 0,
+  period_start DATE,
+  period_end DATE,
+  note VARCHAR(255),
+  settled_by BIGINT UNSIGNED,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_as_agent (agent_id, created_at),
+  INDEX idx_as_counterparty (counterparty_type, counterparty_id),
+  FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Exchange sportsbook: events -> markets -> bets.
+--
+-- Deliberately separate from `bets` / `game_rounds`. Those record aggregator
+-- casino play, which has no event, no market and no lay side; forcing an
+-- exchange bet through them would mean every column the Sport Analysis screen
+-- needs living in a JSON blob no report could group by.
+CREATE TABLE IF NOT EXISTS sport_events (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  -- Free text rather than an ENUM: the sport list grows with the feed, and an
+  -- ENUM would need a migration per sport.
+  sport VARCHAR(40) NOT NULL,
+  -- Upstream feed id, when there is one. Unique so a re-import updates rather
+  -- than duplicates the fixture.
+  event_key VARCHAR(64) UNIQUE,
+  name VARCHAR(200) NOT NULL,
+  competition VARCHAR(150),
+  start_time DATETIME,
+  status ENUM('upcoming', 'in_play', 'closed', 'settled', 'abandoned') NOT NULL DEFAULT 'upcoming',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_se_sport (sport, start_time),
+  INDEX idx_se_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS sport_markets (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  event_id BIGINT UNSIGNED NOT NULL,
+  market_key VARCHAR(64),
+  -- What the panel prints in its MARKETS column, e.g. "Match Odds (Bookmaker)".
+  name VARCHAR(150) NOT NULL,
+  market_type ENUM('match_odds', 'bookmaker', 'fancy', 'toss', 'tied_match', 'other')
+    NOT NULL DEFAULT 'match_odds',
+  status ENUM('open', 'suspended', 'closed', 'settled') NOT NULL DEFAULT 'open',
+  winning_selection VARCHAR(150),
+  settled_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_sm_event_key (event_id, market_key),
+  INDEX idx_sm_event (event_id),
+  INDEX idx_sm_type (market_type),
+  FOREIGN KEY (event_id) REFERENCES sport_events(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- One row per stake. `agent_id` is denormalised off user_settings at placement
+-- time on purpose: it is the column every report groups by, and a player moved
+-- to a different agent tomorrow must not silently rewrite yesterday's history.
+--
+-- Sign conventions, all from the HOUSE's point of view so the reports can sum
+-- without a CASE per row:
+--   stake       -> what the member risked
+--   liability   -> the most the house can lose on this bet
+--   profit_loss -> settled house result: positive = house won, negative = paid out
+--   exposure    -> liability while status='open', 0 once settled
+CREATE TABLE IF NOT EXISTS sport_bets (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  agent_id BIGINT UNSIGNED,
+  event_id BIGINT UNSIGNED NOT NULL,
+  market_id BIGINT UNSIGNED NOT NULL,
+  selection_name VARCHAR(150),
+  side ENUM('back', 'lay') NOT NULL DEFAULT 'back',
+  odds DECIMAL(10,4) NOT NULL DEFAULT 0,
+  -- Fancy markets price in runs, not decimal odds; both are kept so the bet
+  -- list can print what the member actually saw.
+  run_line DECIMAL(10,2),
+  stake DECIMAL(18,2) NOT NULL,
+  liability DECIMAL(18,2) NOT NULL DEFAULT 0,
+  potential_win DECIMAL(18,2) NOT NULL DEFAULT 0,
+  exposure DECIMAL(18,2) NOT NULL DEFAULT 0,
+  profit_loss DECIMAL(18,2) NOT NULL DEFAULT 0,
+  commission DECIMAL(18,2) NOT NULL DEFAULT 0,
+  status ENUM('open', 'won', 'lost', 'void', 'cancelled') NOT NULL DEFAULT 'open',
+  ip_address VARCHAR(45),
+  placed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  settled_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_sb_user (user_id, placed_at),
+  INDEX idx_sb_agent (agent_id, placed_at),
+  INDEX idx_sb_event (event_id),
+  INDEX idx_sb_market (market_id),
+  INDEX idx_sb_status (status),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (event_id) REFERENCES sport_events(id) ON DELETE CASCADE,
+  FOREIGN KEY (market_id) REFERENCES sport_markets(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Audit trail for everything an agent does to an account below it.
+CREATE TABLE IF NOT EXISTS agent_audit_logs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  agent_id BIGINT UNSIGNED NOT NULL,
+  actor_id BIGINT UNSIGNED,
+  actor_label VARCHAR(100),
+  action VARCHAR(60) NOT NULL,
+  target_type ENUM('agent', 'player', 'market', 'settlement', 'session') DEFAULT NULL,
+  target_id BIGINT UNSIGNED,
+  metadata JSON,
+  ip_address VARCHAR(45),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_aal_agent (agent_id, created_at),
+  INDEX idx_aal_action (action),
+  FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------------------------
 -- Seed data (admin, platform settings, game catalog)
 -- ---------------------------------------------------------------------------
 
@@ -1417,6 +1625,43 @@ CALL _dollara_add_column('affiliates', 'last_login_at',       "last_login_at DAT
 CALL _dollara_add_column('affiliates', 'updated_at',          "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
 CALL _dollara_add_column('notifications', 'affiliate_id', "affiliate_id BIGINT UNSIGNED AFTER admin_id");
 
+
+-- agents: the placeholder table gains a real identity (username, password), the
+-- upline/downline tree, and the credit columns the agent panel prints. See the
+-- CREATE TABLE above for what each money column means.
+CALL _dollara_add_column('agents', 'username',          "username VARCHAR(50) AFTER code");
+CALL _dollara_add_column('agents', 'password_hash',     "password_hash VARCHAR(255) AFTER username");
+CALL _dollara_add_column('agents', 'parent_agent_id',   "parent_agent_id BIGINT UNSIGNED AFTER name");
+CALL _dollara_add_column('agents', 'level',             "level ENUM('super_admin','admin','super_master','master','agent') NOT NULL DEFAULT 'agent' AFTER parent_agent_id");
+CALL _dollara_add_column('agents', 'depth',             "depth INT NOT NULL DEFAULT 1 AFTER level");
+CALL _dollara_add_column('agents', 'tree_path',         "tree_path VARCHAR(255) AFTER depth");
+CALL _dollara_add_column('agents', 'credit_reference',  "credit_reference DECIMAL(18,2) DEFAULT 0 AFTER commission_type");
+CALL _dollara_add_column('agents', 'balance',           "balance DECIMAL(18,2) DEFAULT 0 AFTER credit_reference");
+CALL _dollara_add_column('agents', 'exposure',          "exposure DECIMAL(18,2) DEFAULT 0 AFTER balance");
+CALL _dollara_add_column('agents', 'partnership',       "partnership DECIMAL(5,2) DEFAULT 0 AFTER exposure");
+CALL _dollara_add_column('agents', 'settled_pl',        "settled_pl DECIMAL(18,2) DEFAULT 0 AFTER total_commission");
+CALL _dollara_add_column('agents', 'unsettled_pl',      "unsettled_pl DECIMAL(18,2) DEFAULT 0 AFTER settled_pl");
+CALL _dollara_add_column('agents', 'status',            "status ENUM('active','suspended','locked','closed') NOT NULL DEFAULT 'active' AFTER is_active");
+CALL _dollara_add_column('agents', 'bet_locked',        "bet_locked BOOLEAN DEFAULT FALSE AFTER status");
+CALL _dollara_add_column('agents', 'user_locked',       "user_locked BOOLEAN DEFAULT FALSE AFTER bet_locked");
+CALL _dollara_add_column('agents', 'must_change_password', "must_change_password BOOLEAN DEFAULT FALSE AFTER user_locked");
+CALL _dollara_add_column('agents', 'timezone',          "timezone VARCHAR(64) DEFAULT 'Asia/Kolkata'");
+CALL _dollara_add_column('agents', 'currency',          "currency VARCHAR(10) DEFAULT 'INR'");
+CALL _dollara_add_column('agents', 'contact_email',     "contact_email VARCHAR(255)");
+CALL _dollara_add_column('agents', 'contact_phone',     "contact_phone VARCHAR(20)");
+CALL _dollara_add_column('agents', 'last_login_at',     "last_login_at DATETIME");
+CALL _dollara_add_column('agents', 'last_login_ip',     "last_login_ip VARCHAR(45)");
+CALL _dollara_add_column('agents', 'created_by',        "created_by BIGINT UNSIGNED");
+CALL _dollara_add_column('agents', 'updated_at',        "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+
+-- Existing placeholder rows predate the tree. Give them a path so the subtree
+-- queries in core/agent_services.py see them instead of silently skipping them.
+UPDATE agents SET tree_path = CONCAT('/', id, '/') WHERE tree_path IS NULL OR tree_path = '';
+
+-- wallets: the sportsbook's own promotional bucket, alongside the casino one.
+CALL _dollara_add_column('wallets', 'sports_bonus_balance',
+  "sports_bonus_balance DECIMAL(18,2) DEFAULT 0 AFTER bonus_balance");
+
 DROP PROCEDURE IF EXISTS _dollara_add_column;
 
 -- Index helper: add an index only when it is missing (idempotent re-runs).
@@ -1447,6 +1692,14 @@ CALL _dollara_add_index('affiliates',    'idx_aff_status',       'status');
 CALL _dollara_add_index('affiliates',    'idx_aff_parent',       'parent_affiliate_id');
 CALL _dollara_add_index('affiliates',    'idx_aff_email',        'email');
 CALL _dollara_add_index('notifications', 'idx_notif_affiliate',  'affiliate_id');
+
+-- Agent panel lookups: every screen is "me and everything below me" (tree_path),
+-- the client list walks parents, and every player query filters on agent_id —
+-- which user_settings has carried since day one without an index on it.
+CALL _dollara_add_index('agents',        'idx_agents_parent',    'parent_agent_id');
+CALL _dollara_add_index('agents',        'idx_agents_path',      'tree_path');
+CALL _dollara_add_index('agents',        'idx_agents_status',    'status');
+CALL _dollara_add_index('user_settings', 'idx_us_agent',         'agent_id');
 
 DROP PROCEDURE IF EXISTS _dollara_add_index;
 

@@ -55,7 +55,7 @@ coverage/
 # Misc
 *.pem
 *.ppk
-deploy.ps1
-deploy.sh
+*.ps1
+*.sh
 winco/
 .env
