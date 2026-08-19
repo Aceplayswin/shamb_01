@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Card from '../_components/Card';
 import { DataState } from '../../../components/ui/DataState';
 import { useAgentData } from '../../../hooks/useAgentData';
@@ -16,7 +16,9 @@ import { fmtDate, label, money, num, signClass } from '../../../lib/format';
  */
 export default function SportAnalysisPage() {
   const { data, loading, error, reload } = useAgentData('/api/v1/agent/sport-analysis');
-  const sports = data?.sports ?? [];
+  // Memoised because it is an effect dependency: `data?.sports ?? []` allocates
+  // a fresh empty array every render, which would re-run the effect forever.
+  const sports = useMemo(() => data?.sports ?? [], [data]);
   const [active, setActive] = useState(null);
 
   // The first tab is only knowable once the data arrives, and it must not
