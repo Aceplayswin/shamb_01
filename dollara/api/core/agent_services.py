@@ -2012,6 +2012,22 @@ def get_program_settings() -> dict:
     return merged
 
 
+def save_program_settings(values: dict) -> dict:
+    """Merge ``values`` over the stored settings and persist them.
+
+    Unknown keys are dropped so a stray field from an older client cannot
+    poison the config — the same contract as the affiliate programme's saver.
+    """
+    current = get_program_settings()
+    for key in DEFAULT_PROGRAM_SETTINGS:
+        if key in values and values[key] is not None:
+            current[key] = values[key]
+    PlatformSetting.objects.update_or_create(
+        setting_key=SETTINGS_KEY, defaults={'setting_value': current}
+    )
+    return current
+
+
 def get_program_overview() -> dict:
     """Public data for the landing page.
 

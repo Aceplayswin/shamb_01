@@ -40,6 +40,9 @@ import {
   FileSpreadsheet,
   HelpCircle,
   CreditCard,
+  Network,
+  Wallet,
+  ScrollText,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { adminApi, adminUploadImage, clearAdminToken, getAdminRole, getAdminToken } from '@/services/adminApi';
@@ -93,6 +96,16 @@ const NAV_GROUPS = [
       { href: '/affiliates/payouts', label: 'Payout Approvals', icon: CreditCard },
       { href: '/affiliates/settings', label: 'Global Settings', icon: SlidersHorizontal },
       { href: '/affiliates/audit', label: 'Fraud/Audit', icon: ShieldCheck },
+    ],
+  },
+  {
+    label: 'Agents',
+    items: [
+      { href: '/agents/applications', label: 'Applications', icon: Inbox },
+      { href: '/agents', label: 'Agent List', icon: Network, exact: true },
+      { href: '/agents/credit', label: 'Credit & Settlement', icon: Wallet },
+      { href: '/agents/settings', label: 'Global Settings', icon: SlidersHorizontal },
+      { href: '/agents/audit', label: 'Audit Log', icon: ScrollText },
     ],
   },
   {
@@ -727,6 +740,7 @@ export function StatusBadge({ status }) {
     rejected: 'bg-red-500/15 text-red-400 ring-red-500/30',
     failed: 'bg-red-500/15 text-red-400 ring-red-500/30',
     suspended: 'bg-red-500/15 text-red-400 ring-red-500/30',
+    locked: 'bg-orange-500/15 text-orange-400 ring-orange-500/30',
     blocked: 'bg-red-500/15 text-red-400 ring-red-500/30',
     lost: 'bg-red-500/15 text-red-400 ring-red-500/30',
     cancelled: 'bg-slate-500/15 text-slate-400 ring-slate-500/30',

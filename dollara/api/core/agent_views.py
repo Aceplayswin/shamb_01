@@ -5,10 +5,14 @@ read the request, call one service function, wrap the result. No business logic
 lives here.
 
 Decorator order matches the rest of the codebase — ``@csrf_exempt`` first, then
-the auth guard, then the method whitelist. Only one guard appears below,
-``@require_agent()``: unlike affiliates, agents have no signed server-to-server
-contract, so there is no second authentication path to keep separate from this
-one.
+the auth guard, then the method whitelist. Two guards appear below and they are
+never mixed on one view:
+
+* ``@require_agent()``     — an agent's own panel session (JWT);
+* ``@require_auth(['admin'])`` — the staff console, at the bottom of the file.
+
+There is no third: unlike affiliates, agents have no signed server-to-server
+contract, so no separate machine authentication path exists.
 """
 
 from __future__ import annotations
@@ -22,8 +26,10 @@ from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
+from core import agent_admin_services as admin_svc
 from core import agent_services as svc
 from core.agent_auth import require_agent
+from core.middleware import require_auth
 
 logger = logging.getLogger('agent')
 
@@ -412,3 +418,180 @@ def report_export(request, kind):
     except ValueError as e:
         return _error_response(e, status=404)
     return _csv_response(rows, f'agent-{kind}')
+
+
+# ---------------------------------------------------------------------------
+# Admin console
+#
+# The staff side of the programme, behind `@require_auth(['admin'])` rather
+# than `@require_agent`. These are the only views in this file an agent token
+# cannot reach, and the only ones that see the whole tree instead of one
+# subtree — see core/agent_admin_services.py for why that split exists.
+# ---------------------------------------------------------------------------
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_applications(request):
+    return JsonResponse(admin_svc.list_applications(
+        status=request.GET.get('status'),
+        limit=_int_param(request, 'limit', 50),
+        offset=_int_param(request, 'offset', 0),
+    ))
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_application_approve(request, application_id):
+    try:
+        return JsonResponse(admin_svc.approve_application(
+            application_id, request.auth.sub, _json_body(request)
+        ))
+    except (json.JSONDecodeError, ValueError) as e:
+        return _error_response(e)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_application_reject(request, application_id):
+    try:
+        return JsonResponse(admin_svc.decide_application(
+            application_id, request.auth.sub,
+            decision='rejected', reason=_json_body(request).get('reason'),
+        ))
+    except (json.JSONDecodeError, ValueError) as e:
+        return _error_response(e)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_application_request_info(request, application_id):
+    try:
+        return JsonResponse(admin_svc.decide_application(
+            application_id, request.auth.sub,
+            decision='info_requested', reason=_json_body(request).get('message'),
+        ))
+    except (json.JSONDecodeError, ValueError) as e:
+        return _error_response(e)
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_agents(request):
+    return JsonResponse(admin_svc.list_agents(
+        status=request.GET.get('status'),
+        level=request.GET.get('level'),
+        q=request.GET.get('q'),
+        limit=_int_param(request, 'limit', 100),
+        offset=_int_param(request, 'offset', 0),
+    ))
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['GET', 'PATCH', 'DELETE'])
+def admin_agent_detail(request, agent_id):
+    try:
+        if request.method == 'PATCH':
+            return JsonResponse(admin_svc.update_agent(
+                agent_id, request.auth.sub, _json_body(request)
+            ))
+        if request.method == 'DELETE':
+            return JsonResponse(admin_svc.delete_agent(agent_id, request.auth.sub))
+        return JsonResponse(admin_svc.get_agent_detail(agent_id))
+    except json.JSONDecodeError as e:
+        return _error_response(e)
+    except ValueError as e:
+        return _error_response(e, 404 if request.method == 'GET' else 400)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_agent_status(request, agent_id):
+    try:
+        return JsonResponse(admin_svc.set_agent_status(
+            agent_id, request.auth.sub, _json_body(request).get('status', '')
+        ))
+    except (json.JSONDecodeError, ValueError) as e:
+        return _error_response(e)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_agent_password(request, agent_id):
+    try:
+        return JsonResponse(admin_svc.reset_password(
+            agent_id, request.auth.sub, _json_body(request).get('password', '')
+        ))
+    except (json.JSONDecodeError, ValueError) as e:
+        return _error_response(e)
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['POST'])
+def admin_agent_credit(request, agent_id):
+    try:
+        body = _json_body(request)
+        return JsonResponse(admin_svc.adjust_credit(
+            agent_id, request.auth.sub,
+            amount=body.get('amount'), remark=body.get('remark'),
+        ), status=201)
+    except (json.JSONDecodeError, ValueError) as e:
+        return _error_response(e)
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_transfers(request):
+    return JsonResponse(admin_svc.list_transfers(
+        agent_id=_int_param(request, 'agentId', 0) or None,
+        direction=request.GET.get('direction'),
+        date_from=request.GET.get('from'),
+        date_to=request.GET.get('to'),
+        limit=_int_param(request, 'limit', 100),
+        offset=_int_param(request, 'offset', 0),
+    ))
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_settlements(request):
+    return JsonResponse(admin_svc.list_settlements(
+        agent_id=_int_param(request, 'agentId', 0) or None,
+        date_from=request.GET.get('from'),
+        date_to=request.GET.get('to'),
+        limit=_int_param(request, 'limit', 100),
+        offset=_int_param(request, 'offset', 0),
+    ))
+
+
+@csrf_exempt
+@require_auth(['admin'])
+@require_http_methods(['GET', 'PUT'])
+def admin_settings(request):
+    try:
+        if request.method == 'PUT':
+            return JsonResponse(admin_svc.update_settings(
+                _json_body(request), request.auth.sub
+            ))
+        return JsonResponse(admin_svc.get_settings())
+    except (json.JSONDecodeError, ValueError) as e:
+        return _error_response(e)
+
+
+@require_auth(['admin'])
+@require_http_methods(['GET'])
+def admin_audit(request):
+    return JsonResponse(admin_svc.list_audit_log(
+        agent_id=_int_param(request, 'agentId', 0) or None,
+        action=request.GET.get('action'),
+        date_from=request.GET.get('from'),
+        date_to=request.GET.get('to'),
+        limit=_int_param(request, 'limit', 100),
+        offset=_int_param(request, 'offset', 0),
+    ))
