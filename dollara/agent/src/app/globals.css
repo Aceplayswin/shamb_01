@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  font-size: 14px;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background-color: #131a2b;
+  color: #e6eaf3;
+  min-height: 100vh;
+}
+
+/* Native date inputs render an almost-black calendar glyph on a dark field,
+   which is invisible. Inverting it is the only way to recolour that shadow-DOM
+   button from here. */
+input[type='date']::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
+  cursor: pointer;
+}
+
+@layer components {
+  /* The panel is built out of five repeated pieces. They live here rather than
+     in each screen so a table on the dashboard and a table in a report cannot
+     drift apart. */
+  .card {
+    @apply rounded bg-panel shadow-card;
+  }
+  .card-title {
+    @apply px-5 py-3.5 text-base font-semibold text-ink;
+  }
+  .field {
+    @apply w-full rounded border border-hairline bg-shell-bg px-3 py-2.5 text-sm text-ink
+           placeholder:text-ink-faint focus:border-blue-500 focus:outline-none;
+  }
+  .field-label {
+    @apply mb-2 block text-sm text-ink;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded px-5 py-2.5 text-sm
+           font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-blue-600 hover:bg-blue-700;
+  }
+  .btn-success {
+    @apply btn bg-green-600 hover:bg-green-700;
+  }
+  .btn-cancel {
+    @apply btn bg-[#c0563f] hover:bg-[#a94a35];
+  }
+  .btn-ghost {
+    @apply btn border border-hairline bg-transparent text-ink hover:bg-panel-hover;
+  }
+
+  /* Tables. Every report and list on the panel uses exactly these. */
+  .tbl {
+    @apply w-full border-collapse text-sm;
+  }
+  .tbl th {
+    @apply border border-hairline bg-panel-head px-4 py-3 text-left font-semibold text-ink;
+  }
+  .tbl td {
+    @apply border border-hairline px-4 py-3 text-ink;
+  }
+  .tbl tbody tr:hover td {
+    @apply bg-panel-hover;
+  }
+  .num {
+    @apply text-right tabular-nums;
+  }
+}

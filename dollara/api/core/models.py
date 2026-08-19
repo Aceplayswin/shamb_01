@@ -100,7 +100,13 @@ class Wallet(models.Model):
     id = models.BigAutoField(primary_key=True)
     user = models.OneToOneField(User, on_delete=models.CASCADE, db_column='user_id')
     main_balance = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    # Casino promotional money. The sportsbook has its own bucket below so
+    # neither product can spend the other's promotional balance — the agent
+    # panel prints the two side by side in its player-stats row.
     bonus_balance = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    sports_bonus_balance = models.DecimalField(
+        max_digits=18, decimal_places=2, default=0
+    )
     exposure_balance = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     locked_balance = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     # Outstanding wagering requirement (legacy tbl_requiredplay_balance). Must be
@@ -610,3 +616,7 @@ class AiCallLog(models.Model):
 # The import is last and one-directional: core/affiliate_models.py imports
 # nothing from here, using lazy 'core.User' references instead.
 from core.affiliate_models import *  # noqa: E402,F401,F403
+
+# Agent panel models, on the same terms: their own trust boundary, their own
+# module, re-exported here so `from core.models import Agent` keeps working.
+from core.agent_models import *  # noqa: E402,F401,F403

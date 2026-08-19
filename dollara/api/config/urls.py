@@ -35,6 +35,9 @@ urlpatterns = [
     # Affiliate program. Mounted after core.urls — Django tries includes in order
     # and falls through on no match, so core/urls.py needs no change.
     path('api/v1/', include('core.affiliate_urls')),
+    # Agent panel. Mounted after the two includes above on the same terms —
+    # every path here is prefixed 'agent/', so nothing can shadow them.
+    path('api/v1/', include('core.agent_urls')),
     path('graphql', GraphQLView.as_view(schema=schema)),
     # Admin-uploaded images. Served by Django directly (no nginx/object storage
     # in this stack yet) so this must stay enabled outside DEBUG too — unlike
