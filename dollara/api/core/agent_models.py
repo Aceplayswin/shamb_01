@@ -263,9 +263,12 @@ class AgentAuditLog(models.Model):
         SESSION = 'session', 'Session'
 
     id = models.BigAutoField(primary_key=True)
+    # Nullable from migration 005: a console action on the programme itself —
+    # a settings change, or the deletion of the very agent it concerns — belongs
+    # in this trail but has no surviving agent row to hang off.
     agent = models.ForeignKey(
         Agent, on_delete=models.CASCADE, db_column='agent_id',
-        related_name='audit_logs',
+        related_name='audit_logs', null=True, blank=True,
     )
     actor_id = models.BigIntegerField(null=True, blank=True)
     actor_label = models.CharField(max_length=100, null=True, blank=True)

@@ -1125,7 +1125,10 @@ CREATE TABLE IF NOT EXISTS sport_bets (
 -- Audit trail for everything an agent does to an account below it.
 CREATE TABLE IF NOT EXISTS agent_audit_logs (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  agent_id BIGINT UNSIGNED NOT NULL,
+  -- Nullable: a console action on the programme itself (settings, or the
+  -- deletion of the very agent it concerns) belongs in this trail but has no
+  -- surviving agent row to hang off. Mirrors affiliate_audit_logs.affiliate_id.
+  agent_id BIGINT UNSIGNED NULL,
   actor_id BIGINT UNSIGNED,
   actor_label VARCHAR(100),
   action VARCHAR(60) NOT NULL,
@@ -1136,7 +1139,8 @@ CREATE TABLE IF NOT EXISTS agent_audit_logs (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_aal_agent (agent_id, created_at),
   INDEX idx_aal_action (action),
-  FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+  CONSTRAINT fk_aal_agent FOREIGN KEY (agent_id) REFERENCES agents(id)
+    ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------
