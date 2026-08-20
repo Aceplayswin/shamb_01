@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Menu, Search, Bell, Wallet, Download } from 'lucide-react';
+import { Menu, Search, Bell, Wallet, Download, Play, Loader2 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { useAuthStore } from '@/store/auth';
 import { useDemoLogin } from '@/hooks/useDemoLogin';
@@ -24,7 +24,7 @@ export function Theme2TopBar({ onMenu }) {
   const [getAppOpen, setGetAppOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-white/5 bg-[#0d1420]/90 px-4 backdrop-blur-xl">
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-white/5 bg-[#0d1420]/90 px-3 backdrop-blur-xl sm:gap-3 sm:px-4">
       <button
         onClick={onMenu}
         className="grid h-9 w-9 place-items-center rounded-lg text-slate-300 hover:bg-white/5 lg:hidden"
@@ -40,7 +40,7 @@ export function Theme2TopBar({ onMenu }) {
         />
       </div>
 
-      <div className="ml-auto flex items-center gap-2.5">
+      <div className="ml-auto flex items-center gap-1.5 sm:gap-2.5">
         <button
           type="button"
           onClick={() => setGetAppOpen(true)}
@@ -51,25 +51,29 @@ export function Theme2TopBar({ onMenu }) {
           <span className="hidden md:inline">Get the app</span>
         </button>
 
+        {/* Play Demo — reachable at every width; icon-only on narrow screens. */}
         {isHydrated && !token && (
           <button
             type="button"
             onClick={tryDemo}
             disabled={demoLoading}
-            className="hidden rounded-full border border-white/10 px-4 py-2 text-xs font-bold text-white transition hover:border-amber-400/50 disabled:opacity-60 lg:inline-flex"
+            title="Play Demo"
+            aria-label="Play Demo"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/10 text-xs font-bold text-white transition hover:border-amber-400/50 disabled:opacity-60 lg:inline-flex lg:h-auto lg:w-auto lg:items-center lg:gap-2 lg:px-4 lg:py-2"
           >
-            {demoLoading ? 'Starting…' : 'Play Demo'}
+            {demoLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+            <span className="hidden lg:inline">{demoLoading ? 'Starting…' : 'Play Demo'}</span>
           </button>
         )}
 
-        <div className="flex items-center gap-2 rounded-full border border-white/5 bg-[#0a101a] py-1 pl-3 pr-1">
+        <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-white/5 bg-[#0a101a] py-1 pl-2.5 pr-1 sm:gap-2 sm:pl-3">
           <Wallet className="h-4 w-4 text-amber-400" />
-          <span className="text-sm font-bold text-white">
+          <span className="whitespace-nowrap text-xs font-bold text-white sm:text-sm">
             ₹{Number(balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
           <Link
             href={token ? '/deposit' : '/login'}
-            className="rounded-full bg-gradient-to-r from-amber-400 to-amber-600 px-4 py-1.5 text-xs font-bold text-black transition hover:from-amber-300 hover:to-amber-500"
+            className="rounded-full bg-gradient-to-r from-amber-400 to-amber-600 px-3 py-1.5 text-xs font-bold text-black transition hover:from-amber-300 hover:to-amber-500 sm:px-4"
           >
             Deposit
           </Link>
@@ -87,8 +91,8 @@ export function Theme2TopBar({ onMenu }) {
           <ProfileMenu variant="theme2" />
         ) : isHydrated ? (
           <UserAuthActions
-            loginClassName="rounded-full border border-white/10 px-3 py-1.5 text-xs font-bold text-white hover:border-amber-400/50"
-            registerClassName="rounded-full bg-gradient-to-r from-amber-400 to-amber-600 px-3 py-1.5 text-xs font-bold text-black"
+            loginClassName="whitespace-nowrap rounded-full border border-white/10 px-2.5 py-1.5 text-xs font-bold text-white hover:border-amber-400/50 sm:px-3"
+            registerClassName="whitespace-nowrap rounded-full bg-gradient-to-r from-amber-400 to-amber-600 px-2.5 py-1.5 text-xs font-bold text-black sm:px-3"
           />
         ) : (
           <span className="inline-block h-9 w-9" aria-hidden />
