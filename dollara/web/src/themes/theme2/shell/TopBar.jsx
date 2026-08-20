@@ -66,9 +66,17 @@ export function Theme2TopBar({ onMenu }) {
           </button>
         )}
 
+        {/* Wallet pill. Signed out there is no balance to read (it is always
+            ₹0.00 and the pill routes to login), so narrow screens show the
+            wallet mark + Deposit only — that is the room Play Demo needs to
+            stay on the bar on a 360px phone. */}
         <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-white/5 bg-[#0a101a] py-1 pl-2.5 pr-1 sm:gap-2 sm:pl-3">
           <Wallet className="h-4 w-4 text-amber-400" />
-          <span className="whitespace-nowrap text-xs font-bold text-white sm:text-sm">
+          <span
+            className={`whitespace-nowrap text-xs font-bold text-white sm:text-sm ${
+              token ? '' : 'hidden sm:inline'
+            }`}
+          >
             ₹{Number(balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
           <Link
