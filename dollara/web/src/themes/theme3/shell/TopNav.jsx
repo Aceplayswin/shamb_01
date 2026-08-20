@@ -7,7 +7,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, X, Wallet, Download } from 'lucide-react';
+import { Menu, X, Wallet, Download, Play, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import { useBranding } from '@/hooks/useBranding';
 import { useDemoLogin } from '@/hooks/useDemoLogin';
@@ -91,14 +91,18 @@ export function Theme3TopNav() {
             <span className="hidden md:inline">Get the app</span>
           </button>
 
+          {/* Play Demo — reachable at every width; icon-only on narrow screens. */}
           {isHydrated && !token && (
             <button
               type="button"
               onClick={tryDemo}
               disabled={demoLoading}
-              className="hidden rounded-xl border border-black/10 bg-white px-4 py-2 text-xs font-black text-[#1b1726] shadow-sm transition hover:border-[#c79a3b]/50 disabled:opacity-60 lg:inline-flex"
+              title="Play Demo"
+              aria-label="Play Demo"
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-black/10 bg-white px-2.5 py-2 text-xs font-black text-[#1b1726] shadow-sm transition hover:border-[#c79a3b]/50 disabled:opacity-60 lg:px-4"
             >
-              {demoLoading ? 'Starting…' : 'Play Demo'}
+              {demoLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              <span className="hidden lg:inline">{demoLoading ? 'Starting…' : 'Play Demo'}</span>
             </button>
           )}
 

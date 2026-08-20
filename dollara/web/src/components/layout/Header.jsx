@@ -27,6 +27,8 @@ import {
   Plus,
   Sparkles,
   User,
+  Play,
+  Loader2,
 } from 'lucide-react';
 import { useBranding } from '@/hooks/useBranding';
 import { useDemoLogin } from '@/hooks/useDemoLogin';
@@ -232,14 +234,20 @@ export function Header() {
             <span className="hidden sm:inline">Get the app</span>
           </button>
 
+          {/* Play Demo — reachable at every width. Icon-only on narrow screens
+              (the same shape as "Get the app" above) so phones keep the action
+              instead of dropping it out of the bar. */}
           {!token && (
             <button
               type="button"
               onClick={tryDemo}
               disabled={demoLoading}
-              className="hidden rounded-xl border border-hairline/10 px-4 py-2 text-xs font-bold text-app-fg transition hover:border-brand-400/50 hover:bg-panel disabled:opacity-60 xl:inline-flex"
+              title="Play Demo"
+              aria-label="Play Demo"
+              className="inline-flex items-center gap-2 rounded-xl border border-hairline/10 px-2.5 py-2 text-xs font-bold text-app-fg transition hover:border-brand-400/50 hover:bg-panel disabled:opacity-60 xl:px-4"
             >
-              {demoLoading ? 'Starting…' : 'Play Demo'}
+              {demoLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              <span className="hidden xl:inline">{demoLoading ? 'Starting…' : 'Play Demo'}</span>
             </button>
           )}
 

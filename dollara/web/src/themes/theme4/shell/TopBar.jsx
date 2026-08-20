@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Megaphone, User, Wallet, Download } from 'lucide-react';
+import { Megaphone, User, Wallet, Download, Play, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import { useBranding } from '@/hooks/useBranding';
 import { useDemoLogin } from '@/hooks/useDemoLogin';
@@ -104,14 +104,18 @@ export function Theme4TopBar() {
               <span className="hidden md:inline">Get the app</span>
             </button>
 
+            {/* Play Demo — reachable at every width; icon-only on narrow screens. */}
             {isHydrated && !token && (
               <button
                 type="button"
                 onClick={tryDemo}
                 disabled={demoLoading}
-                className="hidden rounded border border-white/30 px-4 py-1.5 text-xs font-black uppercase tracking-wide text-white transition hover:bg-white/10 disabled:opacity-60 lg:inline-flex"
+                title="Play Demo"
+                aria-label="Play Demo"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded border border-white/30 px-2.5 py-1.5 text-xs font-black uppercase tracking-wide text-white transition hover:bg-white/10 disabled:opacity-60 lg:px-4"
               >
-                {demoLoading ? 'Starting…' : 'Play Demo'}
+                {demoLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                <span className="hidden lg:inline">{demoLoading ? 'Starting…' : 'Play Demo'}</span>
               </button>
             )}
 
