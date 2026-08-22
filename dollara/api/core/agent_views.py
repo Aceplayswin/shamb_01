@@ -147,53 +147,10 @@ def apply_status(request):
     return JsonResponse(svc.application_status(request.GET.get('email', '')))
 
 
-# ---------------------------------------------------------------------------
-# Panel: the review queue for applications addressed to this agent
-# ---------------------------------------------------------------------------
-
-@require_agent(allow_locked=True)
-@require_http_methods(['GET'])
-def applications(request):
-    return JsonResponse(svc.list_applications(
-        request.agent,
-        status=request.GET.get('status'),
-        page=_int_param(request, 'page', 0),
-        per_page=_int_param(request, 'perPage', 25),
-    ))
-
-
-@csrf_exempt
-@require_agent()
-@require_http_methods(['POST'])
-def application_approve(request, application_id):
-    try:
-        body = _json_body(request)
-        return JsonResponse(svc.approve_application(
-            request.agent, application_id,
-            level=body.get('level'),
-            partnership=body.get('partnership'),
-            commission_rate=body.get('commissionRate'),
-            credit=body.get('credit', 0),
-            ip=svc.client_ip(request),
-        ))
-    except (ValueError, json.JSONDecodeError) as e:
-        return _error_response(e)
-
-
-@csrf_exempt
-@require_agent(allow_locked=True)
-@require_http_methods(['POST'])
-def application_decide(request, application_id):
-    try:
-        body = _json_body(request)
-        return JsonResponse(svc.decide_application(
-            request.agent, application_id,
-            decision=body.get('decision'),
-            reason=body.get('reason'),
-            ip=svc.client_ip(request),
-        ))
-    except (ValueError, json.JSONDecodeError) as e:
-        return _error_response(e)
+# Reviewing an application is staff-only: see `admin_applications` and its
+# siblings at the bottom of this file. The panel has no counterpart on purpose
+# — an application holds a stranger's contact details, and an agent session
+# must not be able to read or decide one.
 
 
 # ---------------------------------------------------------------------------

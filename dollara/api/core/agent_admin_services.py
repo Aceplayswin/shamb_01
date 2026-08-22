@@ -12,12 +12,18 @@ Two things differ from the panel and are the whole reason this module exists:
 
 **Scope.** Every read in ``agent_services`` starts from ``downline_ids``. Staff
 have no position in the tree, so nothing here is scoped at all — the console
-sees every agent, and ``_assert_can_review`` has no counterpart.
+sees every agent.
 
-**The root.** ``create_client`` and the panel's ``approve_application`` both
-debit the caller's balance, which means neither can open or fund an account at
-the top of the tree. The console can: a parentless approval becomes a root, and
-:func:`adjust_credit` injects platform credit that came from nobody's balance.
+**The root.** ``create_client`` debits the caller's balance, which means the
+panel cannot open or fund an account at the top of the tree. The console can: a
+parentless approval becomes a root, and :func:`adjust_credit` injects platform
+credit that came from nobody's balance.
+
+Application review has no panel counterpart at all. :func:`list_applications`,
+:func:`approve_application` and :func:`decide_application` below are the only
+implementations in the codebase — an application carries a stranger's name,
+email and phone, so an agent session must never read or decide one, not even
+for an applicant who typed that agent's code.
 
 Serialization is snake_case here, matching the rest of the admin console, and
 deliberately unlike the camelCase ``agent_services`` serves the agent panel.
@@ -110,9 +116,10 @@ def _serialize_application(agent: Agent) -> dict:
 def list_applications(*, status=None, limit=50, offset=0) -> dict:
     """Every application, whoever it was addressed to.
 
-    The panel's queue is routed on ``parent_id`` so an upline only sees its own.
-    Staff review is the backstop for all of them, including the ones that
-    resolved to nobody, so there is no routing clause here at all.
+    There is no routing clause because there is nowhere else for an application
+    to go: this is the only review queue in the product. Rows that named an
+    upline and rows that resolved to nobody land here alike, and ``parent`` is
+    carried through only as the default placement for an approval.
     """
     qs = Agent.objects.select_related('parent')
     if status and status != 'all':

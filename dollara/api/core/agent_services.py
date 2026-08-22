@@ -840,8 +840,9 @@ def list_clients(agent: Agent, *, search=None, status=None,
     an agent manages who it created, and drills down by opening one of them.
 
     Applications are excluded even though a pending one carries this agent as
-    its `parent_id` — that link routes it to the right review queue, it is not a
-    statement that it is an account yet. They appear on the Applications screen.
+    its `parent_id` — that link is the placement staff will default to when
+    approving, not a statement that it is an account yet. The panel never shows
+    them anywhere: review happens in the admin console.
     """
     qs = Agent.objects.filter(parent_id=agent.id).exclude(
         status__in=Agent.APPLICATION_STATUSES
@@ -1139,6 +1140,13 @@ def create_player(agent: Agent, *, username, password, full_name=None,
                 remark='Opening credit',
                 performed_by=agent.id,
             )
+            # Opening credit is a deposit like any other. Funding the wallet
+            # above without this row is what left a new player showing a
+            # balance the dashboard could not account for.
+            _record_player_cash(
+                user.id, credit, AgentTransfer.Direction.DOWN,
+                remark='Opening credit',
+            )
 
     audit(agent.id, 'player.created', actor_id=agent.id, actor_label=agent.name,
           target_type=AgentAuditLog.TargetType.PLAYER, target_id=user.id,
@@ -1180,6 +1188,36 @@ def update_player(agent: Agent, user_id: int, changes: dict, *, ip=None) -> dict
 # Credit movement
 # ---------------------------------------------------------------------------
 
+def _record_player_cash(user_id: int, amount: Decimal, direction: str, *,
+                        remark: str) -> None:
+    """Mirror an agent-to-player credit move into the player's cash ledger.
+
+    ``wallets`` holds the balance; ``transactions`` holds the history — and
+    every deposit and withdrawal figure in the product counts rows in the
+    latter, never wallet deltas. The dashboard's Sum Of Deposits tile, its
+    Deposit/Withdraw Top 10 tables, the Transactions report and the net-cash
+    column of Real Revenue all read from there.
+
+    So every path that moves real money into or out of a player wallet has to
+    write here too. One that does not produces a balance with no deposit behind
+    it: the Players screen shows the money (it reads the wallet) while the
+    dashboard shows nothing (it counts transactions), and Real Revenue then
+    reads the eventual withdrawal as pure loss.
+
+    The caller owns the surrounding :func:`tenant_atomic` — this row has to
+    land with the wallet write or not at all.
+    """
+    Transaction.objects.create(
+        user_id=user_id,
+        type=(Transaction.TxType.DEPOSIT if direction == 'down'
+              else Transaction.TxType.WITHDRAWAL),
+        amount=amount,
+        status=Transaction.Status.COMPLETED,
+        payment_method='agent_transfer',
+        notes=remark,
+    )
+
+
 def transfer_credit(agent: Agent, *, counterparty_type, counterparty_id,
                     direction, amount, remark=None, ip=None) -> dict:
     """Move credit between the agent and one account directly below it.
@@ -1207,8 +1245,8 @@ def transfer_credit(agent: Agent, *, counterparty_type, counterparty_id,
             child = Agent.objects.select_for_update().filter(id=counterparty_id).first()
             if not child or child.parent_id != me.id:
                 raise ValueError('That account is not directly below you')
-            # A pending application carries a parent_id for queue routing, but
-            # it is not an account and must not be able to hold credit.
+            # A pending application carries a parent_id for its eventual
+            # placement, but it is not an account and must not hold credit.
             if child.is_application:
                 raise ValueError('That application has not been approved yet')
             source, target = (me, child) if direction == 'down' else (child, me)
@@ -1262,16 +1300,9 @@ def transfer_credit(agent: Agent, *, counterparty_type, counterparty_id,
             wallet.save(update_fields=['main_balance', 'updated_at'])
             counterparty_balance = wallet.main_balance
 
-            # A player's credit move is real money in their wallet, so it also
-            # belongs in the transaction ledger the rest of the product reads.
-            Transaction.objects.create(
-                user_id=counterparty_id,
-                type=(Transaction.TxType.DEPOSIT if direction == 'down'
-                      else Transaction.TxType.WITHDRAWAL),
-                amount=amount,
-                status=Transaction.Status.COMPLETED,
-                payment_method='agent_transfer',
-                notes=(remark or f'Agent {me.username} credit {direction}'),
+            _record_player_cash(
+                counterparty_id, amount, direction,
+                remark=(remark or f'Agent {me.username} credit {direction}'),
             )
 
         transfer = AgentTransfer.objects.create(
@@ -1982,13 +2013,20 @@ def _csv_cell(value):
 
 
 # ---------------------------------------------------------------------------
-# The agent programme: public landing page, applications, and their review
+# The agent programme: public landing page and applications
 #
 # An application IS an agent row in `pending` status, not a row in a separate
 # table. Approving it therefore mutates one record instead of copying a dozen
 # fields between two — and a pending row is invisible to every report for free,
 # because `tree_path` stays NULL until approval attaches it to the tree and
 # every scoped query is a `tree_path` prefix match.
+#
+# Submitting is public; reviewing is not. Listing and deciding applications
+# live only in :mod:`core.agent_admin_services`, behind an admin token. An
+# application carries a stranger's name, email and phone, so no agent panel
+# session may read one — not even the upline whose code was typed. The
+# resolved upline is still stored on the row, so the console can attach an
+# approval at the right place in the tree.
 # ---------------------------------------------------------------------------
 
 def get_program_settings() -> dict:
@@ -2123,11 +2161,14 @@ def apply_as_agent(*, username, password, name, email, phone=None,
                 requested_parent_code=(parent_code or '').strip()[:20] or None,
                 currency=settings['currency'],
                 applied_at=timezone.now(),
-                # The RESOLVED upline, so the application lands in a real queue.
-                # An unresolved code leaves this NULL, which routes it to the
-                # root — a typo must not drop the application into a queue
-                # nobody owns. `requested_parent_code` above keeps whatever they
-                # actually typed, so the reviewer can still see the mistake.
+                # The RESOLVED upline. Nothing is routed by it — every
+                # application goes to the one staff queue either way — but it
+                # is the placement the console defaults to when approving, so
+                # an applicant who typed a valid code lands under that agent
+                # without staff having to look it up. An unresolved code leaves
+                # this NULL and the console picks the parent by hand;
+                # `requested_parent_code` above keeps whatever they actually
+                # typed, so the reviewer can still see the mistake.
                 #
                 # Deliberately still no tree_path: that is what keeps a pending
                 # row out of every report, and approval is what sets it.
@@ -2170,184 +2211,3 @@ def application_status(email: str) -> dict:
         # would hand to their own downline.
         'code': agent.code if agent.status == Agent.Status.ACTIVE else None,
     }
-
-
-def list_applications(agent: Agent, *, status=None, page: int = 0,
-                      per_page: int = 25) -> dict:
-    """The applications this agent may review.
-
-    Two sources, deliberately: applications whose upline code resolved to this
-    agent, plus — for the top of the tree only — every application that resolved
-    to nobody. Without that second clause a direct application, or one naming a
-    code that no longer exists, would sit in a queue nobody owns.
-
-    Routed on the resolved `parent_id` rather than the typed
-    `requested_parent_code`, so a mistyped code reaches the root instead of
-    vanishing.
-    """
-    scope = Q(parent_id=agent.id)
-    if agent.parent_id is None:
-        scope |= Q(parent_id__isnull=True)
-
-    qs = Agent.objects.filter(scope, status__in=Agent.APPLICATION_STATUSES)
-    if status:
-        qs = qs.filter(status=status)
-
-    total = qs.count()
-    rows = qs.order_by('-applied_at')[page * per_page:(page + 1) * per_page]
-
-    return {
-        'total': total,
-        'page': page,
-        'perPage': per_page,
-        'canApprove': agent.can_create_below,
-        'rows': [
-            {
-                'id': row.id,
-                'code': row.code,
-                'username': row.username,
-                'name': row.name,
-                'companyName': row.company_name,
-                'email': row.contact_email,
-                'phone': row.contact_phone,
-                'marketRegion': row.market_region,
-                'expectedVolume': row.expected_volume,
-                'experience': row.experience,
-                'notes': row.application_notes,
-                'requestedParentCode': row.requested_parent_code,
-                'status': row.status,
-                'statusLabel': row.get_status_display(),
-                'rejectionReason': row.rejection_reason,
-                'appliedAt': row.applied_at,
-            }
-            for row in rows
-        ],
-    }
-
-
-def _assert_can_review(agent: Agent, application: Agent) -> None:
-    """Guard a decision against an application in someone else's queue.
-
-    Mirrors :func:`list_applications` exactly — anything the queue shows, its
-    owner may action, and nothing else. Two copies of this rule that could
-    disagree is how an agent ends up able to approve a row they cannot see.
-    """
-    if application.parent_id == agent.id:
-        return
-    if application.parent_id is None and agent.parent_id is None:
-        return
-    raise ValueError('That application was not addressed to you')
-
-
-def approve_application(agent: Agent, application_id: int, *, level=None,
-                        partnership=None, commission_rate=None, credit=0,
-                        ip=None) -> dict:
-    """Attach an application to the tree and make it a live account.
-
-    This is the only place a row acquires a ``tree_path``, which is what makes
-    approval — rather than submission — the moment an agent becomes visible to
-    the reports.
-    """
-    application = Agent.objects.filter(id=application_id).first()
-    if not application:
-        raise ValueError('That application does not exist')
-    if not application.is_application:
-        raise ValueError('That application has already been decided')
-
-    _assert_can_review(agent, application)
-
-    settings = get_program_settings()
-    level = level or settings['default_level']
-    if level not in agent.can_create_below:
-        raise ValueError('You cannot approve an account at that level')
-
-    partnership = Decimal(str(
-        settings['default_partnership'] if partnership is None else partnership
-    ))
-    if partnership < 0 or partnership > 100:
-        raise ValueError('Partnership must be between 0 and 100')
-    commission_rate = Decimal(str(
-        settings['default_commission_rate'] if commission_rate is None
-        else commission_rate
-    ))
-    credit = Decimal(str(credit or 0))
-    if credit < 0:
-        raise ValueError('Opening credit cannot be negative')
-
-    with tenant_atomic():
-        # Same lock-then-check as create_client: the credit test has to happen
-        # against a balance nobody else can move underneath it.
-        me = Agent.objects.select_for_update().get(id=agent.id)
-        if credit > me.available_credit:
-            raise ValueError('Opening credit exceeds your available credit')
-
-        application = Agent.objects.select_for_update().get(id=application_id)
-        if not application.is_application:
-            raise ValueError('That application has already been decided')
-
-        application.parent_id = me.id
-        application.level = level
-        application.depth = me.depth + 1
-        application.tree_path = f'{me.tree_path or f"/{me.id}/"}{application.id}/'
-        application.partnership = partnership
-        application.commission_rate = commission_rate
-        application.status = Agent.Status.ACTIVE
-        application.is_active = True
-        application.rejection_reason = None
-        application.approved_at = timezone.now()
-        application.approved_by = me.id
-        application.created_by = me.id
-        application.credit_reference = credit
-        application.balance = credit
-        application.save()
-
-        if credit > 0:
-            me.balance = Decimal(me.balance or 0) - credit
-            me.save(update_fields=['balance', 'updated_at'])
-            AgentTransfer.objects.create(
-                agent_id=me.id,
-                counterparty_type=AgentTransfer.CounterpartyType.AGENT,
-                counterparty_id=application.id,
-                direction=AgentTransfer.Direction.DOWN,
-                amount=credit,
-                agent_balance_after=me.balance,
-                counterparty_balance_after=application.balance,
-                remark='Opening credit on approval',
-                performed_by=agent.id,
-            )
-
-    audit(agent.id, 'application.approved', actor_id=agent.id,
-          actor_label=agent.name, target_type=AgentAuditLog.TargetType.AGENT,
-          target_id=application.id,
-          metadata={'level': level, 'partnership': str(partnership),
-                    'credit': str(credit)}, ip=ip)
-    return {
-        'id': application.id,
-        'code': application.code,
-        'username': application.username,
-        'status': application.status,
-    }
-
-
-def decide_application(agent: Agent, application_id: int, *, decision,
-                       reason=None, ip=None) -> dict:
-    """Reject an application, or send it back for more information."""
-    if decision not in ('rejected', 'info_requested'):
-        raise ValueError('Unknown decision')
-
-    application = Agent.objects.filter(id=application_id).first()
-    if not application:
-        raise ValueError('That application does not exist')
-    if not application.is_application:
-        raise ValueError('That application has already been decided')
-
-    _assert_can_review(agent, application)
-
-    application.status = decision
-    application.rejection_reason = (reason or '').strip()[:500] or None
-    application.save(update_fields=['status', 'rejection_reason', 'updated_at'])
-
-    audit(agent.id, f'application.{decision}', actor_id=agent.id,
-          actor_label=agent.name, target_type=AgentAuditLog.TargetType.AGENT,
-          target_id=application.id, metadata={'reason': reason}, ip=ip)
-    return {'id': application.id, 'status': application.status}
