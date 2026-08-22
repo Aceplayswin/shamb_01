@@ -8,7 +8,6 @@ import {
   ChevronRight,
   Dice5,
   FileText,
-  Inbox,
   KeyRound,
   LayoutGrid,
   LogOut,
@@ -25,7 +24,6 @@ const NAV = [
   { label: 'Sport Analysis', href: '/sport-analysis', icon: Dice5 },
   { label: 'Clients', href: '/clients', icon: Users },
   { label: 'Players', href: '/players', icon: User },
-  { label: 'Applications', href: '/applications', icon: Inbox },
 ];
 
 // Order matches the panel's own Reports menu.

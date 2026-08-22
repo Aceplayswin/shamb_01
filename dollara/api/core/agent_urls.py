@@ -8,6 +8,11 @@ Two families live here. Everything prefixed ``agent/`` is the panel itself, and
 every one of those except the login is behind ``@require_agent``. Everything
 prefixed ``admin/agents`` is the staff console, behind ``@require_auth(['admin'])``.
 
+Note the asymmetry in the applications routes: ``agent/apply`` is public so a
+prospect can submit one, but reviewing them exists only under ``admin/agents``.
+The panel deliberately has no review queue — an application carries a
+stranger's contact details, which only staff may read.
+
 Ordering note: in the admin block every literal sub-path is listed before the
 ``<int:agent_id>`` pattern. The int converter would not match a word anyway,
 but keeping literals first makes the intent obvious to the next reader.
@@ -34,11 +39,6 @@ urlpatterns = [
     path('agent/dashboard', views.dashboard),
     path('agent/sport-analysis', views.sport_analysis),
     path('agent/sport-analysis/events/<int:event_id>', views.event_book),
-
-    # --- Panel: application review queue ---
-    path('agent/applications', views.applications),
-    path('agent/applications/<int:application_id>/approve', views.application_approve),
-    path('agent/applications/<int:application_id>/decide', views.application_decide),
 
     # --- Panel: clients (downline agents) ---
     path('agent/clients', views.clients),
