@@ -1,5 +1,5 @@
 
-
+'use client';
 
 // Shared layout shell used by all auth screens (login, 2fa, forgot).
 // Import this, wrap your form content inside, and pass a `backHref`
@@ -10,8 +10,11 @@
 
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
+import { useBranding } from '@/hooks/useBranding';
 
 export default function AuthShell({ children, backHref = '/', backLabel = 'Back to Home' }) {
+  const { product_name: productName, logo_url: logoUrl } = useBranding();
+  const brandName = productName || 'the platform';
   return (
     <div className="min-h-screen text-slate-800 py-16 px-4 sm:px-6 lg:px-8 relative overflow-hidden flex flex-col justify-center">
       <div className="max-w-md w-full mx-auto relative z-10">
@@ -34,8 +37,8 @@ export default function AuthShell({ children, backHref = '/', backLabel = 'Back 
           </Link>
 
           <div className="flex items-center space-x-2">
-            <img src="/logo/image.png" alt="Dollara Logo" className="h-8 w-auto object-contain" />
-            <span className="font-bold text-slate-900 font-display">DOLLARA</span>
+            <img src={logoUrl || '/logo/image.png'} alt={`${brandName} Logo`} className="h-8 w-auto object-contain" />
+            <span className="font-bold text-slate-900 font-display">{brandName.toUpperCase()}</span>
           </div>
         </div>
 

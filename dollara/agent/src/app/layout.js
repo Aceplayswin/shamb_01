@@ -1,4 +1,5 @@
 import { Roboto } from 'next/font/google';
+import { BrandProvider } from '@/hooks/useBranding';
 import './globals.css';
 
 // Roboto backs the `font-sans` Tailwind family, declared in tailwind.config.js
@@ -10,17 +11,21 @@ const roboto = Roboto({
   variable: '--font-roboto',
 });
 
+// Static fallback title; useBranding sets the real product name at runtime
+// once branding loads (Next.js metadata can't be dynamic from a client fetch).
 export const metadata = {
-  title: 'Dollara Agent Panel',
+  title: 'Agent Panel',
   description:
-    'Downline console for Dollara agents — sport analysis, clients, players, '
+    'Downline console for agents — sport analysis, clients, players, '
     + 'credit and P&L reporting.',
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className={roboto.variable} suppressHydrationWarning>
-      <body className="bg-shell-bg font-sans text-ink antialiased">{children}</body>
+      <body className="bg-shell-bg font-sans text-ink antialiased">
+        <BrandProvider>{children}</BrandProvider>
+      </body>
     </html>
   );
 }

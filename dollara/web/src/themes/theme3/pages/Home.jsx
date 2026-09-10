@@ -21,6 +21,7 @@ import { useFaqs } from '@/hooks/useFaqs';
 import BannerCarousel from '@/components/BannerCarousel';
 import { filterFeatured, filterByCategory, NAV_GAME_LINKS, playPath } from '@/lib/gameRoutes';
 import { useAuthModal } from '../shell/authModalContext';
+import SupportFab from '@/components/SupportFab';
 
 const STATS = [
   { value: '100%', label: 'First Deposit', color: 'text-[#c79a3b]' },
@@ -359,6 +360,7 @@ export default function Theme3Home() {
           </div>
         </section>
       )}
+      <SupportFab />
     </div>
   );
 }

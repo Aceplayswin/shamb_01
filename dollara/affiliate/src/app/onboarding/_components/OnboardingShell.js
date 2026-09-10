@@ -1,8 +1,11 @@
+'use client';
+
 // Shared page wrapper: top bar, glass card, step indicator, and progress bar.
 // Used only by onboarding/page.js — one import wraps all four steps.
 
 import Link from 'next/link';
 import { ArrowLeft, FileText, CreditCard, ShieldCheck, Link2, Check } from 'lucide-react';
+import { useBranding } from '@/hooks/useBranding';
 
 const STEPS = [
   { number: 1, label: 'Terms & Conditions', icon: FileText },
@@ -12,6 +15,8 @@ const STEPS = [
 ];
 
 export default function OnboardingShell({ currentStep, children }) {
+  const { product_name: productName, logo_url: logoUrl } = useBranding();
+  const brandName = productName || 'the platform';
   return (
     <div className="min-h-screen text-slate-800 py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
       <div className="max-w-2xl w-full mx-auto relative z-10">
@@ -26,8 +31,8 @@ export default function OnboardingShell({ currentStep, children }) {
             <span>Back to Login</span>
           </Link>
           <div className="flex items-center space-x-2">
-            <img src="/logo/image.png" alt="Dollara Logo" className="h-8 w-auto object-contain" />
-            <span className="font-bold text-slate-900 font-display">DOLLARA</span>
+            <img src={logoUrl || '/logo/image.png'} alt={`${brandName} Logo`} className="h-8 w-auto object-contain" />
+            <span className="font-bold text-slate-900 font-display">{brandName.toUpperCase()}</span>
           </div>
         </div>
 

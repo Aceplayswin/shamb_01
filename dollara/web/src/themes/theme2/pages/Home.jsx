@@ -15,6 +15,7 @@ import { useGameCatalog } from '@/hooks/useGameCatalog';
 import { useBanners } from '@/hooks/useBanners';
 import { useFaqs } from '@/hooks/useFaqs';
 import BannerCarousel from '@/components/BannerCarousel';
+import SupportFab from '@/components/SupportFab';
 import {
   filterByCategory,
   filterFeatured,
@@ -445,6 +446,7 @@ export default function Theme2Home() {
           <button className="mt-3 w-full rounded-lg bg-gradient-to-r from-amber-400 to-amber-600 py-2.5 text-sm font-bold text-black">Place Bet</button>
         </div>
       </aside>
+      <SupportFab />
     </div>
   );
 }

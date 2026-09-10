@@ -10,6 +10,7 @@ import { useGameCatalog } from '@/hooks/useGameCatalog';
 import { useGameSearch } from '@/hooks/useGameSearch';
 import BannerCarousel from '@/components/BannerCarousel';
 import { BigWins } from '@/components/BigWins';
+import SupportFab from '@/components/SupportFab';
 import {
   filterByCategory,
   filterByProvider,
@@ -518,6 +519,7 @@ export default function Theme1Home() {
           )}
         </div>
       </main>
+      <SupportFab className="bottom-24 lg:bottom-5" />
     </>
   );
 }

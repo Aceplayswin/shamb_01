@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { fetchProgram } from '../services/affiliateApi';
 import { inr } from '../lib/format';
+import { useBranding } from '@/hooks/useBranding';
 import {
   TrendingUp,
   DollarSign,
@@ -23,6 +24,8 @@ import {
 
 
 export default function LandingPage() {
+  const { product_name: productName, logo_url: logoUrl } = useBranding();
+  const brandName = productName || 'the platform';
 
 
   // Inputs for the earnings calculator down in the "Calculator" section
@@ -94,7 +97,7 @@ export default function LandingPage() {
 
 
 
-            <img src="/logo/image.png" alt="Dollara" className="h-9 w-auto object-contain"
+            <img src={logoUrl || '/logo/image.png'} alt={brandName} className="h-9 w-auto object-contain"
               onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
             <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-brand-600 to-brand-300 hidden items-center justify-center">
               <DollarSign className="w-5 h-5 text-black" />
@@ -103,7 +106,7 @@ export default function LandingPage() {
             <div>
 
 
-              <span className="text-xl font-black font-display tracking-tight text-slate-900">DOLLARA</span>
+              <span className="text-xl font-black font-display tracking-tight text-slate-900">{brandName.toUpperCase()}</span>
               <span className="text-[9px] font-bold text-brand-600 uppercase tracking-[0.2em] block -mt-0.5">Affiliate Network</span>
 
 
@@ -177,7 +180,7 @@ export default function LandingPage() {
 
             <div className="relative rounded-xl overflow-hidden">
 
-              <img src="/banner-image/banner1.png" alt="Dollara Banner" className="w-full h-auto object-cover" />
+              <img src="/banner-image/banner1.png" alt={`${brandName} Banner`} className="w-full h-auto object-cover" />
             </div>
 
             {/* Quick Stats — static values, update here if the deal terms change */}
@@ -213,7 +216,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <p className="text-xs font-bold text-brand-600 uppercase tracking-[0.2em] mb-2">Our Brand</p>
-            <h2 className="text-3xl font-extrabold text-slate-900 font-display">Dollara Gaming Suite</h2>
+            <h2 className="text-3xl font-extrabold text-slate-900 font-display">{brandName} Gaming Suite</h2>
           </div>
 
           <div className="grid lg:grid-cols-12 gap-12 items-center">
@@ -225,7 +228,7 @@ export default function LandingPage() {
 
             <div className="lg:col-span-5 space-y-6">
               <p className="text-base text-slate-600 leading-relaxed">
-                Dollara delivers an outstanding catalog of premium iGaming products. We offer high-converting 3D Slots, Live Casino tables, and Instant Crash games backed by top software providers.
+                {brandName} delivers an outstanding catalog of premium iGaming products. We offer high-converting 3D Slots, Live Casino tables, and Instant Crash games backed by top software providers.
               </p>
               <p className="text-base text-slate-600 leading-relaxed">
                 As a partner, you gain access to marketing tools, analytics, and promo codes designed to convert traffic into active players instantly.
@@ -266,7 +269,7 @@ export default function LandingPage() {
               <div className="absolute w-[80%] aspect-[1.6] rounded-2xl border border-slate-200 bg-white/80 shadow-md p-1.5 overflow-hidden -rotate-6 translate-y-4 translate-x-[-10px] transition-transform hover:rotate-0 duration-300">
                 <img
                   src="/web/website_image.png"
-                  alt="Dollara Platform Preview"
+                  alt={`${brandName} Platform Preview`}
                   className="w-full h-full object-cover rounded-xl"
                 />
               </div>
@@ -458,13 +461,13 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ─── Why Dollara ─── */}
+      {/* ─── Why Us ─── */}
 
 
 
       <section className="py-14 border-t border-slate-200 bg-slate-100/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-xs font-bold text-brand-600 uppercase tracking-[0.2em] text-center mb-8">Why Partners Choose Dollara</p>
+          <p className="text-xs font-bold text-brand-600 uppercase tracking-[0.2em] text-center mb-8">Why Partners Choose {brandName}</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
               { icon: '📊', title: 'Real-Time Analytics', desc: 'Track clicks, signups & earnings live' },
@@ -566,7 +569,7 @@ export default function LandingPage() {
               Start Earning Today
             </h2>
             <p className="text-slate-500 mt-3 text-sm max-w-md mx-auto relative z-10">
-              Join top-performing partners earning weekly commissions with Dollara.
+              Join top-performing partners earning weekly commissions with {brandName}.
             </p>
             <Link href="/apply" className="mt-7 inline-flex px-8 py-3.5 text-sm font-bold text-black bg-gradient-to-r from-brand-400 to-brand-500 rounded-xl shadow-lg hover:scale-105 transition-all items-center space-x-2 relative z-10">
               <span>Apply for Partnership</span>
@@ -582,8 +585,8 @@ export default function LandingPage() {
       <footer className="border-t border-slate-200 py-8 text-xs text-slate-500 bg-white/95">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center space-x-2">
-            <img src="/logo/image.png" alt="Dollara" className="h-6 w-auto object-contain" />
-            <span className="text-sm font-bold font-display text-slate-800">DOLLARA</span>
+            <img src={logoUrl || '/logo/image.png'} alt={brandName} className="h-6 w-auto object-contain" />
+            <span className="text-sm font-bold font-display text-slate-800">{brandName.toUpperCase()}</span>
           </div>
 
 
@@ -591,7 +594,7 @@ export default function LandingPage() {
 
 
 
-          <p>&copy; {new Date().getFullYear()} Dollara Gaming Network</p>
+          <p>&copy; {new Date().getFullYear()} {brandName} Gaming Network</p>
           <div className="flex items-center space-x-5">
 
             <Link href="/login" className="hover:text-slate-900 transition-colors">Login</Link>

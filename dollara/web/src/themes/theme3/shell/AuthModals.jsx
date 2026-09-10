@@ -10,7 +10,6 @@ import { Lock, Phone, User as UserIcon, Gift } from 'lucide-react';
 import { api } from '@/services/api';
 import { useAuthStore } from '@/store/auth';
 import { useUnifiedLogin } from '@/hooks/useUnifiedLogin';
-import { useBranding } from '@/hooks/useBranding';
 import { PasswordInput } from '@/components/PasswordInput';
 import { AuthModal } from '../components/AuthModal';
 import { t3Input, t3BtnPrimary, T3Chip } from '../components/ui';
@@ -21,8 +20,6 @@ const iconLeft = 'pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate
 function LoginModal() {
   const { close, open } = useAuthModal();
   const { identifier, setIdentifier, password, setPassword, loading, submit } = useUnifiedLogin();
-  const branding = useBranding();
-  const brandInitial = (branding.product_name || 'V').charAt(0).toUpperCase();
 
   const handleSubmit = async (e) => {
     await submit(e); // shows its own SweetAlert + redirects on success
@@ -31,7 +28,6 @@ function LoginModal() {
   return (
     <AuthModal
       onClose={close}
-      brandInitial={brandInitial}
       sideTitle="Premium gaming access"
       sideText="Secure account login with live wallet updates and instant game launch."
       sideRows={[
@@ -97,8 +93,6 @@ function LoginModal() {
 function RegisterModal() {
   const { close, open } = useAuthModal();
   const setAuth = useAuthStore((s) => s.setAuth);
-  const branding = useBranding();
-  const brandInitial = (branding.product_name || 'V').charAt(0).toUpperCase();
 
   const [phone, setPhone] = useState('');
   const [fullName, setFullName] = useState('');
@@ -128,7 +122,6 @@ function RegisterModal() {
   return (
     <AuthModal
       onClose={close}
-      brandInitial={brandInitial}
       sideTitle="Start with a cleaner setup"
       sideText="Register once and keep your bonus, wallet, and game access in one account."
       sideRows={[

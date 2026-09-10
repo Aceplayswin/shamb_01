@@ -39,15 +39,15 @@ function Clock() {
 
 export function Theme4BrandMark({ name, dark = false }) {
   const label = name || 'DOLLARA';
+  const { logo_url: logoUrl } = useBranding();
   return (
     <Link href="/" className="flex shrink-0 items-center gap-2">
-      <span
-        className={`grid h-9 w-9 -skew-x-6 place-items-center rounded ${
-          dark ? 'bg-[#0a5560] text-white' : 'bg-white text-[#0e7480]'
-        } text-lg font-black italic shadow-sm`}
-      >
-        {label.charAt(0).toUpperCase()}
-      </span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={logoUrl}
+        alt={label}
+        className={`h-9 w-9 shrink-0 rounded object-contain ${dark ? '' : 'bg-white/95'} p-0.5 shadow-sm`}
+      />
       <span className={`font-display text-lg font-black uppercase leading-none tracking-wide ${dark ? 'text-[#13272b]' : 'text-white'}`}>
         {label}
         <span className={`block text-[0.5rem] font-bold tracking-[0.4em] ${dark ? 'text-[#0e7480]' : 'text-white/70'}`}>

@@ -6,16 +6,17 @@
 
 import { useEffect } from 'react';
 import { X } from 'lucide-react';
+import { useBranding } from '@/hooks/useBranding';
 
 /**
  * @param onClose   close handler (backdrop / ✕ / Esc)
- * @param brandInitial single letter for the little rounded logo tile
  * @param sideTitle title on the dark left panel
  * @param sideText  paragraph under the side title
  * @param sideRows  [{ label, value }] the three stat rows on the dark panel
  * @param children  the form (right panel content)
  */
-export function AuthModal({ onClose, brandInitial = 'V', sideTitle, sideText, sideRows = [], children }) {
+export function AuthModal({ onClose, sideTitle, sideText, sideRows = [], children }) {
+  const { logo_url: logoUrl, product_name: productName } = useBranding();
   // Close on Escape and lock body scroll while the modal is open.
   useEffect(() => {
     const onKey = (e) => {
@@ -49,9 +50,12 @@ export function AuthModal({ onClose, brandInitial = 'V', sideTitle, sideText, si
         <div className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-[#2a2140] via-[#241b3a] to-[#170f28] p-7 text-white md:flex">
           <div className="pointer-events-none absolute -left-8 -top-8 h-40 w-40 rounded-full bg-[#c79a3b]/25 blur-3xl" />
           <div className="relative">
-            <span className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-[#e9c56b] to-[#b8862f] text-lg font-black text-[#241b0e] shadow-lg">
-              {brandInitial}
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={logoUrl}
+              alt={productName || 'VELPLAY'}
+              className="h-11 w-11 rounded-xl object-contain shadow-lg"
+            />
             <h3 className="mt-6 font-display text-2xl font-black leading-tight">{sideTitle}</h3>
             <p className="mt-3 text-sm leading-relaxed text-white/70">{sideText}</p>
           </div>

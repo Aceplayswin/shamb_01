@@ -52,8 +52,11 @@ const CATEGORIES = [
 
 export function Theme5BrandMark({ name, compact = false }) {
   const label = name || 'DOLLARA';
+  const { logo_url: logoUrl } = useBranding();
   return (
     <Link href="/" className="flex shrink-0 items-center gap-2">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={logoUrl} alt={label} className="h-9 w-9 shrink-0 rounded object-contain" />
       <span className="rounded bg-[#101c33] px-2 py-1 leading-none shadow-sm">
         <span className="block font-display text-sm font-black italic tracking-tight text-[#f5c518]">
           {label.toUpperCase()}

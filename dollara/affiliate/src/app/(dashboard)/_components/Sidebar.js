@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAffiliate } from '../../../context/AffiliateContext';
 import { confirmDialog } from '../../../lib/toast';
+import { useBranding } from '@/hooks/useBranding';
 
 import {
   LayoutDashboard, Link2, Users, GitBranch, TrendingUp,
@@ -32,6 +33,8 @@ const NAV = [
 export default function Sidebar() {
   const pathname = usePathname();
   const { me, unread, logout } = useAffiliate();
+  const { product_name: productName, logo_url: logoUrl } = useBranding();
+  const brandName = productName || 'the platform';
 
   const handleLogout = async () => {
     const ok = await confirmDialog({
@@ -54,10 +57,10 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="h-16 flex items-center px-5 border-b border-slate-200 dark:border-slate-800 shrink-0">
         <Link href="/dashboard" className="flex items-center space-x-2.5">
-          <img src="/logo/image.png" alt="Dollara" className="h-7 w-auto object-contain" />
+          <img src={logoUrl || '/logo/image.png'} alt={brandName} className="h-7 w-auto object-contain" />
           <div>
 
-            <span className="text-base font-black font-display text-slate-900 dark:text-slate-100 tracking-tight">DOLLARA</span>
+            <span className="text-base font-black font-display text-slate-900 dark:text-slate-100 tracking-tight">{brandName.toUpperCase()}</span>
 
 
             <span className="text-[9px] font-bold text-brand-600 uppercase tracking-[0.15em] block -mt-0.5">

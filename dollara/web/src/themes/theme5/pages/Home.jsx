@@ -35,6 +35,7 @@ import { useAuthStore } from '@/store/auth';
 import { filterByCategory, filterFeatured, NAV_GAME_LINKS, playPath } from '@/lib/gameRoutes';
 import { useAuthModal } from '../shell/authModalContext';
 import { T5SectionBar, T5Card } from '../components/ui';
+import SupportFab from '@/components/SupportFab';
 
 /* ── hero fallback (only when the product admin has uploaded no banners) ── */
 const SLIDES = [
@@ -420,6 +421,7 @@ export default function Theme5Home() {
       <GameProviders providers={providers} />
       <WhyChoose name={name} />
       <Faq />
+      <SupportFab />
     </div>
   );
 }

@@ -4,10 +4,14 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { fetchBranding } from '@/services/tenant';
 import { applyThemeColors } from '@/themes/palettes';
 
+// The bundled mark, used whenever the platform hasn't set a brand logo. Every
+// logo slot in the UI falls back to this instead of an improvised placeholder.
+export const DEFAULT_LOGO_URL = '/logo.png';
+
 // Neutral defaults so the UI never hardcodes a brand and never flashes empty.
 const DEFAULT_BRANDING = {
   product_name: '',
-  logo_url: '',
+  logo_url: DEFAULT_LOGO_URL,
   favicon_url: '',
   app_icon_url: '',
   theme_color: '#F5C542',
@@ -85,7 +89,10 @@ export function BrandProvider({ children }) {
     fetchBranding()
       .then((data) => {
         if (!active || !data) return;
+        // A tenant that hasn't uploaded a logo sends '' / null, which would
+        // otherwise shadow the bundled default and leave the slot empty.
         const merged = { ...DEFAULT_BRANDING, ...data };
+        if (!merged.logo_url) merged.logo_url = DEFAULT_LOGO_URL;
         setBranding(merged);
         applyBranding(merged);
       })
