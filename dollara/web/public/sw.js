@@ -10,14 +10,12 @@
  * get the fallback page. Providing a fetch handler + offline response is also
  * what lets Chrome offer the richer "install" experience.
  */
-const VERSION = 'v1';
+const VERSION = 'v2'; // bumped: precache now the single bundled logo
 const CACHE = `app-shell-${VERSION}`;
 const OFFLINE_URL = '/offline.html';
 const PRECACHE = [
   OFFLINE_URL,
-  '/icon-192.png',
-  '/icon-512.png',
-  '/apple-touch-icon.png',
+  '/logo.png',
 ];
 
 self.addEventListener('install', (event) => {
