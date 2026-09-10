@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { Dices, Twitter, Send, MessageCircle, Instagram } from 'lucide-react';
-import { useBranding } from '@/hooks/useBranding';
+import { Twitter, Send, MessageCircle, Instagram } from 'lucide-react';
+import { useBranding, onLogoError } from '@/hooks/useBranding';
 import { useAuthStore } from '@/store/auth';
 
 const COLUMNS = [
@@ -39,9 +39,13 @@ export function Theme2Footer() {
         <div className="grid gap-8 lg:grid-cols-6">
           <div className="lg:col-span-2">
             <Link href="/" className="flex items-center gap-2.5">
-              <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-black">
-                <Dices className="h-5 w-5" strokeWidth={2.5} />
-              </span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={branding.logo_url}
+                alt={name}
+                onError={onLogoError}
+                className="h-9 w-9 shrink-0 rounded-full object-contain"
+              />
               <span className="font-display text-base font-black text-white">
                 {name}
                 <span className="block text-[0.55rem] font-bold tracking-[0.3em] text-amber-400/70">WIN BIG</span>
