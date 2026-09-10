@@ -27,7 +27,11 @@ export const metadata = {
     title: 'Gaming App',
   },
   icons: {
+    // The bundled logo is the default favicon; useBranding swaps it for the
+    // product's own favicon at runtime when one is configured. The sized PNGs
+    // stay listed after it for the contexts that want an exact-size icon.
     icon: [
+      { url: '/logo.png', type: 'image/png' },
       { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
       { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
     ],

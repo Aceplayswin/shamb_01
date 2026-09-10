@@ -5,14 +5,15 @@ import { fetchBranding } from '@/services/tenant';
 import { applyThemeColors } from '@/themes/palettes';
 
 // The bundled mark, used whenever the platform hasn't set a brand logo. Every
-// logo slot in the UI falls back to this instead of an improvised placeholder.
+// logo slot in the UI falls back to this instead of an improvised placeholder,
+// and it doubles as the favicon when no dedicated favicon is configured.
 export const DEFAULT_LOGO_URL = '/logo.png';
 
 // Neutral defaults so the UI never hardcodes a brand and never flashes empty.
 const DEFAULT_BRANDING = {
   product_name: '',
   logo_url: DEFAULT_LOGO_URL,
-  favicon_url: '',
+  favicon_url: DEFAULT_LOGO_URL,
   app_icon_url: '',
   theme_color: '#F5C542',
   secondary_color: '#FFB800',
@@ -47,9 +48,10 @@ function applyBranding(branding) {
     // iOS home-screen label when the PWA is added from Safari.
     upsertMeta('apple-mobile-web-app-title', branding.product_name);
   }
-  if (branding.favicon_url) {
-    upsertLink("link[rel~='icon']", (l) => (l.rel = 'icon')).href = branding.favicon_url;
-  }
+  // Replace *every* icon link, not just the first: the document ships several
+  // (the bundled logo plus the sized PNGs) and browsers are free to pick the
+  // sized one, which would keep showing the default over the brand's favicon.
+  setFavicon(branding.favicon_url || DEFAULT_LOGO_URL);
   // Brand the installed-app icon: iOS reads apple-touch-icon at "Add to Home
   // Screen" time, so pointing it at the product's icon (like the favicon above)
   // gives the home-screen icon the brand's mark. Android uses the manifest icons.
@@ -57,6 +59,17 @@ function applyBranding(branding) {
   if (appIcon) {
     upsertLink("link[rel='apple-touch-icon']", (l) => (l.rel = 'apple-touch-icon')).href = appIcon;
   }
+}
+
+// Point the document at a single favicon, dropping any other icon links so no
+// sized variant can win over it.
+function setFavicon(href) {
+  const links = document.querySelectorAll("link[rel~='icon']");
+  links.forEach((l, i) => (i === 0 ? null : l.remove()));
+  const link = links[0] ?? document.head.appendChild(document.createElement('link'));
+  link.rel = 'icon';
+  link.removeAttribute('sizes');
+  link.href = href;
 }
 
 // Find a <link> matching `selector`, or create one (initialised by `init`) and
@@ -93,6 +106,7 @@ export function BrandProvider({ children }) {
         // otherwise shadow the bundled default and leave the slot empty.
         const merged = { ...DEFAULT_BRANDING, ...data };
         if (!merged.logo_url) merged.logo_url = DEFAULT_LOGO_URL;
+        if (!merged.favicon_url) merged.favicon_url = DEFAULT_LOGO_URL;
         setBranding(merged);
         applyBranding(merged);
       })
