@@ -1,3 +1,5 @@
+'use client';
+
 // Step 1 — Terms & Conditions
 // Displays the scrollable agreement text and a checkbox.
 // "Accept & Continue" is disabled until the checkbox is ticked.
@@ -7,25 +9,31 @@
 
 import { ArrowRight } from 'lucide-react';
 import { primaryBtn } from './tokens';
+import { useBranding } from '@/hooks/useBranding';
 
 
 
-const TERMS = [
-  ['Partnership Terms', "By joining the Dollara Affiliate Program, you agree to promote Dollara's iGaming platform in compliance with all applicable laws and regulations in your jurisdiction."],
-  ['Commission Structure', 'Commissions are calculated on net gaming revenue (NGR) after deduction of bonuses, chargebacks, and processing fees. Rates are as agreed in your partner contract.'],
-  ['No Negative Carryover', 'Negative balances from one period will not carry over to the next. Each commission period starts fresh.'],
-  ['Cookie Window', 'Attribution is based on a 30-day last-click cookie. Players must register within 30 days of clicking your tracking link to be attributed to your account.'],
-  ['Prohibited Promotions', 'Self-referrals, spam, incentivised traffic, and promotions targeting minors are strictly prohibited and will result in immediate account suspension and commission forfeiture.'],
-  ['Payment Schedule', 'Commissions are paid weekly every Monday, subject to a minimum threshold of $100 (or equivalent). Payouts below the threshold roll forward.'],
-  ['KYC Requirement', 'Identity verification is required before any payout can be processed. Failure to complete KYC within 30 days will suspend commission accrual.'],
-  ['Termination', 'Either party may terminate this agreement with 14 days written notice. Any earned commissions to the termination date remain payable.'],
-];
+function getTerms(brandName) {
+  return [
+    ['Partnership Terms', `By joining the ${brandName} Affiliate Program, you agree to promote ${brandName}'s iGaming platform in compliance with all applicable laws and regulations in your jurisdiction.`],
+    ['Commission Structure', 'Commissions are calculated on net gaming revenue (NGR) after deduction of bonuses, chargebacks, and processing fees. Rates are as agreed in your partner contract.'],
+    ['No Negative Carryover', 'Negative balances from one period will not carry over to the next. Each commission period starts fresh.'],
+    ['Cookie Window', 'Attribution is based on a 30-day last-click cookie. Players must register within 30 days of clicking your tracking link to be attributed to your account.'],
+    ['Prohibited Promotions', 'Self-referrals, spam, incentivised traffic, and promotions targeting minors are strictly prohibited and will result in immediate account suspension and commission forfeiture.'],
+    ['Payment Schedule', 'Commissions are paid weekly every Monday, subject to a minimum threshold of $100 (or equivalent). Payouts below the threshold roll forward.'],
+    ['KYC Requirement', 'Identity verification is required before any payout can be processed. Failure to complete KYC within 30 days will suspend commission accrual.'],
+    ['Termination', 'Either party may terminate this agreement with 14 days written notice. Any earned commissions to the termination date remain payable.'],
+  ];
+}
 
 
 
 
 
 export default function StepTerms({ agreed, setAgreed, onNext, loading }) {
+  const { product_name: productName } = useBranding();
+  const brandName = productName || 'the platform';
+  const TERMS = getTerms(brandName);
   return (
     <div className="animate-fade-up space-y-6">
 
@@ -38,7 +46,7 @@ export default function StepTerms({ agreed, setAgreed, onNext, loading }) {
 
           <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
 
-            Dollara Affiliate Agreement
+            {brandName} Affiliate Agreement
 
           </span>
 
@@ -75,7 +83,7 @@ export default function StepTerms({ agreed, setAgreed, onNext, loading }) {
         <span className="text-sm text-slate-600 group-hover:text-slate-900 transition-colors">
           I have read and agree to the{' '}
 
-          <span className="font-semibold text-slate-900">Dollara Affiliate Agreement</span>,
+          <span className="font-semibold text-slate-900">{brandName} Affiliate Agreement</span>,
 
           including the payout schedule, cookie policy, and prohibited traffic clauses.
         </span>

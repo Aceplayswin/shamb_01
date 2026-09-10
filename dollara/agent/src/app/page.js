@@ -18,6 +18,7 @@ import { PublicFooter, PublicHeader } from './_components/PublicShell';
 import { fetchProgram } from '../services/agentApi';
 import { getAgentToken } from '../services/agentApi';
 import { label, pct } from '../lib/format';
+import { useBranding } from '@/hooks/useBranding';
 
 const FEATURES = [
   {
@@ -87,6 +88,7 @@ const FAQS = [
 ];
 
 export default function LandingPage() {
+  const { product_name: productName } = useBranding();
   const [programme, setProgramme] = useState(null);
   const [openFaq, setOpenFaq] = useState(0);
   const [signedIn, setSignedIn] = useState(false);
@@ -128,7 +130,7 @@ export default function LandingPage() {
             </h1>
 
             <p className="mx-auto mt-5 max-w-2xl text-base text-ink-muted sm:text-lg">
-              The Dollara agent panel gives you a live view of every bet under
+              The {productName || 'platform'} agent panel gives you a live view of every bet under
               you, a downline you control, and the reports to settle it — sports
               and casino, in one place.
             </p>

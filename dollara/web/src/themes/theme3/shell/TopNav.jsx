@@ -27,11 +27,11 @@ const NAV = [
 ];
 
 function BrandMark({ name }) {
+  const { logo_url: logoUrl } = useBranding();
   return (
     <Link href="/" className="flex shrink-0 items-center gap-2">
-      <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-[#e9c56b] to-[#b8862f] text-sm font-black text-[#241b0e] shadow-[0_6px_16px_-6px_rgba(199,154,59,0.9)]">
-        {(name || 'V').charAt(0).toUpperCase()}
-      </span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={logoUrl} alt={name || 'VELPLAY'} className="h-9 w-9 shrink-0 rounded-xl object-contain" />
       <span className="hidden font-display text-base font-black tracking-tight text-[#1b1726] sm:block">
         {name || 'VELPLAY'}
       </span>

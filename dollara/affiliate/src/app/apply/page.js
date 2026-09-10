@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AlertCircle, DollarSign, ArrowLeft, CheckCircle2, Eye, EyeOff, Send, ShieldCheck, ArrowRight, Users } from 'lucide-react';
 import { fetchProgram, submitApplication } from '../../services/affiliateApi';
+import { useBranding } from '@/hooks/useBranding';
 
 // Blank slate for the form — kept outside the component so we're not
 // recreating this object on every render
@@ -282,6 +283,8 @@ function ApplyForm() {
 // Top bar with the "back to landing" link and the logo — same on every
 // screen (form + success), so it's pulled out here instead of copy-pasted
 function PageHeader() {
+  const { product_name: productName, logo_url: logoUrl } = useBranding();
+  const brandName = productName || 'the platform';
   return (
     <div className="mb-8 flex items-center justify-between">
       <Link href="/" className="inline-flex items-center space-x-2 text-sm text-slate-500 hover:text-slate-900 transition-colors">
@@ -289,8 +292,8 @@ function PageHeader() {
         <span>Back to Landing Page</span>
       </Link>
       <div className="flex items-center space-x-2">
-        <img src="/logo/image.png" alt="Dollara Logo" className="h-8 w-auto object-contain" />
-        <span className="font-bold text-slate-900 font-display">DOLLARA</span>
+        <img src={logoUrl || '/logo/image.png'} alt={`${brandName} Logo`} className="h-8 w-auto object-contain" />
+        <span className="font-bold text-slate-900 font-display">{brandName.toUpperCase()}</span>
       </div>
     </div>
   );

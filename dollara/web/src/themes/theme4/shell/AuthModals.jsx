@@ -31,7 +31,6 @@ function LoginModal() {
   return (
     <AuthModal
       onClose={close}
-      brandInitial={brandName.charAt(0).toUpperCase()}
       brandName={brandName}
       headline="Member Login"
     >
@@ -120,7 +119,6 @@ function RegisterModal() {
   return (
     <AuthModal
       onClose={close}
-      brandInitial={brandName.charAt(0).toUpperCase()}
       brandName={brandName}
       headline="Create Account"
     >

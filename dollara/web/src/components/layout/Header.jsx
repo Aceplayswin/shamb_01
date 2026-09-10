@@ -25,7 +25,6 @@ import {
   Download,
   Wallet,
   Plus,
-  Sparkles,
   User,
   Play,
   Loader2,
@@ -139,23 +138,8 @@ export function Header() {
           title={brandName}
           className="flex h-16 shrink-0 items-center justify-center border-b border-hairline/[0.06]"
         >
-          {branding.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={branding.logo_url} alt={brandName} className="h-10 w-10 rounded-xl object-contain" />
-          ) : (
-            <span className="relative grid h-10 w-10 place-items-center">
-              <span
-                className="absolute inset-0 rounded-xl blur-[6px] opacity-60"
-                style={{ backgroundColor: branding.theme_color }}
-              />
-              <span
-                className="relative grid h-10 w-10 place-items-center rounded-xl shadow-glow"
-                style={{ background: `linear-gradient(135deg, ${branding.theme_color}, ${branding.secondary_color})` }}
-              >
-                <Sparkles className="h-4 w-4 text-surface-950" strokeWidth={2.5} />
-              </span>
-            </span>
-          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={branding.logo_url} alt={brandName} className="h-10 w-10 rounded-xl object-contain" />
         </Link>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-3 pt-3 scrollbar-hide">
@@ -183,17 +167,8 @@ export function Header() {
       <header className="fixed inset-x-0 top-0 z-30 flex h-16 items-center gap-2 border-b border-hairline/[0.06] bg-panel-strong/80 px-3 backdrop-blur-xl sm:gap-3 sm:px-4 lg:left-[92px]">
         {/* Brand: logo + name on mobile; name only on desktop (logo lives in side rail) */}
         <Link href="/" className="flex min-w-0 items-center gap-2 lg:hidden">
-          {branding.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={branding.logo_url} alt={brandName} className="h-9 w-9 shrink-0 rounded-xl object-contain" />
-          ) : (
-            <span
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-xl shadow-glow"
-              style={{ background: `linear-gradient(135deg, ${branding.theme_color}, ${branding.secondary_color})` }}
-            >
-              <Sparkles className="h-4 w-4 text-surface-950" strokeWidth={2.5} />
-            </span>
-          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={branding.logo_url} alt={brandName} className="h-9 w-9 shrink-0 rounded-xl object-contain" />
           <span className="truncate font-display text-base font-extrabold text-app-fg sm:text-lg">{brandName}</span>
         </Link>
         <Link href="/" className="hidden shrink-0 font-display text-lg font-extrabold text-app-fg lg:block">

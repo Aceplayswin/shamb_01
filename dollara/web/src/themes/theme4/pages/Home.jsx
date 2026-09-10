@@ -20,6 +20,7 @@ import { useAuthStore } from '@/store/auth';
 import { filterFeatured, NAV_GAME_LINKS, playPath } from '@/lib/gameRoutes';
 import { useAuthModal } from '../shell/authModalContext';
 import { T4SectionBar } from '../components/ui';
+import SupportFab from '@/components/SupportFab';
 
 /* ── hero carousel ── */
 const SLIDES = [
@@ -420,6 +421,7 @@ export default function Theme4Home() {
         {BOARDS.map((b) => <OddsBoard key={b.title} board={b} />)}
         <Theme4Faq />
       </div>
+      <SupportFab />
     </div>
   );
 }

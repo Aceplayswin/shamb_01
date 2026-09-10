@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { LayoutGrid } from 'lucide-react';
+import { useBranding } from '@/hooks/useBranding';
 
 /**
  * Header and footer for the three public pages (landing, apply, status).
@@ -11,6 +12,7 @@ import { LayoutGrid } from 'lucide-react';
  * header and drift apart on the first change to either link.
  */
 export function PublicHeader({ active }) {
+  const { product_name: productName } = useBranding();
   const linkClass = (name) =>
     `text-sm transition ${
       active === name ? 'text-white' : 'text-ink-muted hover:text-white'
@@ -24,7 +26,9 @@ export function PublicHeader({ active }) {
             <LayoutGrid className="h-5 w-5" />
           </span>
           <span>
-            <span className="block text-lg font-bold leading-none text-ink">DOLLARA</span>
+            <span className="block text-lg font-bold leading-none text-ink">
+              {(productName || 'the platform').toUpperCase()}
+            </span>
             <span className="block text-[10px] uppercase tracking-[0.18em] text-blue-400">
               Agent Network
             </span>
