@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Megaphone, User, Wallet, Download, Play, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
-import { useBranding } from '@/hooks/useBranding';
+import { useBranding, onLogoError } from '@/hooks/useBranding';
 import { useDemoLogin } from '@/hooks/useDemoLogin';
 import { ProfileMenu } from '@/components/ProfileMenu';
 import { GetAppModal } from '@/components/GetAppModal';
@@ -46,6 +46,7 @@ export function Theme4BrandMark({ name, dark = false }) {
       <img
         src={logoUrl}
         alt={label}
+        onError={onLogoError}
         className={`h-9 w-9 shrink-0 rounded object-contain ${dark ? '' : 'bg-white/95'} p-0.5 shadow-sm`}
       />
       <span className={`font-display text-lg font-black uppercase leading-none tracking-wide ${dark ? 'text-[#13272b]' : 'text-white'}`}>

@@ -5,7 +5,7 @@ import {
   Home, Dices, Trophy, Tv, Gift, Crown, Medal, Ticket, LifeBuoy,
 } from 'lucide-react';
 import { NAV_GAME_LINKS } from '@/lib/gameRoutes';
-import { useBranding } from '@/hooks/useBranding';
+import { useBranding, onLogoError } from '@/hooks/useBranding';
 
 const NAV = [
   { label: 'Home', href: '/', icon: Home },
@@ -38,7 +38,7 @@ export function Theme2Sidebar({ open, onClose }) {
         {/* Brand */}
         <Link href="/" title={brandName} className="flex h-16 items-center gap-2.5 border-b border-white/5 px-5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={branding.logo_url} alt={brandName} className="h-9 w-9 shrink-0 rounded-full object-contain" />
+          <img src={branding.logo_url} alt={brandName} onError={onLogoError} className="h-9 w-9 shrink-0 rounded-full object-contain" />
           <span className="whitespace-nowrap font-display text-base font-black leading-none text-white lg:opacity-0 lg:transition-opacity group-hover/sidebar:lg:opacity-100">
             {branding.product_name ? (
               brandName

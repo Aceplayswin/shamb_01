@@ -6,7 +6,7 @@
 
 import { useEffect } from 'react';
 import { X } from 'lucide-react';
-import { useBranding } from '@/hooks/useBranding';
+import { useBranding, onLogoError } from '@/hooks/useBranding';
 
 /**
  * @param onClose   close handler (backdrop / ✕ / Esc)
@@ -54,6 +54,7 @@ export function AuthModal({ onClose, sideTitle, sideText, sideRows = [], childre
             <img
               src={logoUrl}
               alt={productName || 'VELPLAY'}
+              onError={onLogoError}
               className="h-11 w-11 rounded-xl object-contain shadow-lg"
             />
             <h3 className="mt-6 font-display text-2xl font-black leading-tight">{sideTitle}</h3>

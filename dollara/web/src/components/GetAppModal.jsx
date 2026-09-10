@@ -13,7 +13,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Download, Plus, Share, Smartphone, X } from 'lucide-react';
-import { useBranding } from '@/hooks/useBranding';
+import { useBranding, onLogoError } from '@/hooks/useBranding';
 import { useInstallPrompt } from '@/hooks/useInstallPrompt';
 
 const PERKS = [
@@ -86,7 +86,7 @@ export function GetAppModal({ open, onClose }) {
           {/* brand mark */}
           <div className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={branding.logo_url} alt={name} className="h-12 w-12 rounded-xl object-contain" />
+            <img src={branding.logo_url} alt={name} onError={onLogoError} className="h-12 w-12 rounded-xl object-contain" />
             <div className="min-w-0">
               <h2 className="truncate font-display text-lg font-extrabold text-app-fg">
                 Get the {name} app

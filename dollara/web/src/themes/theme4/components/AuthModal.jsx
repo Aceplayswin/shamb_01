@@ -6,7 +6,7 @@
 
 import { useEffect } from 'react';
 import { X } from 'lucide-react';
-import { useBranding } from '@/hooks/useBranding';
+import { useBranding, onLogoError } from '@/hooks/useBranding';
 
 /**
  * @param onClose      close handler (backdrop / ✕ / Esc)
@@ -52,7 +52,7 @@ export function AuthModal({ onClose, brandName = '', headline, children }) {
           </button>
           <div className="flex items-center gap-2.5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={logoUrl} alt={brandName} className="h-10 w-10 rounded bg-white/95 object-contain p-0.5" />
+            <img src={logoUrl} alt={brandName} onError={onLogoError} className="h-10 w-10 rounded bg-white/95 object-contain p-0.5" />
             <div>
               <p className="font-display text-lg font-black uppercase leading-none tracking-wide text-white">
                 {brandName}
