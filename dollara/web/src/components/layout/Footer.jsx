@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { ShieldCheck } from 'lucide-react';
-import { useBranding } from '@/hooks/useBranding';
+import { useBranding, onLogoError } from '@/hooks/useBranding';
 import { useAuthStore } from '@/store/auth';
 
 const LINK_GROUPS = [
@@ -27,14 +27,13 @@ export function Footer() {
         <div className="mx-auto max-w-[1400px]">
           <div className="flex flex-col items-center justify-between gap-3 border-t border-hairline/[0.06] py-5 sm:flex-row">
             <div className="flex items-center gap-2.5">
-              <span
-                className="grid h-7 w-7 place-items-center rounded-lg text-surface-950"
-                style={{ background: `linear-gradient(135deg, ${branding.theme_color}, ${branding.secondary_color})` }}
-              >
-                <span className="font-display text-xs font-black">
-                  {brandName.charAt(0).toUpperCase()}
-                </span>
-              </span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={branding.logo_url}
+                alt={brandName}
+                onError={onLogoError}
+                className="h-7 w-7 rounded-lg object-contain"
+              />
               <span className="text-xs text-muted">© 2026 {brandName}</span>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-muted">
@@ -73,14 +72,13 @@ export function Footer() {
           {/* Brand + support — spans wider */}
           <div className="col-span-2 space-y-4">
             <div className="flex items-center gap-2.5">
-              <span
-                className="grid h-9 w-9 place-items-center rounded-xl text-surface-950 shadow-glow"
-                style={{ background: `linear-gradient(135deg, ${branding.theme_color}, ${branding.secondary_color})` }}
-              >
-                <span className="font-display text-sm font-black">
-                  {brandName.charAt(0).toUpperCase()}
-                </span>
-              </span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={branding.logo_url}
+                alt={brandName}
+                onError={onLogoError}
+                className="h-9 w-9 rounded-xl object-contain"
+              />
               <span className="font-display text-xl font-extrabold text-app-fg">{brandName}</span>
             </div>
             <p className="max-w-xs text-xs leading-relaxed text-muted">

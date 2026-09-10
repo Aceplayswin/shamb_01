@@ -6,7 +6,7 @@
 
 import Link from 'next/link';
 import { Download } from 'lucide-react';
-import { useBranding } from '@/hooks/useBranding';
+import { useBranding, onLogoError } from '@/hooks/useBranding';
 import { NAV_GAME_LINKS } from '@/lib/gameRoutes';
 
 const QUICK_NAV = [
@@ -32,9 +32,13 @@ export function Theme3Footer() {
           {/* Brand */}
           <div>
             <div className="flex items-center gap-2.5">
-              <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-[#e9c56b] to-[#b8862f] text-base font-black text-[#241b0e]">
-                {name.charAt(0).toUpperCase()}
-              </span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={branding.logo_url}
+                alt={name}
+                onError={onLogoError}
+                className="h-10 w-10 rounded-xl object-contain"
+              />
               <span className="font-display text-lg font-black text-white">
                 {name}
                 <span className="block text-[0.55rem] font-bold tracking-[0.3em] text-[#e9c56b]/80">PLAY WIN</span>

@@ -8,7 +8,7 @@
 
 import Link from 'next/link';
 import { Download, ArrowRight } from 'lucide-react';
-import { useBranding } from '@/hooks/useBranding';
+import { useBranding, onLogoError } from '@/hooks/useBranding';
 import { NAV_GAME_LINKS } from '@/lib/gameRoutes';
 
 const QUICK_NAV = [
@@ -30,9 +30,13 @@ export function Theme5Footer() {
         {/* ── Brand blurb ── */}
         <div>
           <div className="flex items-center gap-2.5">
-            <span className="rounded bg-[#101c33] px-2 py-1.5 font-display text-xs font-black italic leading-none tracking-tight text-[#f5c518]">
-              {name.toUpperCase()}
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={branding.logo_url}
+              alt={name}
+              onError={onLogoError}
+              className="h-9 w-9 shrink-0 rounded object-contain"
+            />
             <div>
               <p className="font-display text-lg font-black uppercase leading-none tracking-wide text-[#0f1b33]">
                 {name}
