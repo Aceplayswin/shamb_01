@@ -13,7 +13,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Bell, Download, Play, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
-import { useBranding } from '@/hooks/useBranding';
+import { useBranding, onLogoError } from '@/hooks/useBranding';
 import { useDemoLogin } from '@/hooks/useDemoLogin';
 import { ProfileMenu } from '@/components/ProfileMenu';
 import { GetAppModal } from '@/components/GetAppModal';
@@ -56,7 +56,7 @@ export function Theme5BrandMark({ name, compact = false }) {
   return (
     <Link href="/" className="flex shrink-0 items-center gap-2">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={logoUrl} alt={label} className="h-9 w-9 shrink-0 rounded object-contain" />
+      <img src={logoUrl} alt={label} onError={onLogoError} className="h-9 w-9 shrink-0 rounded object-contain" />
       <span className="rounded bg-[#101c33] px-2 py-1 leading-none shadow-sm">
         <span className="block font-display text-sm font-black italic tracking-tight text-[#f5c518]">
           {label.toUpperCase()}

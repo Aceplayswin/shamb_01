@@ -32,6 +32,27 @@ const DEFAULT_BRANDING = {
   privacy_url: '',
 };
 
+// An https page may not load http subresources — the browser blocks them as
+// mixed content and the slot renders empty. The platform stores some media as
+// http:// URLs, so upgrade same-host-scheme assets to https before use; a host
+// that genuinely has no TLS then fails to load and hits the onerror fallback.
+function secureUrl(url) {
+  if (typeof url !== 'string' || !url.startsWith('http://')) return url;
+  if (typeof window === 'undefined' || window.location.protocol !== 'https:') return url;
+  return `https://${url.slice('http://'.length)}`;
+}
+
+// onError for any <img> showing the brand logo: a tenant URL can 404, be blocked
+// as mixed content, or point at a dead host, and a broken <img> renders as an
+// empty box. Swap in the bundled logo once, guarding against a loop if that
+// somehow fails too.
+export function onLogoError(e) {
+  const img = e.currentTarget;
+  if (img.dataset.fallbackApplied) return;
+  img.dataset.fallbackApplied = '1';
+  img.src = DEFAULT_LOGO_URL;
+}
+
 const BrandContext = createContext(DEFAULT_BRANDING);
 
 export function useBranding() {
@@ -58,23 +79,39 @@ function applyBranding(branding) {
   // Replace *every* icon link, not just the first: the document ships both the
   // .ico and a sized PNG, and browsers are free to pick the sized one, which
   // would keep showing the default over the brand's own favicon.
-  setFavicon(branding.favicon_url || DEFAULT_FAVICON_URL);
+  setFavicon(secureUrl(branding.favicon_url));
   // Brand the installed-app icon: iOS reads apple-touch-icon at "Add to Home
   // Screen" time, so pointing it at the product's icon (like the favicon above)
   // gives the home-screen icon the brand's mark. Android uses the manifest icons.
-  const appIcon = branding.app_icon_url || DEFAULT_APP_ICON_URL;
+  const appIcon = secureUrl(branding.app_icon_url) || DEFAULT_APP_ICON_URL;
   upsertLink("link[rel='apple-touch-icon']", (l) => (l.rel = 'apple-touch-icon')).href = appIcon;
 }
 
 // Point the document at a single favicon, dropping any other icon links so no
 // sized variant can win over it.
-function setFavicon(href) {
+function writeFavicon(href) {
   const links = document.querySelectorAll("link[rel~='icon']");
   links.forEach((l, i) => (i === 0 ? null : l.remove()));
   const link = links[0] ?? document.head.appendChild(document.createElement('link'));
   link.rel = 'icon';
   link.removeAttribute('sizes');
   link.href = href;
+}
+
+// Swap in the brand's favicon only once it has actually loaded. A branded icon
+// can fail for reasons we can't detect up front — blocked as mixed content,
+// 404, dead host, CORS — and because writeFavicon replaces the bundled tag,
+// committing a broken URL leaves the tab with the browser's blank globe. So we
+// probe it off-document first and keep the shipped .ico when the probe fails.
+function setFavicon(href) {
+  if (!href || href === DEFAULT_FAVICON_URL) {
+    writeFavicon(DEFAULT_FAVICON_URL);
+    return;
+  }
+  const probe = new Image();
+  probe.onload = () => writeFavicon(href);
+  probe.onerror = () => writeFavicon(DEFAULT_FAVICON_URL);
+  probe.src = href;
 }
 
 // Find a <link> matching `selector`, or create one (initialised by `init`) and
@@ -110,6 +147,11 @@ export function BrandProvider({ children }) {
         // A tenant that hasn't uploaded a logo sends '' / null, which would
         // otherwise shadow the bundled default and leave the slot empty.
         const merged = { ...DEFAULT_BRANDING, ...data };
+        // Platform media is sometimes stored as http://; on an https page the
+        // browser blocks those outright, so upgrade every asset URL up front.
+        merged.logo_url = secureUrl(merged.logo_url);
+        merged.favicon_url = secureUrl(merged.favicon_url);
+        merged.app_icon_url = secureUrl(merged.app_icon_url);
         if (!merged.logo_url) merged.logo_url = DEFAULT_LOGO_URL;
         if (!merged.favicon_url) merged.favicon_url = DEFAULT_FAVICON_URL;
         setBranding(merged);

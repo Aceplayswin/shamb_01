@@ -9,7 +9,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Menu, X, Wallet, Download, Play, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
-import { useBranding } from '@/hooks/useBranding';
+import { useBranding, onLogoError } from '@/hooks/useBranding';
 import { useDemoLogin } from '@/hooks/useDemoLogin';
 import { ProfileMenu } from '@/components/ProfileMenu';
 import { GetAppModal } from '@/components/GetAppModal';
@@ -31,7 +31,7 @@ function BrandMark({ name }) {
   return (
     <Link href="/" className="flex shrink-0 items-center gap-2">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={logoUrl} alt={name || 'VELPLAY'} className="h-9 w-9 shrink-0 rounded-xl object-contain" />
+      <img src={logoUrl} alt={name || 'VELPLAY'} onError={onLogoError} className="h-9 w-9 shrink-0 rounded-xl object-contain" />
       <span className="hidden font-display text-base font-black tracking-tight text-[#1b1726] sm:block">
         {name || 'VELPLAY'}
       </span>

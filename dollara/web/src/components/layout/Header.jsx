@@ -29,7 +29,7 @@ import {
   Play,
   Loader2,
 } from 'lucide-react';
-import { useBranding } from '@/hooks/useBranding';
+import { useBranding, onLogoError } from '@/hooks/useBranding';
 import { useDemoLogin } from '@/hooks/useDemoLogin';
 import { NAV_GAME_LINKS } from '@/lib/gameRoutes';
 import { ThemeToggleButton } from '@/components/ThemeToggle';
@@ -139,7 +139,7 @@ export function Header() {
           className="flex h-16 shrink-0 items-center justify-center border-b border-hairline/[0.06]"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={branding.logo_url} alt={brandName} className="h-10 w-10 rounded-xl object-contain" />
+          <img src={branding.logo_url} alt={brandName} onError={onLogoError} className="h-10 w-10 rounded-xl object-contain" />
         </Link>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-3 pt-3 scrollbar-hide">
@@ -168,7 +168,7 @@ export function Header() {
         {/* Brand: logo + name on mobile; name only on desktop (logo lives in side rail) */}
         <Link href="/" className="flex min-w-0 items-center gap-2 lg:hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={branding.logo_url} alt={brandName} className="h-9 w-9 shrink-0 rounded-xl object-contain" />
+          <img src={branding.logo_url} alt={brandName} onError={onLogoError} className="h-9 w-9 shrink-0 rounded-xl object-contain" />
           <span className="truncate font-display text-base font-extrabold text-app-fg sm:text-lg">{brandName}</span>
         </Link>
         <Link href="/" className="hidden shrink-0 font-display text-lg font-extrabold text-app-fg lg:block">
