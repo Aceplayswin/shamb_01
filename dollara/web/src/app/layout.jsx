@@ -27,11 +27,17 @@ export const metadata = {
     title: 'Gaming App',
   },
   icons: {
-    // The bundled logo is the one shipped mark — favicon and home-screen icon
-    // alike. useBranding swaps it for the product's own favicon / app icon at
-    // runtime when the platform has them configured.
-    icon: [{ url: '/logo.png', type: 'image/png' }],
-    apple: [{ url: '/logo.png', type: 'image/png' }],
+    // favicon.ico (multi-resolution, 16-256) is the default fallback: browsers
+    // request /favicon.ico by path whether or not these tags render, so it is
+    // what shows before branding loads and on any route that misses the head.
+    // Both it and the square icon.png are the logo's emblem, cropped out of the
+    // wide lockup — the wordmark beside it is unreadable at tab size.
+    // useBranding swaps in the product's own favicon / app icon at runtime.
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/icon.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [{ url: '/icon.png', sizes: '512x512', type: 'image/png' }],
   },
   formatDetection: { telephone: false },
 };
