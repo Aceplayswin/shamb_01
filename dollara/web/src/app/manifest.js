@@ -22,8 +22,8 @@ export const revalidate = 300;
 const APP_BG = '#0B0F14'; // matches --color-app-bg
 
 const DEFAULT_ICONS = [
-  { src: '/logo.png', sizes: 'any', type: 'image/png', purpose: 'any' },
-  { src: '/logo.png', sizes: 'any', type: 'image/png', purpose: 'maskable' },
+  { src: '/icon.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+  { src: '/icon.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
 ];
 
 // Home-screen labels get ~12 chars before the OS truncates. Prefer the whole
