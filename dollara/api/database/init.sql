@@ -1149,8 +1149,8 @@ CREATE TABLE IF NOT EXISTS agent_audit_logs (
 
 INSERT INTO users (id, username, email, password_hash, full_name, role, account_status)
 VALUES (
-  1, 'superadmin', 'admin@dollara.local',
-  '$2b$12$C9ZVRYJkjISgdOHdF/wTIeoWNhC80WWiYrvlJenWGI9pAxSjFqcxm', 'Platform Admin', 'admin', 'active'
+  1, 'admin', 'admin@dollara.local',
+  '$2b$12$7ApjIY9R97wMLZ4Q5QnateoIhY9YZFqC3.xHAc0RDM8k6kBoPCQge', 'Platform Admin', 'admin', 'active'
 )
 ON DUPLICATE KEY UPDATE username = username;
 
