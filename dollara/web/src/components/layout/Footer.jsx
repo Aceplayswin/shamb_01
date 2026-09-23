@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ShieldCheck } from 'lucide-react';
 import { useBranding, onLogoError } from '@/hooks/useBranding';
 import { useAuthStore } from '@/store/auth';
+import { SocialIconRow } from '@/components/SocialLinks';
 
 const LINK_GROUPS = [
   { title: 'Play', links: ['Sports', 'Live Casino', 'Slots', 'Crash Games', 'Lottery'] },
@@ -84,6 +85,13 @@ export function Footer() {
             <p className="max-w-xs text-xs leading-relaxed text-muted">
               The premier platform for live, uninterrupted betting across Cricket, Soccer, Aviator, Andar Bahar and 2,000+ games.
             </p>
+            {/* Social channels — admin-controlled (Admin → Content → Social
+                Links). Renders nothing until at least one is configured, so an
+                unconfigured product shows no empty row here. */}
+            <SocialIconRow
+              className="flex items-center gap-2.5"
+              itemClassName="grid h-8 w-8 place-items-center rounded-full border border-hairline/10 text-muted transition hover:border-brand-400/40 hover:text-brand-400"
+            />
           </div>
 
           {LINK_GROUPS.map((group) => (

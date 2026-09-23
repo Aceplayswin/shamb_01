@@ -24,6 +24,8 @@ import Rules from './pages/Rules';
 import Onboarding from './pages/Onboarding';
 import Games from './pages/Games';
 import Play from './pages/Play';
+import Providers from './pages/Providers';
+import Transactions from './pages/Transactions';
 
 // `pages` is keyed by ROUTE KEY — the key each src/app/<route>/page.jsx passes to
 // <ThemePage routeKey="…">. Keys this theme omits fall back (registry.resolvePage).
@@ -47,6 +49,8 @@ export default {
     onboarding: Onboarding,
     games: Games,
     play: Play,
+    providers: Providers,
+    transactions: Transactions,
   },
   Shell,
 };

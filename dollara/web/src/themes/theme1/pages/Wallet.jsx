@@ -159,6 +159,7 @@ export default function Theme1Wallet() {
             <div className="mt-4 grid grid-cols-2 gap-3">
               <ActionTile href="/deposit" label="Deposit" icon="↑" />
               <ActionTile href="/withdraw" label="Withdraw" icon="↓" />
+              <ActionTile href="/transactions" label="Transactions" icon="🧾" />
               <ActionTile href="/bet-history" label="Bet History" icon="🎲" />
               <ActionTile href="/promotions" label="Promotions" icon="🎁" />
               <ActionTile href="/bonus" label="My Bonuses" icon="💎" />

@@ -1,13 +1,16 @@
 import logging
 import random
+import re
 import secrets
 import string
+import uuid
 from datetime import timedelta
 from decimal import Decimal
 
 import bcrypt
 from django.conf import settings
 from django.core.cache import cache
+from django.core.files.storage import default_storage
 from django.db import IntegrityError
 from django.db.models import BigIntegerField, Count, F, Q, Sum
 from django.db.models.functions import Cast
@@ -22,6 +25,7 @@ from core.models import (
     Game,
     GameSession,
     PlatformSetting,
+    PromotionPoster,
     Transaction,
     User,
     UserBonus,
@@ -121,6 +125,37 @@ def update_user_preferences(user_id: int, changes: dict) -> dict:
 # 10000001, ...). The column stays a CharField — we just store the number as a
 # string so the format is purely an API-layer concern.
 _USERNAME_START = 10000000
+
+
+# --- Slug-based username helpers (ported from mahakalworld) ----------------
+# NOT currently wired into _next_sequential_username / register_user /
+# admin_create_user below: dollara deliberately keeps its existing sequential
+# numeric username scheme (10000000, 10000001, ...) for this port. These are
+# added standalone, as named in the port checklist, so they are available if
+# the username scheme is revisited later; they have no callers today.
+_USERNAME_FALLBACK_SLUG = 'usr'
+_USERNAME_DIGITS = 2
+
+
+def _username_slug(full_name: str) -> str:
+    """Reduce a full name to the first-name slug a username is built on.
+
+    Takes the first whitespace-separated token and keeps only ASCII letters and
+    digits, lowercased ("Ravi Kumar" -> "ravi", "O'Brien" -> "obrien"). Names
+    that leave nothing usable -- punctuation only, or a script with no ASCII at
+    all -- fall back to the old 'usr' prefix so sign-up still succeeds.
+    """
+    first = (full_name or '').strip().split()
+    slug = re.sub(r'[^a-z0-9]', '', first[0].lower()) if first else ''
+    # A slug that starts with a digit would blur into the counter, so prefix it.
+    if slug and slug[0].isdigit():
+        slug = f'{_USERNAME_FALLBACK_SLUG}{slug}'
+    return slug[:20] or _USERNAME_FALLBACK_SLUG
+
+
+def _format_username(slug: str, seq: int) -> str:
+    """Render a counter as a username (dev01, and dev100 once 99 is passed)."""
+    return f'{slug}{seq:0{_USERNAME_DIGITS}d}'
 
 
 def _next_sequential_username() -> str:
@@ -345,6 +380,30 @@ def get_app_download() -> dict:
     return config
 
 
+# --- Social / support links (footer + floating WhatsApp) -------------------
+
+SOCIAL_LINKS_KEY = 'social_links'
+
+SOCIAL_LINKS_DEFAULTS = {
+    'facebook': '',
+    'instagram': '',
+    'twitter': '',
+    'whatsapp': '',
+}
+
+
+def get_social_links() -> dict:
+    """Public social URLs set by the product admin (empty string = hidden)."""
+    row = PlatformSetting.objects.filter(setting_key=SOCIAL_LINKS_KEY).first()
+    value = row.setting_value if row and isinstance(row.setting_value, dict) else {}
+    config = {**SOCIAL_LINKS_DEFAULTS}
+    for key in SOCIAL_LINKS_DEFAULTS:
+        raw = value.get(key, SOCIAL_LINKS_DEFAULTS[key])
+        config[key] = (raw or '').strip() if isinstance(raw, str) else ''
+    config['updated_at'] = row.updated_at.isoformat() if row else None
+    return config
+
+
 def _require_player(user_id: int) -> User:
     user = User.objects.filter(id=user_id, role=User.Role.USER).first()
     if not user:
@@ -455,6 +514,94 @@ def get_wallet_breakdown(user_id: int) -> dict:
     }
 
 
+# --- payment proof (manual deposit screenshots) ----------------------------
+
+# Deliberately narrower than the admin uploader: these files come from
+# unauthenticated-until-login players, so SVG is excluded (it can carry script
+# that would run if the file were ever served inline) and every upload must
+# *look* like a real image, not merely be named one.
+PROOF_ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
+PROOF_MAX_BYTES = 5 * 1024 * 1024
+
+# Leading bytes each accepted format must start with. A file whose extension
+# says .png but whose bytes say otherwise is rejected rather than stored.
+_IMAGE_MAGIC = (
+    b'\x89PNG\r\n\x1a\n',   # PNG
+    b'\xff\xd8\xff',          # JPEG
+    b'RIFF',                    # WEBP (RIFF....WEBP)
+)
+
+
+def _looks_like_image(file) -> bool:
+    """Sniff the file header instead of trusting the client-supplied name."""
+    pos = file.tell()
+    try:
+        file.seek(0)
+        head = file.read(16)
+    finally:
+        file.seek(pos)
+    if not head.startswith(_IMAGE_MAGIC):
+        return False
+    # WEBP is RIFF-framed; make sure it is actually WEBP and not another RIFF type.
+    if head.startswith(b'RIFF') and head[8:12] != b'WEBP':
+        return False
+    return True
+
+
+def save_payment_proof(user_id: int, file) -> str:
+    """Store a player's payment screenshot and return its URL.
+
+    Validates type and size before anything is written. The file is namespaced
+    per tenant like every other upload; the returned URL is what gets stamped on
+    the deposit row for the admin to review.
+    """
+    _require_player(user_id)
+    if file is None:
+        raise ValueError('No screenshot uploaded')
+    ext = file.name.rsplit('.', 1)[-1].lower() if '.' in (file.name or '') else ''
+    if ext not in PROOF_ALLOWED_EXTENSIONS:
+        raise ValueError('Upload a PNG, JPG or WEBP image')
+    if file.size > PROOF_MAX_BYTES:
+        raise ValueError('Screenshot too large (max 5MB)')
+    if not _looks_like_image(file):
+        raise ValueError('That file is not a valid image')
+
+    tenant_key = get_current_tenant_id() or 'default'
+    filename = f'{uuid.uuid4().hex}.{ext}'
+    path = default_storage.save(f'uploads/{tenant_key}/deposits/{filename}', file)
+    return default_storage.url(path)
+
+
+def _normalize_deposit_reference(reference_number: str | None) -> str | None:
+    """Strip whitespace; empty strings become None (UTR stays optional)."""
+    if reference_number is None:
+        return None
+    ref = str(reference_number).strip()
+    return ref or None
+
+
+def _assert_unique_deposit_reference(
+    reference_number: str, exclude_id: int | None = None
+) -> None:
+    """Reject a UTR that already belongs to any deposit (any status).
+
+    Scoped to deposits only — ``reference_number`` is reused for withdrawals
+    and bet settlements, so a table-wide unique constraint is unsafe.
+
+    NOTE: not currently called from create_deposit/confirm_deposit below (those
+    keep dollara's existing, unmodified behaviour for this port) — added
+    standalone per the port checklist so callers can opt in explicitly.
+    """
+    qs = Transaction.objects.filter(
+        type=Transaction.TxType.DEPOSIT,
+        reference_number=reference_number,
+    )
+    if exclude_id is not None:
+        qs = qs.exclude(id=exclude_id)
+    if qs.exists():
+        raise ValueError('This UTR / reference number has already been used')
+
+
 def create_deposit(
     user_id: int,
     amount: float,
@@ -536,6 +683,73 @@ def reject_deposit(transaction_id: int, reason: str) -> dict:
         tx.notes = reason or tx.notes
         tx.save(update_fields=['status', 'notes', 'updated_at'])
     return {'rejected': True}
+
+
+# Payout destination fields required per method (ported from mahakalworld).
+# NOTE: not currently called from create_withdrawal below (dollara keeps its
+# existing, unmodified signature/behaviour for this port) — added standalone
+# per the port checklist.
+WITHDRAWAL_DESTINATION_FIELDS = {
+    'upi': ('upiId',),
+    'bank_transfer': ('accountName', 'accountNumber', 'ifsc', 'bankName'),
+    'crypto': ('network', 'walletAddress'),
+}
+
+# Short labels for the admin-facing reference string (title-casing the keys
+# would render "Upi Id" / "Ifsc Code").
+_REFERENCE_LABELS = {
+    'upiId': 'UPI',
+    'accountName': 'Name',
+    'accountNumber': 'A/C',
+    'ifsc': 'IFSC',
+    'bankName': 'Bank',
+    'network': 'Network',
+    'walletAddress': 'Wallet',
+}
+
+# Human labels for the validation error, so the player is told which box to fill.
+_DESTINATION_LABELS = {
+    'upiId': 'UPI ID',
+    'accountName': 'account holder name',
+    'accountNumber': 'account number',
+    'ifsc': 'IFSC code',
+    'bankName': 'bank name',
+    'network': 'network',
+    'walletAddress': 'wallet address',
+}
+
+
+def _format_destination(payment_method: str, destination: dict | None) -> str:
+    """Validate the payout details and flatten them for the admin queue.
+
+    Returned as a compact "Key: value" string because the pending-withdrawals
+    payload already carries ``reference_number`` — no schema change is needed
+    for an admin to see where the money must go.
+    """
+    required = WITHDRAWAL_DESTINATION_FIELDS.get(payment_method)
+    if not required:
+        raise ValueError('Unsupported withdrawal method.')
+
+    details = destination or {}
+    cleaned = {}
+    missing = []
+    for key in required:
+        value = str(details.get(key) or '').strip()
+        if not value:
+            missing.append(_DESTINATION_LABELS.get(key, key))
+        else:
+            cleaned[key] = value
+    if missing:
+        raise ValueError(f'Please provide your {", ".join(missing)}.')
+
+    if payment_method == 'upi' and '@' not in cleaned['upiId']:
+        raise ValueError('Enter a valid UPI ID (for example name@bank).')
+    if payment_method == 'bank_transfer' and not cleaned['accountNumber'].isdigit():
+        raise ValueError('Account number must contain digits only.')
+
+    parts = [f'{_REFERENCE_LABELS.get(k, k)}: {v}' for k, v in cleaned.items()]
+    # reference_number is a 255-char column; keep well inside it.
+    return ' | '.join(parts)[:255]
 
 
 def create_withdrawal(user_id: int, amount: float, payment_method: str) -> dict:
@@ -625,6 +839,23 @@ def reject_withdrawal(transaction_id: int, reason: str) -> dict:
     return {'rejected': True}
 
 
+def list_game_categories() -> list[dict]:
+    """Active catalog verticals for the public site nav//filters, in display order."""
+    from core.models import GameCategory
+
+    return [
+        {
+            'id': c.id,
+            'name': c.name,
+            'slug': c.slug,
+            'icon_url': c.icon_url,
+            'is_sports': c.is_sports,
+            'sort_order': c.sort_order,
+        }
+        for c in GameCategory.objects.filter(is_active=True).order_by('sort_order', 'name')
+    ]
+
+
 def list_games(
     category: str | None = None,
     featured: bool | None = None,
@@ -671,6 +902,93 @@ def list_games(
     ]
 
 
+def get_game_by_slug(slug: str):
+    """One playable game by slug, or None.
+
+    The play page used to find its game by scanning the paginated catalog the
+    client had already downloaded, so any game outside that page (the catalog is
+    capped, and there are far more games than the cap) resolved to "Game not
+    found" and could never be opened. Resolving server-side makes every active
+    game reachable by URL no matter how large the catalog grows.
+
+    Visibility matches :func:`list_games` exactly — same active/provider/category
+    rules — so a game hidden from the catalog cannot be opened by guessing its
+    URL.
+    """
+    if not slug:
+        return None
+    game = (
+        # Accept a game_uid as well as a slug: a game with no slug is opened by
+        # uid, and the two namespaces cannot collide.
+        Game.objects.filter(Q(slug=slug) | Q(game_uid=slug))
+        .filter(is_active_web=True, is_active=True)
+        .filter(Q(provider__isnull=True) | Q(provider__is_active=True))
+        .filter(Q(category_ref__isnull=True) | Q(category_ref__is_active=True))
+        .select_related('provider', 'category_ref')
+        .first()
+    )
+    if not game:
+        return None
+    return {
+        'id': game.id,
+        'name': game.name,
+        'slug': game.slug,
+        'category': game.category,
+        'category_name': game.category_ref.name if game.category_ref else None,
+        'game_uid': game.game_uid,
+        'game_type': game.game_type,
+        'thumbnail_url': game.thumbnail_url,
+        'rtp': float(game.rtp) if game.rtp else None,
+        'min_bet': float(game.min_bet),
+        'max_bet': float(game.max_bet),
+        'is_featured': game.is_featured,
+        'is_provably_fair': game.is_provably_fair,
+        'play_count': game.play_count,
+        'provider_name': game.provider.name if game.provider else None,
+        'provider_slug': game.provider.slug if game.provider else None,
+    }
+
+
+def list_deposit_methods() -> list[dict]:
+    """Deposit methods a player can pay into, with the destination account.
+
+    The deposit page asked for a payment but showed a hardcoded method list and
+    no account details, so a player following UPI/bank-transfer instructions had
+    nowhere to send the money. These rows are admin-managed (Backoffice →
+    Payment methods); only deposit-capable active ones are returned.
+    """
+    from core.backoffice_models import PaymentMethod
+
+    methods = PaymentMethod.objects.filter(
+        is_active=True, supports_deposit=True
+    ).order_by('sort_order', 'name')
+    return [
+        {
+            'id': m.id,
+            'name': m.name,
+            'code': m.code,
+            'method_type': m.method_type,
+            'logo_url': m.logo_url,
+            'min_amount': float(m.min_amount or 0),
+            'max_amount': float(m.max_amount) if m.max_amount is not None else None,
+            # Where the player sends the money. Only the fields for the
+            # method's type are populated (backoffice_reports.DESTINATION_FIELDS);
+            # the deposit page renders the block that matches method_type.
+            'account_name': m.account_name,
+            'account_number': m.account_number,
+            'ifsc_code': m.ifsc_code,
+            'bank_name': m.bank_name,
+            'branch_name': m.branch_name,
+            'upi_id': m.upi_id,
+            'qr_image_url': m.qr_image_url,
+            'crypto_network': m.crypto_network,
+            'wallet_address': m.wallet_address,
+            'instructions': m.instructions,
+        }
+        for m in methods
+    ]
+
+
 def list_active_banners():
     """Public home-page hero banners the product admin has set to active,
     in display order. Returns [] when none are configured."""
@@ -682,6 +1000,20 @@ def list_active_banners():
             'link_url': b.link_url,
         }
         for b in Banner.objects.filter(status='active').order_by('sort_order', 'id')
+    ]
+
+
+def list_active_promotion_posters():
+    """Active offer posters for the public /promotions page, in display order.
+    Separate from bonus catalogue rows at GET /promotions."""
+    return [
+        {
+            'id': p.id,
+            'title': p.title,
+            'image_url': p.image_url,
+            'link_url': p.link_url,
+        }
+        for p in PromotionPoster.objects.filter(status='active').order_by('sort_order', 'id')
     ]
 
 

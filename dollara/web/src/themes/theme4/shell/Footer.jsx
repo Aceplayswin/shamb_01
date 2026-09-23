@@ -7,6 +7,7 @@
 import Link from 'next/link';
 import { Download } from 'lucide-react';
 import { useBranding } from '@/hooks/useBranding';
+import { SocialIconRow } from '@/components/SocialLinks';
 import { Theme4BrandMark } from './TopBar';
 
 const PROVIDERS = [
@@ -76,6 +77,13 @@ export function Theme4Footer() {
             18+
           </span>
         </div>
+        {/* Social profiles configured in Admin → Content → Social Links. Omits
+            itself entirely when nothing is configured (SocialIconRow renders
+            null), so an unconfigured product shows no empty row here. */}
+        <SocialIconRow
+          className="mx-auto flex max-w-[1200px] items-center justify-center gap-3 px-4 pb-6"
+          itemClassName="grid h-9 w-9 place-items-center rounded-full border border-[#5d7378]/30 text-[#5d7378] transition hover:border-[#0e7480] hover:text-[#0e7480]"
+        />
       </div>
 
       {/* ── Responsibility strip ── */}

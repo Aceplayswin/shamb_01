@@ -43,6 +43,8 @@ import {
   Network,
   Wallet,
   ScrollText,
+  Share2,
+  Layers,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { adminApi, adminUploadImage, clearAdminToken, getAdminRole, getAdminToken } from '@/services/adminApi';
@@ -62,6 +64,24 @@ const NAV_GROUPS = [
       { href: '/users', label: 'Users', icon: Users },
       { href: '/bet-history', label: 'Bet History', icon: History },
       { href: '/bets', label: 'Bets', icon: Dices },
+      { href: '/players/online', label: 'Players Online', icon: Users },
+    ],
+  },
+  {
+    label: 'Risk',
+    items: [
+      { href: '/players/blocked-ip', label: 'Blocked IP', icon: ShieldCheck },
+    ],
+  },
+  {
+    label: 'Cashier',
+    items: [
+      { href: '/cashier/methods', label: 'Payment Methods', icon: CreditCard },
+      { href: '/cashier/providers', label: 'Providers', icon: Building2 },
+      { href: '/cashier/bin-rules', label: 'BIN Rules', icon: ShieldCheck },
+      { href: '/cashier/frontend-rules', label: 'Front End Rules', icon: SlidersHorizontal },
+      { href: '/cashier/decline-queue', label: 'Decline Queue', icon: Inbox },
+      { href: '/cashier/upgrade-queue', label: 'Upgrade Queue', icon: Inbox },
     ],
   },
   {
@@ -71,6 +91,9 @@ const NAV_GROUPS = [
       { href: '/deposits', label: 'Deposits', icon: ArrowDownToLine },
       { href: '/withdrawals', label: 'Withdrawals', icon: ArrowUpFromLine },
       { href: '/bonuses', label: 'Bonuses', icon: Gift },
+      { href: '/bonus/list', label: 'Bonus List (New)', icon: Gift },
+      { href: '/bonus/create', label: 'Create Bonus', icon: Gift },
+      { href: '/bonus/exchange', label: 'Exchange Bonus', icon: Gift },
     ],
   },
   {
@@ -79,6 +102,8 @@ const NAV_GROUPS = [
       { href: '/banners', label: 'Banners', icon: ImageIcon },
       { href: '/faqs', label: 'FAQs', icon: HelpCircle },
       { href: '/app', label: 'App Download', icon: Smartphone },
+      { href: '/promotions', label: 'Promotions', icon: Sparkles },
+      { href: '/social-links', label: 'Social Links', icon: Share2 },
     ],
   },
   {
@@ -86,6 +111,22 @@ const NAV_GROUPS = [
     items: [
       { href: '/games', label: 'Games', icon: Gamepad2 },
       { href: '/providers', label: 'Providers', icon: Building2 },
+      { href: '/categories', label: 'Category', icon: Layers },
+      { href: '/games/sort-order', label: 'Sort by Web', icon: SlidersHorizontal },
+    ],
+  },
+  {
+    label: 'Mailing',
+    items: [
+      { href: '/mailing/templates', label: 'Templates', icon: FileSpreadsheet },
+      { href: '/mailing/casino-config', label: 'Casino Configuration', icon: Settings },
+      { href: '/mailing/emailsms-config', label: 'Email/SMS Configuration', icon: Settings },
+    ],
+  },
+  {
+    label: 'Configurations',
+    items: [
+      { href: '/config/groups', label: 'User Groups', icon: ShieldCheck },
     ],
   },
   {

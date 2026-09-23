@@ -19,6 +19,7 @@ import { ProfileMenu } from '@/components/ProfileMenu';
 import { GetAppModal } from '@/components/GetAppModal';
 import { NAV_GAME_LINKS } from '@/lib/gameRoutes';
 import { useAuthModal } from './authModalContext';
+import { isAccountRoute, HIDE_ON_MOBILE } from './accountRoutes';
 
 const NEWS = [
   'Weekly Cashback update version 2.0 releasing soon',
@@ -135,6 +136,10 @@ export function Theme5TopBar() {
   const [getAppOpen, setGetAppOpen] = useState(false);
 
   const isActive = (href) => (href === '/' ? pathname === '/' : pathname?.startsWith(href));
+  // On the player's own account pages the category rail collapses on phones
+  // (the footer card matches — see ThemeShell.jsx) so the task at hand gets
+  // the vertical space. See accountRoutes.js.
+  const hideLobbyNav = isAccountRoute(pathname);
 
   return (
     <header className="sticky top-0 z-40 shadow-sm">
@@ -238,7 +243,9 @@ export function Theme5TopBar() {
         </div>
       </div>
 
-      <CategoryRail />
+      <div className={hideLobbyNav ? HIDE_ON_MOBILE : undefined}>
+        <CategoryRail />
+      </div>
 
       <GetAppModal open={getAppOpen} onClose={() => setGetAppOpen(false)} />
     </header>
