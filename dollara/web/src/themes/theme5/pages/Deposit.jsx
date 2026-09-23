@@ -1,19 +1,33 @@
 'use client';
 
-// Theme5 Deposit — same cashier flow as theme1: choose amount → choose method →
-// pay through the shared gateway sheet → request submitted for review. The
-// gateway step reuses <PaymentGateway/> (the app's one checkout surface) as-is;
-// everything else here is theme5's own navy/blue styling. The wallet is NOT
-// credited on the user's action — the deposit stays pending until the product
-// admin confirms it from the admin panel.
+// Theme5 Deposit — two independent ways to fund the wallet, picked with a tab:
+//
+//   • "Quick Pay" — dollara's original cashier flow: choose amount → choose
+//     method → pay through the shared <PaymentGateway/> sandbox sheet → request
+//     submitted for review. Unchanged; kept as-is per product decision (do not
+//     remove PaymentGateway even once manual transfer is available).
+//   • "Bank / UPI Transfer" — the admin-configured methods from Cashier →
+//     Payment Methods (useDepositMethods), the "send payment to" block for the
+//     chosen method's type (<ReceivingDetails/>: QR/UPI, bank account, crypto
+//     address …), and a payment-screenshot upload the admin verifies before
+//     crediting. Ported from mahakalworld's theme5, which has already moved to
+//     this flow — see the local `uploadPaymentProof` note below for the one
+//     adaptation this required.
+//
+// Neither flow credits the wallet on the player's action — every deposit stays
+// pending until the product admin approves it from the admin panel.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Clock, Smartphone, Landmark, Bitcoin } from 'lucide-react';
+import { Clock, Smartphone, Landmark, Bitcoin, Upload, X, Check, Loader2 } from 'lucide-react';
 import { api } from '@/services/api';
+import { API_URL } from '@/services/tenant';
 import { useAuthStore } from '@/store/auth';
 import { PaymentGateway } from '@/components/payments/PaymentGateway';
+import { useDepositMethods } from '@/hooks/useDepositMethods';
+import { ReceivingDetails } from '@/components/payments/ReceivingDetails';
+import { amountWithinLimits, hasDestination, methodDescription } from '@/lib/paymentDestination';
 import { T5Card, t5Input, t5BtnPrimary, t5BtnOutline, T5FormPage } from '../components/ui';
 
 const MIN_DEPOSIT = 100;
@@ -27,9 +41,56 @@ const PAYMENT_METHODS = [
 
 const STEPS = ['Amount', 'Method', 'Payment'];
 
+const MANUAL_QUICK_AMOUNTS = [500, 1000, 2500, 5000, 10000];
+const MAX_PROOF_BYTES = 5 * 1024 * 1024;
+const PROOF_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+
+// dollara's shared services/api.js does not (yet) export the multipart
+// `upload()` helper mahakalworld's does — kept local to this page, scoped to
+// the one field the manual-transfer flow needs, rather than reaching into the
+// shared services file from a single-theme change. Mirrors that helper
+// exactly: no Content-Type header, so the browser sets the multipart boundary.
+async function uploadPaymentProof(file) {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${API_URL}/api/v1/wallet/deposit/proof`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error ?? err.message ?? 'Upload failed');
+  }
+  return res.json();
+}
+
+// Theme5 (light / blue) palette for the shared "send payment to" block; the
+// card itself is a T5Card wrapped around it.
+const RECEIVING_STYLES = {
+  card: '',
+  title: 'font-black text-[#0f1b33]',
+  note: 'mt-1 text-xs text-[#94a3b8]',
+  rows: 'mt-4 space-y-2',
+  row: 'flex items-center justify-between gap-3 rounded-lg border border-black/10 bg-white px-4 py-3',
+  label: 'text-[0.65rem] font-black uppercase tracking-wide text-[#94a3b8]',
+  value: 'break-all font-bold text-[#0f1b33]',
+  mono: 'font-mono text-sm',
+  copyBtn:
+    'shrink-0 rounded-md border border-black/10 px-3 py-1.5 text-xs font-bold text-[#1d4ed8] transition hover:border-[#1d4ed8] hover:bg-[#eff4ff]',
+  qrFrame: 'mt-4 flex justify-center',
+  qrImg: 'h-44 w-44 max-w-full rounded-lg border border-black/10 bg-white object-contain p-1',
+  instructions: 'mt-4 whitespace-pre-line rounded-lg bg-[#eff4ff] p-3 text-xs text-[#0f1b33]',
+};
+
 export default function Theme5Deposit() {
   const router = useRouter();
   const { token, isHydrated, hydrate } = useAuthStore();
+
+  // Which of the two independent deposit flows is showing. Both post to the
+  // same /wallet/deposit endpoint; only how the player gets there differs.
+  const [mode, setMode] = useState('quick'); // 'quick' | 'manual'
 
   const [step, setStep] = useState('amount'); // amount | method | pay | done
   const [amount, setAmount] = useState('');
@@ -43,6 +104,38 @@ export default function Theme5Deposit() {
   const valid = numAmount >= MIN_DEPOSIT;
   const bonus = numAmount >= 1000 ? numAmount * 0.5 : 0;
 
+  // --- Manual (bank / UPI transfer) flow state --------------------------------
+  const [manualAmount, setManualAmount] = useState('');
+  const [manualMethod, setManualMethod] = useState('');
+  const [manualLoading, setManualLoading] = useState(false);
+  const [manualResult, setManualResult] = useState(null);
+  // UTR / reference the player copies out of their payment app.
+  const [manualReference, setManualReference] = useState('');
+  const [manualSubmitError, setManualSubmitError] = useState('');
+  // Payment screenshot: the local File, its object-URL preview, the uploaded
+  // URL once stored, and any validation/upload error.
+  const [proofFile, setProofFile] = useState(null);
+  const [proofPreview, setProofPreview] = useState('');
+  const [proofUrl, setProofUrl] = useState('');
+  const [proofError, setProofError] = useState('');
+  const [proofUploading, setProofUploading] = useState(false);
+  const fileInputRef = useRef(null);
+  // Methods the admin has configured, each carrying the account the player
+  // pays into. No static fallback: an empty list is shown as unavailable.
+  const {
+    methods: manualMethods,
+    loading: manualMethodsLoading,
+    error: manualMethodsError,
+  } = useDepositMethods(isHydrated && Boolean(token));
+
+  const manualNumAmount = parseFloat(manualAmount) || 0;
+  const manualBonus = manualNumAmount >= 1000 ? manualNumAmount * 0.5 : 0;
+  const selectedManualMethod = manualMethods.find((pm) => pm.code === manualMethod) ?? null;
+  // Every admin-configured method is paid manually, so proof is always asked
+  // for once a method is chosen.
+  const needsProof = Boolean(selectedManualMethod);
+  const manualLimit = amountWithinLimits(selectedManualMethod, manualNumAmount);
+
   useEffect(() => {
     hydrate();
   }, [hydrate]);
@@ -52,6 +145,107 @@ export default function Theme5Deposit() {
   }, [isHydrated, token, router]);
 
   const stepIndex = { amount: 0, method: 1, pay: 2, done: 2 }[step];
+
+  // A method the admin has since disabled must not stay selected.
+  useEffect(() => {
+    if (manualMethod && !manualMethods.some((pm) => pm.code === manualMethod)) setManualMethod('');
+  }, [manualMethods, manualMethod]);
+
+  // A reference or screenshot belongs to one payment: changing the method
+  // means that payment was never made, so the proof starts over.
+  useEffect(() => {
+    setManualReference('');
+    setManualSubmitError('');
+    setProofFile(null);
+    setProofPreview('');
+    setProofUrl('');
+    setProofError('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, [manualMethod]);
+
+  // Object URLs are leaked memory until revoked; drop the old one whenever the
+  // preview changes and on unmount.
+  useEffect(() => {
+    if (!proofPreview) return undefined;
+    return () => URL.revokeObjectURL(proofPreview);
+  }, [proofPreview]);
+
+  // Picking a file uploads it straight away, so the screenshot is already
+  // stored (and validated by the server) before the deposit is submitted.
+  const pickProof = async (file) => {
+    if (!file) return;
+    setProofError('');
+    setProofUrl('');
+    if (!PROOF_TYPES.includes(file.type)) {
+      setProofError('Upload a PNG, JPG or WEBP image.');
+      return;
+    }
+    if (file.size > MAX_PROOF_BYTES) {
+      setProofError('Screenshot too large (max 5MB).');
+      return;
+    }
+    setProofFile(file);
+    setProofPreview(URL.createObjectURL(file));
+    setProofUploading(true);
+    try {
+      const res = await uploadPaymentProof(file);
+      setProofUrl(res.url);
+    } catch (e) {
+      setProofError(e instanceof Error ? e.message : 'Upload failed');
+      setProofFile(null);
+      setProofPreview('');
+    } finally {
+      setProofUploading(false);
+    }
+  };
+
+  const clearProof = () => {
+    setProofFile(null);
+    setProofPreview('');
+    setProofUrl('');
+    setProofError('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const submitManual = async () => {
+    if (!selectedManualMethod) return;
+    setManualLoading(true);
+    setManualSubmitError('');
+    try {
+      const res = await api('/api/v1/wallet/deposit', {
+        method: 'POST',
+        body: JSON.stringify({
+          amount: manualNumAmount,
+          paymentMethod: selectedManualMethod.code,
+          referenceNumber: manualReference.trim() || null,
+          paymentProofUrl: proofUrl || null,
+        }),
+      });
+      setManualResult(res);
+      // Clear the form: the request is queued and the same screenshot must not
+      // be submitted again by accident.
+      setManualAmount('');
+      setManualReference('');
+      clearProof();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Deposit failed';
+      if (/log in again|unauthorized/i.test(msg)) {
+        router.replace('/login');
+        return;
+      }
+      setManualSubmitError(msg);
+    } finally {
+      setManualLoading(false);
+    }
+  };
+
+  const canSubmitManual =
+    !manualLoading &&
+    !proofUploading &&
+    manualNumAmount > 0 &&
+    Boolean(selectedManualMethod) &&
+    manualLimit.ok &&
+    (!needsProof || Boolean(proofUrl));
 
   // Create the pending deposit (the "order") before opening the gateway.
   const startPayment = async () => {

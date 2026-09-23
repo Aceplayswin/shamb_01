@@ -1,20 +1,51 @@
 'use client';
 
-// Theme3 Deposit — same cashier flow as theme1: choose amount → choose method →
-// pay through the shared gateway sheet → request submitted for review. The
-// gateway step reuses <PaymentGateway/> (the app's one checkout surface) as-is;
-// everything else here is theme3's own cream/gold styling. The wallet is NOT
-// credited on the user's action — the deposit stays pending until the product
-// admin confirms it from the admin panel.
+// Theme3 Deposit — two ways to pay in, switched by a tab at the top:
+//   • Instant Deposit — same cashier flow as before: choose amount → choose
+//     method → pay through the shared gateway sheet → request submitted for
+//     review. The gateway step reuses <PaymentGateway/> (the app's one sandbox
+//     checkout surface) as-is.
+//   • Bank Transfer — the admin-configured manual methods (Backoffice →
+//     Payment methods): the player picks one, sees exactly where to send the
+//     money via the shared <ReceivingDetails/>, and submits the amount plus an
+//     optional UTR/reference for the cashier to match.
+// Either way the wallet is NOT credited on the user's action — the deposit
+// stays pending until the product admin confirms it from the admin panel.
+// Everything here beyond the two shared components is theme3's own cream/gold
+// styling.
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Clock, Smartphone, Landmark, Bitcoin } from 'lucide-react';
+import { Clock, Smartphone, Landmark, Bitcoin, CreditCard, Wallet as WalletIcon } from 'lucide-react';
 import { api } from '@/services/api';
 import { useAuthStore } from '@/store/auth';
 import { PaymentGateway } from '@/components/payments/PaymentGateway';
+import { useDepositMethods } from '@/hooks/useDepositMethods';
+import { ReceivingDetails } from '@/components/payments/ReceivingDetails';
+import { amountWithinLimits, hasDestination, methodDescription } from '@/lib/paymentDestination';
 import { T3Card, t3Input, t3BtnPrimary, t3BtnOutline, T3FormPage } from '../components/ui';
+
+// The "send payment to" block, restyled to VELPLAY's cream/gold card look.
+// ReceivingDetails renders its own <section>, so this supplies the full card
+// styling directly rather than nesting inside another T3Card.
+const T3_RECEIVING_STYLES = {
+  card: 'rounded-2xl border border-black/[0.06] bg-white p-6 shadow-[0_20px_50px_-32px_rgba(36,27,58,0.45)]',
+  title: 'font-display text-sm font-black uppercase tracking-wide text-[#1b1726]',
+  note: 'mt-1 text-xs text-[#9a94a8]',
+  rows: 'mt-4 space-y-2',
+  row: 'flex items-center justify-between gap-3 rounded-xl border border-black/[0.06] bg-[#faf6ec] px-4 py-3',
+  label: 'text-[0.65rem] font-black uppercase tracking-wide text-[#9a94a8]',
+  value: 'break-all font-bold text-[#1b1726]',
+  mono: 'font-mono text-sm',
+  copyBtn:
+    'shrink-0 rounded-lg border border-[#c79a3b]/40 bg-white px-3 py-1.5 text-xs font-bold text-[#9a7a24] transition hover:border-[#c79a3b] hover:bg-[#faf6ec]',
+  qrFrame: 'mt-4 flex justify-center',
+  qrImg: 'h-44 w-44 max-w-full rounded-xl border border-black/10 bg-white object-contain p-1',
+  instructions: 'mt-4 whitespace-pre-line rounded-xl bg-[#faf6ec] p-3 text-xs text-[#6b6579]',
+};
+
+const METHOD_ICONS = { upi: Smartphone, bank: Landmark, crypto: Bitcoin, wallet: WalletIcon, card: CreditCard, other: Landmark };
 
 const MIN_DEPOSIT = 100;
 const QUICK_AMOUNTS = [500, 1000, 2500, 5000, 10000];

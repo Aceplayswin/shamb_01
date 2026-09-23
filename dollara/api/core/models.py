@@ -19,9 +19,15 @@ class User(models.Model):
     phone = models.CharField(max_length=20, unique=True, null=True, blank=True)
     password_hash = models.CharField(max_length=255, null=True, blank=True)
     full_name = models.CharField(max_length=100, null=True, blank=True)
+    state = models.CharField(max_length=60, null=True, blank=True)
+    # IP captured at registration; the last-seen IP comes from login_history.
+    signup_ip = models.CharField(max_length=45, null=True, blank=True)
+    # NULL for self-registration, else the staff account that created the player.
+    created_by = models.BigIntegerField(null=True, blank=True)
     role = models.CharField(
         max_length=20, choices=Role.choices, default=Role.USER, db_index=True
     )
+    staff_group_id = models.BigIntegerField(null=True, blank=True)
     account_status = models.CharField(
         max_length=20, choices=AccountStatus.choices, default=AccountStatus.ACTIVE
     )
@@ -75,6 +81,9 @@ class UserSetting(models.Model):
     referral_code = models.CharField(max_length=20, null=True, blank=True)
     referred_by = models.BigIntegerField(null=True, blank=True)
     fraud_score = models.IntegerField(default=0)
+    # Tiers used by the Aging and Player Wise reports.
+    risk_level = models.CharField(max_length=10, default='low')
+    vip_level = models.IntegerField(default=0)
     is_demo = models.BooleanField(default=False)
     demo_expires_at = models.DateTimeField(null=True, blank=True)
     website_language = models.CharField(max_length=10, default='en')
@@ -145,7 +154,14 @@ class Transaction(models.Model):
     currency = models.CharField(max_length=10, default='INR')
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     payment_method = models.CharField(max_length=50, null=True, blank=True)
+    # The PSP that handled the payment, its own id for it, and any decline text.
+    provider_id = models.BigIntegerField(null=True, blank=True)
+    provider_payment_id = models.CharField(max_length=120, null=True, blank=True)
+    error_message = models.CharField(max_length=500, null=True, blank=True)
     reference_number = models.CharField(max_length=255, null=True, blank=True)
+    # Screenshot the player uploaded as proof of a manual payment. Reviewed by
+    # an admin before the deposit is confirmed and credited.
+    payment_proof_url = models.CharField(max_length=500, null=True, blank=True)
     notes = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -203,6 +219,38 @@ class GameProvider(models.Model):
         return bool(self.agency_uid or self.aes_secret_key or self.server_url)
 
 
+class GameCategory(models.Model):
+    """A catalog vertical (Slots, Live Casino, Sports, …), managed in the admin.
+
+    This replaces the fixed ``Game.Category`` enum: adding a vertical is now a
+    row, not a schema change. The ``slug`` remains the wire contract — every API
+    response still emits ``category`` as this slug string, so web themes,
+    reports and exports that key on ``'sports'`` / ``'live_casino'`` are
+    unaffected by the move to a foreign key.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+    name = models.CharField(max_length=80)
+    slug = models.SlugField(max_length=50, unique=True)
+    icon_url = models.URLField(max_length=500, null=True, blank=True)
+    # Sports verticals are priced and reported on the sports side of every agent
+    # report; delayed-settlement ones stay Pending until a result callback
+    # lands. Both were hardcoded Python tuples before.
+    is_sports = models.BooleanField(default=False)
+    is_delayed_settlement = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'game_categories'
+        ordering = ['sort_order', 'name']
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class Game(models.Model):
     class Category(models.TextChoices):
         SLOTS = 'slots', 'Slots'
@@ -219,6 +267,13 @@ class Game(models.Model):
     )
     name = models.CharField(max_length=150)
     slug = models.SlugField(max_length=100, unique=True)
+    # Optional link to the new GameCategory taxonomy (admin-managed). Not yet
+    # wired into game create/update in this port; `category` below remains the
+    # flat slug this platform's existing game-admin flow reads and writes.
+    category_ref = models.ForeignKey(
+        GameCategory, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='games', db_column='category_id',
+    )
     category = models.CharField(max_length=30, choices=Category.choices)
     # External aggregator identifier (32-char hex UID). The launch + callback
     # flow keys on this; it maps aggregator events back to this catalog row.
@@ -313,7 +368,15 @@ class GameRound(models.Model):
     # entered through, so history stays readable.
     game_name = models.CharField(max_length=150, null=True, blank=True)
     # Aggregator idempotency key (unique). Unique round id from the aggregator.
+    # For a delayed-settlement bet this holds the *result* callback's number once
+    # the payout lands, so a redelivery of either callback still collides here.
     serial_number = models.CharField(max_length=100, unique=True)
+    # The stake callback's serial number, kept when the result callback's number
+    # takes over `serial_number` above. Unique so a redelivered stake callback is
+    # still rejected as a duplicate after its round has been settled.
+    stake_serial = models.CharField(
+        max_length=100, null=True, blank=True, unique=True
+    )
     game_round = models.CharField(max_length=100, null=True, blank=True)
     # Stake-only rounds from a delayed-settlement provider stay PENDING until
     # the result callback arrives; they must not be shown as a loss meanwhile.
@@ -438,6 +501,19 @@ class Bonus(models.Model):
     bonus_type = models.CharField(max_length=20, choices=Type.choices)
     value_type = models.CharField(max_length=20, choices=ValueType.choices)
     value_amount = models.DecimalField(max_digits=18, decimal_places=2)
+    # Reference Redemption tab: its own type/amount/ceiling, separate from the
+    # value_type/value_amount pair above.
+    redemption_type = models.CharField(max_length=40, null=True, blank=True)
+    redemption_amount = models.DecimalField(
+        max_digits=18, decimal_places=2, null=True, blank=True
+    )
+    max_redeemable_value = models.DecimalField(
+        max_digits=18, decimal_places=2, null=True, blank=True
+    )
+    # Comma-separated payment method codes the qualifying deposit must have used.
+    payment_methods = models.CharField(max_length=255, null=True, blank=True)
+    # Which bonus wins when a player qualifies for several; 0 = accumulative.
+    priority = models.IntegerField(default=0)
     min_deposit = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     # Deposit-sequence gates. None set = any deposit qualifies; setting several
     # makes the bonus fire on any of those ordinals.
@@ -462,11 +538,38 @@ class Bonus(models.Model):
     scope = models.CharField(max_length=10, choices=Scope.choices, default=Scope.MASS)
     target_user_id = models.BigIntegerField(null=True, blank=True)
     promo_code = models.CharField(max_length=40, null=True, blank=True)
+    coupon_length = models.IntegerField(null=True, blank=True)
+    # `status` is the lifecycle; these are the reference's visibility toggles.
+    is_published = models.BooleanField(default=False)
+    is_public = models.BooleanField(default=False)
+    affiliate_id = models.BigIntegerField(null=True, blank=True)
+    parent_bonus_id = models.BigIntegerField(null=True, blank=True)
+    comment = models.TextField(null=True, blank=True)
     per_user_limit = models.IntegerField(null=True, blank=True)
     total_budget = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
     total_awarded = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     total_claims = models.IntegerField(default=0)
     bonus_validity_days = models.IntegerField(default=30)
+    # Claim conditions. What the player must hold right now (balance) or must
+    # have done *during the offer* (turnover, deposits) before the claim goes
+    # through. NULL = no such requirement. Activity from before start_date (or
+    # created_at when unscheduled) never counts, and nothing counts after
+    # end_date — a player who hit the figure last week is not qualified by a
+    # bonus created today. The web shows the offer with a disabled Claim button
+    # until every condition is met; see bonus_services.claim_requirements.
+    claim_min_balance = models.DecimalField(
+        max_digits=18, decimal_places=2, null=True, blank=True
+    )
+    claim_min_wagering = models.DecimalField(
+        max_digits=18, decimal_places=2, null=True, blank=True
+    )
+    claim_min_deposit_total = models.DecimalField(
+        max_digits=18, decimal_places=2, null=True, blank=True
+    )
+    # Abuse tab: thresholds that block a redemption outright. NULL = no check.
+    abuse_similarity_percent = models.IntegerField(null=True, blank=True)
+    abuse_deposited_days = models.IntegerField(null=True, blank=True)
+    abuse_played_days = models.IntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -575,6 +678,23 @@ class Banner(models.Model):
 
     class Meta:
         db_table = 'banners'
+
+
+class PromotionPoster(models.Model):
+    """Offer poster for the public /promotions page (image + optional link).
+    Distinct from Bonus catalogue rows served at GET /promotions."""
+
+    id = models.BigAutoField(primary_key=True)
+    title = models.CharField(max_length=150, null=True, blank=True)
+    image_url = models.CharField(max_length=500)
+    link_url = models.CharField(max_length=500, null=True, blank=True)
+    sort_order = models.IntegerField(default=0)
+    status = models.CharField(max_length=20, default='draft')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'promotion_posters'
 
 
 class Faq(models.Model):

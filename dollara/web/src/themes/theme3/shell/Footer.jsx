@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { Download } from 'lucide-react';
 import { useBranding, onLogoError } from '@/hooks/useBranding';
 import { NAV_GAME_LINKS } from '@/lib/gameRoutes';
+import { SocialIconRow } from '@/components/SocialLinks';
 
 const QUICK_NAV = [
   { label: 'Live Betting', href: NAV_GAME_LINKS.sports },
@@ -68,6 +69,12 @@ export function Theme3Footer() {
                 <Download className="h-3.5 w-3.5" /> GET APP
               </Link>
             </div>
+            {/* Social profiles configured in Admin → Content → Social Links.
+                Renders nothing until the admin sets a channel. */}
+            <SocialIconRow
+              className="mt-5 flex gap-2.5"
+              itemClassName="grid h-8 w-8 place-items-center rounded-lg border border-white/15 text-white/70 transition hover:border-[#e9c56b]/60 hover:text-[#e9c56b]"
+            />
           </div>
 
           {/* Quick navigation */}

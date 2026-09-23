@@ -16,8 +16,14 @@ import Wallet from './pages/Wallet';
 import Profile from './pages/Profile';
 import Onboarding from './pages/Onboarding';
 import Support from './pages/Support';
+import AppDownload from './pages/AppDownload';
 import Games from './pages/Games';
+import Providers from './pages/Providers';
 import Play from './pages/Play';
+import Promotions from './pages/Promotions';
+import BetHistory from './pages/BetHistory';
+import Transactions from './pages/Transactions';
+import Bonus from './pages/Bonus';
 
 export default {
   key: 'theme5',
@@ -31,8 +37,14 @@ export default {
     profile: Profile,
     onboarding: Onboarding,
     support: Support,
+    appDownload: AppDownload,
     games: Games,
+    providers: Providers,
     play: Play,
+    promotions: Promotions,
+    betHistory: BetHistory,
+    transactions: Transactions,
+    bonus: Bonus,
   },
   Shell,
 };

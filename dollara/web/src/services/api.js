@@ -62,6 +62,31 @@ export async function api(path, options = {}) {
   return res.json();
 }
 
+// Multipart upload. Deliberately does NOT set Content-Type: the browser must
+// set it itself so the multipart boundary is included — hard-coding
+// application/json (as `api` does) makes the server reject the body. Used by
+// the manual-deposit proof upload (ReceivingDetails) and any other
+// screenshot/file submission.
+export async function upload(path, file, field = 'file') {
+  const token =
+    typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+
+  const form = new FormData();
+  form.append(field, file);
+
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error ?? err.message ?? 'Upload failed');
+  }
+  return res.json();
+}
+
 export async function detectGeo() {
   return api('/api/v1/geo/detect');
 }

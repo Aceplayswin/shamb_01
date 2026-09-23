@@ -19,7 +19,9 @@ import { Theme5Sidebar } from './Sidebar';
 import { Theme5RightRail } from './RightRail';
 import { Theme5Footer } from './Footer';
 import { Theme5AuthModals } from './AuthModals';
+import { WhatsAppButton } from '@/components/WhatsAppButton';
 import { Theme5AuthModalContext } from './authModalContext';
+import { isAccountRoute, HIDE_ON_MOBILE } from './accountRoutes';
 
 export default function Theme5Shell({ children }) {
   const pathname = usePathname();
@@ -37,6 +39,11 @@ export default function Theme5Shell({ children }) {
   // A launched game takes the full width — no rails, no footer.
   const isPlayRoute = pathname?.startsWith('/play/');
 
+  // The player's own account pages drop the footer card on phones (the top
+  // bar drops its category rail to match — see TopBar.jsx) so the task fills
+  // the small viewport. See accountRoutes.js.
+  const hideChromeOnMobile = isAccountRoute(pathname);
+
   return (
     <Theme5AuthModalContext.Provider value={modalValue}>
       <div className="theme5-root flex min-h-screen flex-col">
@@ -49,11 +56,16 @@ export default function Theme5Shell({ children }) {
             <Theme5Sidebar />
             <main className="flex min-w-0 flex-1 flex-col">
               <div className="flex-1">{children}</div>
-              <Theme5Footer />
+              <div className={hideChromeOnMobile ? HIDE_ON_MOBILE : undefined}>
+                <Theme5Footer />
+              </div>
             </main>
             <Theme5RightRail />
           </div>
         )}
+
+        {/* Floating support button — renders itself on the home route only. */}
+        <WhatsAppButton />
 
         <Theme5AuthModals />
       </div>
