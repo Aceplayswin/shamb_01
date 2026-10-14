@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Gift, Lock, Phone, User, X } from 'lucide-react';
 import { api } from '@/services/api';
+import { registerAttribution } from '@/lib/referral';
 import { useAuthStore } from '@/store/auth';
 import { useUnifiedLogin } from '@/hooks/useUnifiedLogin';
 import { useAuthModal } from '@/hooks/useAuthModal';
@@ -140,11 +141,11 @@ function RegisterModal({ onClose, switchTo }) {
     try {
       const result = await api('/api/v1/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ phone, fullName, password, referralCode: referralCode.trim() || undefined }),
+        body: JSON.stringify({ phone, fullName, password, ...registerAttribution(referralCode) }),
       });
       setAuth({ token: result.token, userId: result.userId, username: result.username });
       onClose();
-      router.push('/onboarding');
+      router.push('/');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Registration failed');
     } finally {
@@ -155,7 +156,7 @@ function RegisterModal({ onClose, switchTo }) {
   return (
     <ModalShell onClose={onClose} mesh="bg-mesh-amber">
       <h1 className="font-display text-2xl font-black text-app-fg sm:text-3xl">Create account</h1>
-      <p className="mt-2 text-sm text-muted">Instant access. KYC required before first withdrawal.</p>
+      <p className="mt-2 text-sm text-muted">Instant access. Start playing in seconds.</p>
 
       {error && (
         <p className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-400">

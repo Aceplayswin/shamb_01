@@ -30,7 +30,7 @@ export default function Theme1Withdraw() {
   const [step, setStep] = useState('amount'); // amount | details | review | processing | done
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('bank_transfer');
-  const [dest, setDest] = useState({ accountName: '', accountNumber: '', ifsc: '', upiId: '', address: '' });
+  const [dest, setDest] = useState({ accountName: '', accountNumber: '', ifsc: '', bankName: '', upiId: '', address: '' });
   const [transactionId, setTransactionId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -56,7 +56,7 @@ export default function Theme1Withdraw() {
   const stepIndex = { amount: 0, details: 1, review: 2, done: 2 }[step];
 
   const destValid = () => {
-    if (method === 'bank_transfer') return dest.accountName && dest.accountNumber.length >= 6 && dest.ifsc;
+    if (method === 'bank_transfer') return dest.accountName && dest.accountNumber.length >= 6 && dest.ifsc && dest.bankName;
     if (method === 'upi') return /.+@.+/.test(dest.upiId);
     if (method === 'crypto') return dest.address.length >= 10;
     return false;
@@ -80,7 +80,24 @@ export default function Theme1Withdraw() {
     try {
       const res = await api('/api/v1/wallet/withdraw', {
         method: 'POST',
-        body: JSON.stringify({ amount: numAmount, paymentMethod: method }),
+        body: JSON.stringify({
+          amount: numAmount,
+          paymentMethod: method,
+          // Map this form's field names onto the API contract
+          // (services.WITHDRAWAL_DESTINATION_FIELDS) so the payout details
+          // actually reach the admin queue.
+          destination:
+            method === 'bank_transfer'
+              ? {
+                  accountName: dest.accountName,
+                  accountNumber: dest.accountNumber,
+                  ifsc: dest.ifsc,
+                  bankName: dest.bankName,
+                }
+              : method === 'upi'
+                ? { upiId: dest.upiId }
+                : { network: dest.network || 'TRC20', walletAddress: dest.address },
+        }),
       });
       setTransactionId(res.transactionId);
       await refreshSession();
@@ -97,7 +114,7 @@ export default function Theme1Withdraw() {
     timers.current = [];
     setStep('amount');
     setAmount('');
-    setDest({ accountName: '', accountNumber: '', ifsc: '', upiId: '', address: '' });
+    setDest({ accountName: '', accountNumber: '', ifsc: '', bankName: '', upiId: '', address: '' });
     setTransactionId(null);
     setError(null);
   };
@@ -194,6 +211,7 @@ export default function Theme1Withdraw() {
                   <Input label="Account holder name" value={dest.accountName} onChange={(v) => setDest({ ...dest, accountName: v })} placeholder="As per bank records" />
                   <Input label="Account number" value={dest.accountNumber} onChange={(v) => setDest({ ...dest, accountNumber: v })} placeholder="Bank account number" inputMode="numeric" />
                   <Input label="IFSC code" value={dest.ifsc} onChange={(v) => setDest({ ...dest, ifsc: v.toUpperCase() })} placeholder="e.g. HDFC0001234" />
+                  <Input label="Bank Name" value={dest.bankName} onChange={(v) => setDest({ ...dest, bankName: v })} placeholder="e.g. HDFC Bank" />
                 </>
               )}
               {method === 'upi' && (

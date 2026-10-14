@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { Gift, Sparkles } from 'lucide-react';
 import { api } from '@/services/api';
 import { useAuthStore } from '@/store/auth';
+import { formatDateTime as formatDate } from '@/lib/datetime';
 
 const inr = (n) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 
@@ -169,15 +170,3 @@ function BonusCard({ bonus }) {
   );
 }
 
-function formatDate(iso) {
-  if (!iso) return '';
-  try {
-    return new Date(iso).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  } catch {
-    return '';
-  }
-}

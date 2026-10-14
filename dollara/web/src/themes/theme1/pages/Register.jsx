@@ -2,14 +2,14 @@
 
 // Theme1 /register route. Same popup-based approach as /login: open the shell's
 // register modal, with a fallback CTA if it's dismissed. Authenticated users are
-// sent to /onboarding by useGuestOnly.
+// sent to the homepage by useGuestOnly.
 
 import { useEffect } from 'react';
 import { useGuestOnly } from '@/hooks/useGuestOnly';
 import { useAuthModal } from '@/hooks/useAuthModal';
 
 export default function Theme1Register() {
-  useGuestOnly('/onboarding');
+  useGuestOnly('/');
   const { open, mode } = useAuthModal();
 
   useEffect(() => {

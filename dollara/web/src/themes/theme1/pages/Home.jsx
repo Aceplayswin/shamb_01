@@ -10,7 +10,6 @@ import { useGameCatalog } from '@/hooks/useGameCatalog';
 import { useGameSearch } from '@/hooks/useGameSearch';
 import BannerCarousel from '@/components/BannerCarousel';
 import { BigWins } from '@/components/BigWins';
-import SupportFab from '@/components/SupportFab';
 import {
   filterByCategory,
   filterByProvider,
@@ -334,22 +333,14 @@ export default function Theme1Home() {
           <div>
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-[0.25em] text-muted">Game Providers</h3>
-              <div className="flex items-center gap-3">
-                {selectedProvider && (
-                  <button
-                    onClick={() => setSelectedProvider(null)}
-                    className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-brand-400 hover:text-brand-300"
-                  >
-                    <X className="h-3 w-3" /> Clear
-                  </button>
-                )}
-                <Link
-                  href="/providers"
-                  className="hidden items-center gap-1 rounded-lg border border-hairline/10 px-3 py-1.5 text-xs font-bold text-app-fg/70 transition hover:border-brand-400/50 hover:text-app-fg sm:flex"
+              {selectedProvider && (
+                <button
+                  onClick={() => setSelectedProvider(null)}
+                  className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-brand-400 hover:text-brand-300"
                 >
-                  View all <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              </div>
+                  <X className="h-3 w-3" /> Clear
+                </button>
+              )}
             </div>
             <div className="edge-fade-x flex gap-2.5 overflow-x-auto pb-1 scrollbar-hide">
               {providers.map((p) => (
@@ -527,7 +518,6 @@ export default function Theme1Home() {
           )}
         </div>
       </main>
-      <SupportFab className="bottom-24 lg:bottom-5" />
     </>
   );
 }
