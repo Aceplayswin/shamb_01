@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"e:\\\\Dancika\\\\shamb_01\\\\super_admin\\\\web\\\\\" -Recurse -Force | Select-Object FullName, PSIsContainer | Sort-Object FullName | Format-Table -AutoSize)",
+      "Bash(node -e \"console.log\\(Object.keys\\(require\\('./package.json'\\).scripts||{}\\).join\\(', '\\)\\)\")",
+      "Bash(curl -s -m 8 \"http://localhost:5000/api/v1/super-admin/public/theme?slug=dollara\")",
+      "Bash(echo \"curl_exit: $?\")",
+      "Bash(python -c ' *)",
+      "Bash(./venv/Scripts/python.exe -c ' *)",
+      "Bash(npx next *)",
+      "Bash(node -e ' *)",
+      "Bash(rm -rf .next-verify)",
+      "Bash(timeout 240 npx next build --no-lint)",
+      "Read(//tmp/**)",
+      "Bash(timeout 200 bash -c 'while kill -0 $\\(pgrep -f \"next build\" | head -1\\) 2>/dev/null; do sleep 2; done')",
+      "Bash(NEXT_VERIFY_DIST=.next-verify timeout 260 npx next build --no-lint)",
+      "Bash(grep -vE \"^\\\\s*$\")",
+      "Bash(mkdir -p src/themes/theme1/pages src/themes/theme2/pages src/themes/theme2/shell)",
+      "Bash(git mv *)",
+      "Bash(mv src/themes/theme1/HomePage.jsx src/themes/theme1/pages/Home.jsx)"
+    ]
+  }
+}

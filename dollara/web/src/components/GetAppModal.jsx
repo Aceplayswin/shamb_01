@@ -12,8 +12,8 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Download, Plus, Share, Smartphone, X } from 'lucide-react';
-import { useBranding, onLogoError } from '@/hooks/useBranding';
+import { Check, Download, Plus, Share, Smartphone, Sparkles, X } from 'lucide-react';
+import { useBranding } from '@/hooks/useBranding';
 import { useInstallPrompt } from '@/hooks/useInstallPrompt';
 
 const PERKS = [
@@ -46,7 +46,7 @@ export function GetAppModal({ open, onClose }) {
 
   if (!mounted || !open) return null;
 
-  const name = branding.product_name || 'the app';
+  const name = branding.product_name || 'Mahakal World';
 
   const handleInstall = async () => {
     setBusy(true);
@@ -85,8 +85,17 @@ export function GetAppModal({ open, onClose }) {
         <div className="p-6 sm:p-7">
           {/* brand mark */}
           <div className="flex items-center gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={branding.logo_url} alt={name} onError={onLogoError} className="h-12 w-12 rounded-xl object-contain" />
+            {branding.logo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={branding.logo_url} alt={name} className="h-12 w-12 rounded-xl object-contain" />
+            ) : (
+              <span
+                className="grid h-12 w-12 place-items-center rounded-xl shadow-glow"
+                style={{ background: `linear-gradient(135deg, ${branding.theme_color}, ${branding.secondary_color})` }}
+              >
+                <Sparkles className="h-5 w-5 text-surface-950" strokeWidth={2.5} />
+              </span>
+            )}
             <div className="min-w-0">
               <h2 className="truncate font-display text-lg font-extrabold text-app-fg">
                 Get the {name} app

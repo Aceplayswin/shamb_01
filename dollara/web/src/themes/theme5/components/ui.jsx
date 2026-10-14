@@ -91,16 +91,35 @@ export function T5LiveBadge() {
 }
 
 // Centered page wrapper for narrow forms (deposit, withdraw, profile, etc.).
-export function T5FormPage({ title, subtitle, maxWidth = 'max-w-2xl', children }) {
+// Optional `tabs` (e.g. Deposit ↔ Withdrawals) render next to the active navy tab
+// so players can jump between related cashier pages without going through Wallet.
+export function T5FormPage({ title, subtitle, tabs, maxWidth = 'max-w-2xl', children }) {
+  const activeLabel = tabs?.find((t) => t.active)?.label ?? title;
+
   return (
     <div className={`mx-auto ${maxWidth} px-4 py-6 sm:py-8`}>
-      {title && (
-        <div className="flex overflow-hidden rounded-lg bg-white shadow-sm">
-          <div className="theme5-tab py-2.5 pl-4">
+      {(title || tabs) && (
+        <div className="flex items-stretch overflow-hidden rounded-lg bg-white shadow-sm">
+          <div className="theme5-tab flex items-center py-2.5 pl-4">
             <h1 className="whitespace-nowrap text-sm font-black uppercase tracking-wide text-white sm:text-base">
-              {title}
+              {activeLabel}
             </h1>
           </div>
+          {tabs?.some((t) => !t.active) && (
+            <nav className="flex flex-1 items-center gap-1 px-3 sm:px-4" aria-label="Page">
+              {tabs
+                .filter((t) => !t.active)
+                .map((t) => (
+                  <Link
+                    key={t.href}
+                    href={t.href}
+                    className="whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-black uppercase tracking-wide text-[#64748b] transition hover:bg-[#eff4ff] hover:text-[#1d4ed8] sm:text-sm"
+                  >
+                    {t.label}
+                  </Link>
+                ))}
+            </nav>
+          )}
         </div>
       )}
       {subtitle && <p className="mt-3 text-sm text-[#64748b]">{subtitle}</p>}

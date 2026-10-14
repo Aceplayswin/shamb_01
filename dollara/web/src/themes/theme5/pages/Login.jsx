@@ -10,16 +10,19 @@ import { useAuthModal } from '../shell/authModalContext';
 import { t5BtnPrimary } from '../components/ui';
 
 export default function Theme5Login() {
-  useGuestOnly();
+  const { isHydrated, token } = useGuestOnly();
   const { open, mode } = useAuthModal();
 
+  // useGuestOnly's redirect is async, so an authenticated visitor still renders
+  // this page for a beat. Opening unconditionally flashes the login modal over
+  // the page they are being sent to, so wait until we know they are a guest.
   useEffect(() => {
-    open('login');
-  }, [open]);
+    if (isHydrated && !token) open('login');
+  }, [isHydrated, token, open]);
 
   return (
     <div className="mx-auto grid min-h-[50vh] max-w-md place-items-center px-4 py-16 text-center">
-      {mode == null && (
+      {mode == null && isHydrated && !token && (
         <div>
           <h1 className="font-display text-2xl font-black text-[#0f1b33]">Sign in to continue</h1>
           <p className="mt-2 text-sm text-[#64748b]">The login window was closed.</p>

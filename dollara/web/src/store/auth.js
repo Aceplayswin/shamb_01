@@ -10,6 +10,10 @@ export const useAuthStore = create((set, get) => ({
   wallet: null,
   isDemo: false,
   isHydrated: false,
+  // Set when the backend rejects our token because this account logged in on
+  // another device (see services/api.js -> 'auth:session-revoked'). Cleared
+  // once the UI has shown it.
+  sessionMessage: null,
   setAuth: (data) => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('token', data.token);
@@ -36,6 +40,7 @@ export const useAuthStore = create((set, get) => ({
       isDemo: false,
     });
   },
+  clearSessionMessage: () => set({ sessionMessage: null }),
   hydrate: () => {
     if (typeof window === 'undefined') return;
     const token = localStorage.getItem('token');
@@ -67,3 +72,10 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 }));
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('auth:session-revoked', (event) => {
+    useAuthStore.setState({ sessionMessage: event.detail?.message ?? null });
+    useAuthStore.getState().logout();
+  });
+}

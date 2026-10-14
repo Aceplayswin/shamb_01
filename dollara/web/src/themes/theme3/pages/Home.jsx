@@ -21,12 +21,10 @@ import { useFaqs } from '@/hooks/useFaqs';
 import BannerCarousel from '@/components/BannerCarousel';
 import { filterFeatured, filterByCategory, NAV_GAME_LINKS, playPath } from '@/lib/gameRoutes';
 import { useAuthModal } from '../shell/authModalContext';
-import SupportFab from '@/components/SupportFab';
 
 const STATS = [
   { value: '100%', label: 'First Deposit', color: 'text-[#c79a3b]' },
   { value: '20%', label: 'Reload Bonus', color: 'text-[#2fbf71]' },
-  { value: '₹500', label: 'Refer & Earn', color: 'text-[#e5484d]' },
   { value: 'Live', label: 'Sports', color: 'text-[#1b1726]' },
 ];
 
@@ -360,7 +358,6 @@ export default function Theme3Home() {
           </div>
         </section>
       )}
-      <SupportFab />
     </div>
   );
 }

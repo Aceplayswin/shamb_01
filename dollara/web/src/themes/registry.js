@@ -38,11 +38,13 @@ context.keys().forEach((path) => {
 // Every theme bundled in THIS build, sorted for stable ordering.
 export const AVAILABLE_THEMES = Object.keys(THEMES).sort();
 
-// The theme rendered before/without a super admin answer. theme1 is the platform
-// default; in a single-theme build (where theme1 may not be the one shipped) the
-// only bundled theme becomes the default, so the app never renders a theme it
-// does not have.
-const PLATFORM_DEFAULT = 'theme1';
+// The theme rendered before/without a super admin answer. theme5 is the platform
+// default: it is what this product actually ships, so rendering it first means the
+// first paint already matches the resolved theme and there is no flash of a
+// different theme while fetchActiveTheme() is in flight. In a single-theme build
+// (where theme5 may not be the one shipped) the only bundled theme becomes the
+// default, so the app never renders a theme it does not have.
+const PLATFORM_DEFAULT = 'theme5';
 export const DEFAULT_THEME = THEMES[PLATFORM_DEFAULT]
   ? PLATFORM_DEFAULT
   : AVAILABLE_THEMES[0] ?? PLATFORM_DEFAULT;

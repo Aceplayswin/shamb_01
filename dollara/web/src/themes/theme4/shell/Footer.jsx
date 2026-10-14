@@ -7,8 +7,8 @@
 import Link from 'next/link';
 import { Download } from 'lucide-react';
 import { useBranding } from '@/hooks/useBranding';
-import { SocialIconRow } from '@/components/SocialLinks';
 import { Theme4BrandMark } from './TopBar';
+import { SocialIconRow, WhatsAppSupportLink } from '@/components/SocialLinks';
 
 const PROVIDERS = [
   'Evolution Gaming',
@@ -48,16 +48,23 @@ export function Theme4Footer() {
                 Download the Official APK and Bet Anytime, Anywhere
               </p>
             </div>
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2 rounded-full border-2 border-white/80 px-6 py-2.5 text-sm font-black uppercase tracking-wide text-white transition hover:bg-white hover:text-[#0a0f1e]"
-            >
-              <Download className="h-4 w-4" /> Download APK
-            </Link>
+            <div className="flex flex-col items-center gap-3 sm:flex-row">
+              <Link
+                href="/"
+                className="inline-flex items-center gap-2 rounded-full border-2 border-white/80 px-6 py-2.5 text-sm font-black uppercase tracking-wide text-white transition hover:bg-white hover:text-[#0a0f1e]"
+              >
+                <Download className="h-4 w-4" /> Download APK
+              </Link>
+              <WhatsAppSupportLink className="inline-flex items-center gap-2 rounded-full border-2 border-emerald-400 px-6 py-2.5 text-sm font-black uppercase tracking-wide text-emerald-400 transition hover:bg-emerald-400 hover:text-[#0a0f1e]" />
+            </div>
           </div>
 
-          <div className="shrink-0">
+          <div className="flex shrink-0 flex-col items-center gap-3">
             <Theme4BrandMark name={name} />
+            <SocialIconRow
+              className="flex gap-2"
+              itemClassName="grid h-8 w-8 place-items-center rounded-full border border-white/20 text-white/70 transition hover:border-emerald-400/50 hover:text-emerald-400"
+            />
           </div>
         </div>
       </div>
@@ -77,13 +84,6 @@ export function Theme4Footer() {
             18+
           </span>
         </div>
-        {/* Social profiles configured in Admin → Content → Social Links. Omits
-            itself entirely when nothing is configured (SocialIconRow renders
-            null), so an unconfigured product shows no empty row here. */}
-        <SocialIconRow
-          className="mx-auto flex max-w-[1200px] items-center justify-center gap-3 px-4 pb-6"
-          itemClassName="grid h-9 w-9 place-items-center rounded-full border border-[#5d7378]/30 text-[#5d7378] transition hover:border-[#0e7480] hover:text-[#0e7480]"
-        />
       </div>
 
       {/* ── Responsibility strip ── */}

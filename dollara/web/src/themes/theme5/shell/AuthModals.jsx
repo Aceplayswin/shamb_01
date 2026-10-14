@@ -6,9 +6,10 @@
 //   - Login  → useUnifiedLogin (player mode, phone + password).
 //   - Register → full name + phone + password. Direct sign-up, no verification step.
 
-import { useState } from 'react';
-import { Lock, Phone, User as UserIcon, Gift } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Lock, Phone, User as UserIcon } from 'lucide-react';
 import { api } from '@/services/api';
+import { registerAttribution } from '@/lib/referral';
 import { useAuthStore } from '@/store/auth';
 import { useUnifiedLogin } from '@/hooks/useUnifiedLogin';
 import { useBranding } from '@/hooks/useBranding';
@@ -22,9 +23,9 @@ const labelCls = 'mb-1.5 block text-xs font-black uppercase tracking-[0.14em] te
 
 function LoginModal() {
   const { close, open } = useAuthModal();
-  const { identifier, setIdentifier, password, setPassword, loading, submit } = useUnifiedLogin({ onSuccess: close });
+  const { identifier, setIdentifier, password, setPassword, loading, submit } = useUnifiedLogin();
   const branding = useBranding();
-  const brandName = branding.product_name || 'DOLLARA';
+  const brandName = branding.product_name || 'MAHAKAL WORLD';
 
   const handleSubmit = async (e) => {
     await submit(e); // shows its own SweetAlert + redirects on success
@@ -85,12 +86,11 @@ function RegisterModal() {
   const { close, open } = useAuthModal();
   const setAuth = useAuthStore((s) => s.setAuth);
   const branding = useBranding();
-  const brandName = branding.product_name || 'DOLLARA';
+  const brandName = branding.product_name || 'MAHAKAL WORLD';
 
   const [phone, setPhone] = useState('');
   const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
-  const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -100,11 +100,11 @@ function RegisterModal() {
     try {
       const result = await api('/api/v1/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ phone, fullName, password, referralCode: referralCode.trim() || undefined }),
+        body: JSON.stringify({ phone, fullName, password, ...registerAttribution() }),
       });
       setAuth({ token: result.token, userId: result.userId, username: result.username });
       close();
-      window.location.assign('/onboarding');
+      window.location.assign('/');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Registration failed');
     } finally {
@@ -163,20 +163,6 @@ function RegisterModal() {
             />
           </div>
         </div>
-        <div>
-          <label className={labelCls}>Referral code (optional)</label>
-          <div className="relative">
-            <Gift className={iconLeft} />
-            <input
-              type="text"
-              placeholder="Enter code"
-              value={referralCode}
-              onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
-              className={`${t5Input} pl-11 uppercase tracking-widest`}
-              maxLength={20}
-            />
-          </div>
-        </div>
         <button
           type="button"
           onClick={register}
@@ -201,7 +187,18 @@ function RegisterModal() {
 }
 
 export function Theme5AuthModals() {
-  const { mode } = useAuthModal();
+  const { mode, close } = useAuthModal();
+  const token = useAuthStore((s) => s.token);
+
+  // Signing in leaves `mode` set (the submit handlers navigate rather than
+  // close), and every entry point — header, right rail, /login — routes through
+  // here, so drop the modal centrally once a session exists instead of guarding
+  // each caller.
+  useEffect(() => {
+    if (token && mode) close();
+  }, [token, mode, close]);
+
+  if (token) return null;
   if (mode === 'login') return <LoginModal />;
   if (mode === 'register') return <RegisterModal />;
   return null;

@@ -1,78 +1,64 @@
 'use client';
 
-// Theme3 Deposit — two ways to pay in, switched by a tab at the top:
-//   • Instant Deposit — same cashier flow as before: choose amount → choose
-//     method → pay through the shared gateway sheet → request submitted for
-//     review. The gateway step reuses <PaymentGateway/> (the app's one sandbox
-//     checkout surface) as-is.
-//   • Bank Transfer — the admin-configured manual methods (Backoffice →
-//     Payment methods): the player picks one, sees exactly where to send the
-//     money via the shared <ReceivingDetails/>, and submits the amount plus an
-//     optional UTR/reference for the cashier to match.
-// Either way the wallet is NOT credited on the user's action — the deposit
-// stays pending until the product admin confirms it from the admin panel.
-// Everything here beyond the two shared components is theme3's own cream/gold
-// styling.
+// Theme3 Deposit — same data flow as theme2 (shared wallet endpoints), cream
+// style. Methods come from the admin console; the block under the chosen one
+// is decided by its TYPE (UPI: QR + ID, bank: account, crypto: wallet address).
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Clock, Smartphone, Landmark, Bitcoin, CreditCard, Wallet as WalletIcon } from 'lucide-react';
 import { api } from '@/services/api';
+import { affiliateAttribution } from '@/lib/referral';
 import { useAuthStore } from '@/store/auth';
-import { PaymentGateway } from '@/components/payments/PaymentGateway';
 import { useDepositMethods } from '@/hooks/useDepositMethods';
 import { ReceivingDetails } from '@/components/payments/ReceivingDetails';
 import { amountWithinLimits, hasDestination, methodDescription } from '@/lib/paymentDestination';
-import { T3Card, t3Input, t3BtnPrimary, t3BtnOutline, T3FormPage } from '../components/ui';
+import { T3Card, t3Input, t3BtnPrimary, T3FormPage } from '../components/ui';
 
-// The "send payment to" block, restyled to VELPLAY's cream/gold card look.
-// ReceivingDetails renders its own <section>, so this supplies the full card
-// styling directly rather than nesting inside another T3Card.
-const T3_RECEIVING_STYLES = {
-  card: 'rounded-2xl border border-black/[0.06] bg-white p-6 shadow-[0_20px_50px_-32px_rgba(36,27,58,0.45)]',
-  title: 'font-display text-sm font-black uppercase tracking-wide text-[#1b1726]',
+const QUICK_AMOUNTS = [500, 1000, 2500, 5000, 10000];
+
+// Theme3 (cream / gold) palette for the shared "send payment to" block.
+const RECEIVING_STYLES = {
+  card: '',
+  title: 'font-black text-[#1b1726]',
   note: 'mt-1 text-xs text-[#9a94a8]',
   rows: 'mt-4 space-y-2',
-  row: 'flex items-center justify-between gap-3 rounded-xl border border-black/[0.06] bg-[#faf6ec] px-4 py-3',
+  row: 'flex items-center justify-between gap-3 rounded-xl border border-black/10 bg-white px-4 py-3',
   label: 'text-[0.65rem] font-black uppercase tracking-wide text-[#9a94a8]',
   value: 'break-all font-bold text-[#1b1726]',
   mono: 'font-mono text-sm',
   copyBtn:
-    'shrink-0 rounded-lg border border-[#c79a3b]/40 bg-white px-3 py-1.5 text-xs font-bold text-[#9a7a24] transition hover:border-[#c79a3b] hover:bg-[#faf6ec]',
+    'shrink-0 rounded-lg border border-black/10 px-3 py-1.5 text-xs font-bold text-[#9a7a24] transition hover:border-[#c79a3b]/50 hover:bg-[#faf6ec]',
   qrFrame: 'mt-4 flex justify-center',
   qrImg: 'h-44 w-44 max-w-full rounded-xl border border-black/10 bg-white object-contain p-1',
-  instructions: 'mt-4 whitespace-pre-line rounded-xl bg-[#faf6ec] p-3 text-xs text-[#6b6579]',
+  instructions: 'mt-4 whitespace-pre-line rounded-xl bg-[#faf6ec] p-3 text-xs text-[#4a4458]',
 };
-
-const METHOD_ICONS = { upi: Smartphone, bank: Landmark, crypto: Bitcoin, wallet: WalletIcon, card: CreditCard, other: Landmark };
-
-const MIN_DEPOSIT = 100;
-const QUICK_AMOUNTS = [500, 1000, 2500, 5000, 10000];
-const PAYMENT_METHODS = [
-  { id: 'upi', label: 'UPI (Instant)', desc: 'Google Pay, PhonePe, Paytm', icon: Smartphone, eta: 'Instant' },
-  { id: 'imps', label: 'IMPS', desc: 'Instant transfer', icon: Landmark, eta: 'Instant' },
-  { id: 'bank_transfer', label: 'Bank Transfer', desc: '5-30 min verification', icon: Landmark, eta: '5-30 min' },
-  { id: 'crypto', label: 'Cryptocurrency', desc: 'BTC, ETH, USDT', icon: Bitcoin, eta: '10-30 min' },
-];
-
-const STEPS = ['Amount', 'Method', 'Payment'];
 
 export default function Theme3Deposit() {
   const router = useRouter();
   const { token, isHydrated, hydrate } = useAuthStore();
-
-  const [step, setStep] = useState('amount'); // amount | method | pay | done
   const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState('upi');
-  const [transactionId, setTransactionId] = useState(null);
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState(null);
-  const [receipt, setReceipt] = useState(null); // { amount, reference }
+  const [method, setMethod] = useState('');
+  const [reference, setReference] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  // One request at a time, same as withdrawals: the form stays locked until
+  // the open deposit is approved or rejected.
+  const [hasPending, setHasPending] = useState(false);
+  const {
+    methods,
+    loading: methodsLoading,
+    error: methodsError,
+  } = useDepositMethods(isHydrated && Boolean(token));
 
   const numAmount = parseFloat(amount) || 0;
-  const valid = numAmount >= MIN_DEPOSIT;
-  const bonus = numAmount >= 1000 ? numAmount * 0.5 : 0;
+  const selected = methods.find((m) => m.code === method) ?? null;
+  const limit = amountWithinLimits(selected, numAmount);
+  const canSubmit = !loading && !hasPending && numAmount > 0 && Boolean(selected) && limit.ok;
+
+  const loadPending = () =>
+    api('/api/v1/wallet')
+      .then((w) => setHasPending(Boolean(w?.hasPendingDeposit)))
+      .catch(() => {});
 
   useEffect(() => {
     hydrate();
@@ -82,243 +68,151 @@ export default function Theme3Deposit() {
     if (isHydrated && !token) router.replace('/login');
   }, [isHydrated, token, router]);
 
-  const stepIndex = { amount: 0, method: 1, pay: 2, done: 2 }[step];
+  useEffect(() => {
+    if (token) loadPending();
+  }, [token]);
 
-  // Create the pending deposit (the "order") before opening the gateway.
-  const startPayment = async () => {
-    setError(null);
-    setCreating(true);
+  // A method the admin has since disabled must not stay selected.
+  useEffect(() => {
+    if (method && !methods.some((m) => m.code === method)) setMethod('');
+  }, [methods, method]);
+
+  const submit = async () => {
+    if (!selected || hasPending) return;
+    setLoading(true);
     try {
       const res = await api('/api/v1/wallet/deposit', {
         method: 'POST',
-        body: JSON.stringify({ amount: numAmount, paymentMethod: method }),
+        body: JSON.stringify({
+          amount: numAmount,
+          paymentMethod: selected.code,
+          referenceNumber: reference.trim() || null,
+          ...affiliateAttribution(),
+        }),
       });
-      setTransactionId(res.transactionId);
-      setStep('pay');
+      setResult(res);
+      setHasPending(true);
+      setReference('');
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Could not start payment';
+      const msg = e instanceof Error ? e.message : 'Deposit failed';
       if (/log in again|unauthorized/i.test(msg)) {
         router.replace('/login');
         return;
       }
-      setError(msg);
+      alert(msg);
     } finally {
-      setCreating(false);
+      setLoading(false);
+      loadPending();
     }
   };
 
-  // Called by the gateway once the user completes "payment". This does NOT
-  // credit the wallet — it just records the reference the user supplied so the
-  // admin can match it. The deposit created in startPayment stays pending until
-  // an admin confirms it.
-  const confirmPayment = async (reference) => {
-    setReceipt({ amount: numAmount, reference });
-    setStep('done');
-  };
-
-  const reset = () => {
-    setStep('amount');
-    setAmount('');
-    setMethod('upi');
-    setTransactionId(null);
-    setReceipt(null);
-    setError(null);
-  };
-
-  if (!isHydrated || !token) return null;
-
   return (
     <T3FormPage title="Deposit">
-      {step !== 'done' && <Stepper steps={STEPS} current={stepIndex} />}
-
-      {error && (
-        <p className="mt-4 rounded-xl border border-[#e5484d]/30 bg-[#e5484d]/10 px-3 py-2 text-sm text-[#c23a3e]">
-          {error}
+      {hasPending ? (
+        <p className="mt-4 rounded-xl border border-[#c79a3b]/30 bg-[#faf6ec] px-3 py-2 text-xs font-bold text-[#9a7a24]">
+          You have a deposit request awaiting approval. You can place a new
+          request once it has been approved or rejected.
         </p>
-      )}
-
-      {/* ── Step 1: Amount ── */}
-      {step === 'amount' && (
-        <div className="mt-6 space-y-6">
-          <T3Card className="p-6">
-            <label className="text-sm text-[#6b6579]">Enter Amount (₹)</label>
-            <input
-              type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0"
-              className={`${t3Input} mt-2 text-2xl`}
-              autoFocus
-            />
-            <div className="mt-4 flex flex-wrap gap-2">
-              {QUICK_AMOUNTS.map((a) => (
-                <button
-                  key={a}
-                  type="button"
-                  onClick={() => setAmount(String(a))}
-                  className="rounded-lg border border-black/10 bg-white px-4 py-2 text-sm text-[#4a4458] shadow-sm transition hover:border-[#c79a3b]/50 hover:text-[#9a7a24]"
-                >
-                  ₹{a.toLocaleString('en-IN')}
-                </button>
-              ))}
-            </div>
-            {numAmount > 0 && (
-              <div className="mt-4 rounded-xl border border-[#2fbf71]/25 bg-[#2fbf71]/10 p-4 text-sm text-[#1c8a52]">
-                <p>You deposit: ₹{numAmount.toLocaleString('en-IN')}</p>
-                {bonus > 0 && <p>You get bonus: ₹{bonus.toLocaleString('en-IN')}</p>}
-                <p className="font-black">Total playable: ₹{(numAmount + bonus).toLocaleString('en-IN')}</p>
-              </div>
-            )}
-            <p className="mt-3 text-xs text-[#9a94a8]">Minimum deposit ₹{MIN_DEPOSIT}.</p>
-          </T3Card>
-
-          <button
-            type="button"
-            onClick={() => valid && setStep('method')}
-            disabled={!valid}
-            className={`${t3BtnPrimary} w-full`}
-          >
-            Continue
-          </button>
-        </div>
-      )}
-
-      {/* ── Step 2: Method ── */}
-      {step === 'method' && (
-        <div className="mt-6 space-y-6">
-          <T3Card className="p-6">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-[#6b6579]">Depositing</span>
-              <span className="text-lg font-black text-[#9a7a24]">₹{numAmount.toLocaleString('en-IN')}</span>
-            </div>
-            <h2 className="mt-5 text-sm font-black uppercase tracking-wide text-[#6b6579]">
-              Choose payment method
-            </h2>
-            <div className="mt-4 space-y-2">
-              {PAYMENT_METHODS.map((pm) => {
-                const Icon = pm.icon;
-                const active = method === pm.id;
-                return (
-                  <button
-                    key={pm.id}
-                    type="button"
-                    onClick={() => setMethod(pm.id)}
-                    className={`flex w-full items-center gap-3 rounded-xl border p-4 text-left transition ${
-                      active ? 'border-[#c79a3b]/60 bg-[#faf6ec]' : 'border-black/10 bg-white hover:bg-[#faf6ec]/60'
-                    }`}
-                  >
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#faf6ec] text-[#9a7a24]">
-                      <Icon className="h-5 w-5" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-bold text-[#1b1726]">{pm.label}</span>
-                      <span className="block text-xs text-[#9a94a8]">{pm.desc}</span>
-                    </span>
-                    <span className="shrink-0 text-xs text-[#9a94a8]">{pm.eta}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </T3Card>
-
-          <div className="flex gap-3">
-            <button type="button" onClick={() => setStep('amount')} className={`${t3BtnOutline} flex-1`}>
-              Back
-            </button>
+      ) : null}
+      <T3Card className="mt-6 p-6">
+        <label className="text-sm text-[#6b6579]">Enter Amount (₹)</label>
+        <input
+          type="number"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="0"
+          className={`${t3Input} mt-2 text-2xl`}
+        />
+        <div className="mt-4 flex flex-wrap gap-2">
+          {QUICK_AMOUNTS.map((a) => (
             <button
+              key={a}
               type="button"
-              onClick={startPayment}
-              disabled={creating}
-              className={`${t3BtnPrimary} flex-[2]`}
+              onClick={() => setAmount(String(a))}
+              className="rounded-lg border border-black/10 bg-white px-4 py-2 text-sm text-[#4a4458] shadow-sm transition hover:border-[#c79a3b]/50 hover:text-[#9a7a24]"
             >
-              {creating ? 'Starting…' : `Proceed to pay ₹${numAmount.toLocaleString('en-IN')}`}
+              ₹{a.toLocaleString('en-IN')}
             </button>
-          </div>
+          ))}
         </div>
+      </T3Card>
+
+      <T3Card className="mt-6 p-6">
+        <h2 className="font-black text-[#1b1726]">Payment Method</h2>
+        {methodsLoading ? (
+          <p className="mt-4 text-sm text-[#9a94a8]">Loading payment methods…</p>
+        ) : methods.length === 0 ? (
+          <p className="mt-4 rounded-xl border border-black/10 bg-white p-4 text-sm text-[#6b6579]">
+            {methodsError
+              ? 'Payment methods are temporarily unavailable. Please try again shortly.'
+              : 'No payment methods are available right now. Please contact support.'}
+          </p>
+        ) : (
+          <div className="mt-4 space-y-2">
+            {methods.map((pm) => (
+              <label
+                key={pm.code}
+                className={`flex cursor-pointer items-center gap-3 rounded-xl border p-4 transition ${
+                  method === pm.code ? 'border-[#c79a3b]/60 bg-[#faf6ec]' : 'border-black/10 bg-white'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="method"
+                  value={pm.code}
+                  checked={method === pm.code}
+                  onChange={() => setMethod(pm.code)}
+                  className="accent-[#c79a3b]"
+                />
+                <div className="min-w-0">
+                  <p className="font-bold text-[#1b1726]">{pm.name}</p>
+                  <p className="text-xs text-[#9a94a8]">{methodDescription(pm)}</p>
+                </div>
+              </label>
+            ))}
+          </div>
+        )}
+        {selected && numAmount > 0 && !limit.ok && (
+          <p className="mt-3 text-sm font-bold text-[#b45309]">{limit.message}</p>
+        )}
+      </T3Card>
+
+      {/* What the player pays into — the block for the selected method's type. */}
+      {selected && hasDestination(selected) && (
+        <T3Card className="mt-6 p-6">
+          <ReceivingDetails method={selected} styles={RECEIVING_STYLES} />
+        </T3Card>
       )}
 
-      {/* ── Step 3: Payment (shared gateway) ── */}
-      {step === 'pay' && (
-        <div className="mt-6">
-          <PaymentGateway
-            amount={numAmount}
-            method={method}
-            onConfirm={confirmPayment}
-            onCancel={() => setStep('method')}
+      {selected && (
+        <T3Card className="mt-6 p-6">
+          <label className="text-sm text-[#6b6579]">
+            UTR / reference number <span className="text-[#9a94a8]">(optional)</span>
+          </label>
+          <input
+            type="text"
+            value={reference}
+            onChange={(e) => setReference(e.target.value)}
+            placeholder="e.g. 412345678901"
+            className={`${t3Input} mt-2`}
           />
-        </div>
+          <p className="mt-2 text-xs text-[#9a94a8]">
+            Pay using {selected.name}, then paste the reference from your payment app so our team can match it.
+          </p>
+        </T3Card>
       )}
 
-      {/* ── Done (submitted, pending admin approval) ── */}
-      {step === 'done' && receipt && (
-        <div className="mt-8 space-y-6">
-          <T3Card className="p-8 text-center">
-            <Clock className="mx-auto h-14 w-14 text-[#9a7a24]" />
-            <h2 className="mt-4 text-xl font-black text-[#1b1726]">Deposit submitted</h2>
-            <p className="mt-1 text-sm text-[#6b6579]">
-              ₹{Number(receipt.amount).toLocaleString('en-IN')} is awaiting confirmation. Your wallet will
-              be credited once our team approves the payment.
-            </p>
-            <div className="mt-6 space-y-2 rounded-xl border border-black/[0.06] bg-[#faf6ec] p-4 text-left text-sm">
-              <Row label="Amount" value={`₹${Number(receipt.amount).toLocaleString('en-IN')}`} />
-              <Row label="Reference" value={receipt.reference} />
-              <Row label="Transaction ID" value={`#${transactionId}`} />
-              <Row label="Status" value="Pending approval" last />
-            </div>
-          </T3Card>
-          <div className="flex gap-3">
-            <button type="button" onClick={reset} className={`${t3BtnOutline} flex-1`}>
-              New deposit
-            </button>
-            <Link href="/wallet" className={`${t3BtnPrimary} flex-1 text-center`}>
-              Go to wallet
-            </Link>
-          </div>
+      <button type="button" onClick={submit} disabled={!canSubmit} className={`${t3BtnPrimary} mt-6 w-full`}>
+        {hasPending ? 'Deposit Pending Approval' : loading ? 'Processing...' : 'Submit deposit request'}
+      </button>
+      {result && (
+        <div className="mt-4 rounded-xl border border-[#c79a3b]/30 bg-[#faf6ec] p-4 text-center">
+          <p className="text-sm font-black text-[#9a7a24]">Deposit submitted — pending approval</p>
+          <p className="mt-1 text-xs text-[#6b6579]">
+            Request ID: {result.transactionId}. Your wallet will be credited once our team confirms the payment.
+          </p>
         </div>
       )}
     </T3FormPage>
-  );
-}
-
-function Stepper({ steps, current }) {
-  return (
-    <div className="mt-6 flex items-center">
-      {steps.map((label, i) => {
-        const done = i < current;
-        const active = i === current;
-        return (
-          <div key={label} className="flex flex-1 items-center last:flex-none">
-            <div className="flex flex-col items-center">
-              <span
-                className={`grid h-8 w-8 place-items-center rounded-full text-xs font-bold transition ${
-                  done
-                    ? 'bg-[#2fbf71] text-white'
-                    : active
-                      ? 'bg-[#c79a3b] text-white'
-                      : 'bg-[#f3ead4] text-[#9a94a8]'
-                }`}
-              >
-                {done ? '✓' : i + 1}
-              </span>
-              <span className={`mt-1.5 text-[0.7rem] ${active ? 'font-bold text-[#1b1726]' : 'text-[#9a94a8]'}`}>
-                {label}
-              </span>
-            </div>
-            {i < steps.length - 1 && (
-              <div className={`mx-2 h-px flex-1 ${i < current ? 'bg-[#2fbf71]/60' : 'bg-black/10'}`} />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function Row({ label, value, last }) {
-  return (
-    <div className={`flex items-center justify-between py-1.5 ${last ? '' : 'border-b border-black/[0.06]'}`}>
-      <span className="text-[#9a94a8]">{label}</span>
-      <span className="font-bold text-[#1b1726]">{value}</span>
-    </div>
   );
 }

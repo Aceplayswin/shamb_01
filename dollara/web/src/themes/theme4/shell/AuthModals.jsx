@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { Lock, Phone, User as UserIcon, Gift } from 'lucide-react';
 import { api } from '@/services/api';
+import { registerAttribution } from '@/lib/referral';
 import { useAuthStore } from '@/store/auth';
 import { useUnifiedLogin } from '@/hooks/useUnifiedLogin';
 import { useBranding } from '@/hooks/useBranding';
@@ -20,7 +21,7 @@ const iconLeft = 'pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate
 
 function LoginModal() {
   const { close, open } = useAuthModal();
-  const { identifier, setIdentifier, password, setPassword, loading, submit } = useUnifiedLogin({ onSuccess: close });
+  const { identifier, setIdentifier, password, setPassword, loading, submit } = useUnifiedLogin();
   const branding = useBranding();
   const brandName = branding.product_name || 'DOLLARA';
 
@@ -31,6 +32,7 @@ function LoginModal() {
   return (
     <AuthModal
       onClose={close}
+      brandInitial={brandName.charAt(0).toUpperCase()}
       brandName={brandName}
       headline="Member Login"
     >
@@ -104,11 +106,11 @@ function RegisterModal() {
     try {
       const result = await api('/api/v1/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ phone, fullName, password, referralCode: referralCode.trim() || undefined }),
+        body: JSON.stringify({ phone, fullName, password, ...registerAttribution(referralCode) }),
       });
       setAuth({ token: result.token, userId: result.userId, username: result.username });
       close();
-      window.location.assign('/onboarding');
+      window.location.assign('/');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Registration failed');
     } finally {
@@ -119,6 +121,7 @@ function RegisterModal() {
   return (
     <AuthModal
       onClose={close}
+      brandInitial={brandName.charAt(0).toUpperCase()}
       brandName={brandName}
       headline="Create Account"
     >

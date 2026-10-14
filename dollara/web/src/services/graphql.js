@@ -23,15 +23,28 @@ export async function fetchMe() {
         username
         full_name
         phone
-        kyc_status
         account_status
         currency
+        website_language
+        country_code
+        state
+        gender
+        referral_code
+        phone_verified
+        two_factor_enabled
+        vip_level
+        is_demo
+        created_at
+        last_login_at
         wallet {
           main
           bonus
           exposure
           locked
           available
+          withdrawable
+          playable
+          total
           currency
         }
       }

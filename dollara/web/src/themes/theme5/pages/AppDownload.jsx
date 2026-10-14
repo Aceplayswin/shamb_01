@@ -45,7 +45,7 @@ export default function Theme5AppDownload() {
     };
   }, []);
 
-  const name = branding.product_name || 'Dollara';
+  const name = branding.product_name || 'Mahakal World';
   const apkAvailable = config?.available;
   const downloadUrl = `${API_URL}/api/v1/app/apk`;
 

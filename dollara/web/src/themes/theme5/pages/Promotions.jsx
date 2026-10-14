@@ -25,9 +25,9 @@ export default function Theme5Promotions() {
       </p>
 
       {loading ? (
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          {[0, 1, 2, 3].map((i) => (
-            <T5Card key={i} className="aspect-[16/9] animate-pulse" />
+        <div className="mt-4 grid gap-4">
+          {[0, 1].map((i) => (
+            <T5Card key={i} className="aspect-[21/9] animate-pulse" />
           ))}
         </div>
       ) : posters.length === 0 ? (
@@ -39,7 +39,7 @@ export default function Theme5Promotions() {
           <p className="text-sm text-[var(--t5-muted)]">Check back soon for new offers.</p>
         </T5Card>
       ) : (
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div className="mt-4 grid gap-4">
           {posters.map((p) => (
             <PromotionPosterCard
               key={p.id}

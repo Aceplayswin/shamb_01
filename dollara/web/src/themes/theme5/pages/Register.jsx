@@ -2,7 +2,7 @@
 
 // Theme5 /register route. Same modal-based approach as /login: open the shell's
 // register modal, with a fallback CTA if it's dismissed. Authenticated users are
-// sent to /onboarding by useGuestOnly.
+// sent to the homepage by useGuestOnly.
 
 import { useEffect } from 'react';
 import { useGuestOnly } from '@/hooks/useGuestOnly';
@@ -10,16 +10,18 @@ import { useAuthModal } from '../shell/authModalContext';
 import { t5BtnPrimary } from '../components/ui';
 
 export default function Theme5Register() {
-  useGuestOnly('/onboarding');
+  const { isHydrated, token } = useGuestOnly('/');
   const { open, mode } = useAuthModal();
 
+  // Same as /login: don't flash the modal at a user who is already signed in
+  // and is mid-redirect.
   useEffect(() => {
-    open('register');
-  }, [open]);
+    if (isHydrated && !token) open('register');
+  }, [isHydrated, token, open]);
 
   return (
     <div className="mx-auto grid min-h-[50vh] max-w-md place-items-center px-4 py-16 text-center">
-      {mode == null && (
+      {mode == null && isHydrated && !token && (
         <div>
           <h1 className="font-display text-2xl font-black text-[#0f1b33]">Create your account</h1>
           <p className="mt-2 text-sm text-[#64748b]">The signup window was closed.</p>

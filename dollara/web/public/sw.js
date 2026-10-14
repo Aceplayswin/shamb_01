@@ -10,13 +10,14 @@
  * get the fallback page. Providing a fetch handler + offline response is also
  * what lets Chrome offer the richer "install" experience.
  */
-const VERSION = 'v3'; // bumped: precache now favicon.ico + square icon.png
+const VERSION = 'v1';
 const CACHE = `app-shell-${VERSION}`;
 const OFFLINE_URL = '/offline.html';
 const PRECACHE = [
   OFFLINE_URL,
-  '/favicon.ico',
-  '/icon.png',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', (event) => {

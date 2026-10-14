@@ -22,17 +22,39 @@ export function useGamePlay(slug) {
     setNotFound(false);
     setRedirecting(false);
     setError('');
-    loadGameCatalog(300)
-      .then((games) => {
-        const g = games.find((x) => x.slug === slug);
-        if (!g) {
-          setNotFound(true);
-          return;
-        }
-        setGame(g);
-        if (g.min_bet) setBetAmount(String(g.min_bet));
-      })
-      .catch(() => setNotFound(true));
+    if (!slug) {
+      setNotFound(true);
+      return undefined;
+    }
+    let active = true;
+
+    const apply = (g) => {
+      if (!active) return;
+      setGame(g);
+      if (g.min_bet) setBetAmount(String(g.min_bet));
+    };
+
+    // Resolve the game server-side. Scanning the downloaded catalog instead
+    // made every game past its page limit unopenable ("Game not found"), since
+    // the catalog is capped well below the number of games on the platform.
+    api(`/api/v1/games/detail/${encodeURIComponent(slug)}`)
+      .then(apply)
+      .catch(() =>
+        // Older API without the detail route: fall back to the catalog scan so
+        // the page still works for games inside the first page.
+        loadGameCatalog(1000)
+          .then((games) => {
+            const g = games.find((x) => x.slug === slug);
+            if (!active) return;
+            if (g) apply(g);
+            else setNotFound(true);
+          })
+          .catch(() => active && setNotFound(true)),
+      );
+
+    return () => {
+      active = false;
+    };
   }, [slug]);
 
   const launchGame = useCallback(async () => {
@@ -55,7 +77,13 @@ export function useGamePlay(slug) {
         // (process_callback → GameRound/Wallet/GameSession), and the game's
         // home button returns the player here (home_url sent at launch).
         setRedirecting(true);
-        window.location.href = res.data.game_url;
+        // Replace this entry in history instead of pushing onto it. The game
+        // takes over the tab, so leaving /play/<slug> in the stack meant the
+        // browser's Back (and the game's own home button) returned here and the
+        // auto-launch effect immediately threw the player back into the game —
+        // "back doesn't leave the game". Replacing sends Back to whatever page
+        // the player opened the game from.
+        window.location.replace(res.data.game_url);
         return;
       }
       setError(res.error ?? 'Could not launch this game. Please try again.');
@@ -86,15 +114,18 @@ export function useGamePlay(slug) {
   }, [game, token, betAmount, refreshSession, router]);
 
   const isAggregatorGame = Boolean(game?.game_uid);
-  const autoLaunchDone = useRef(false);
+  // Which slug has already auto-launched. A plain `true` flag never reset, so
+  // opening a second game in the same session (very common: back out, tap
+  // another) silently skipped its auto-launch and sat on the manual screen.
+  const autoLaunchedSlug = useRef(null);
 
-  // Auto-launch once when an aggregator game loads and the user is logged in.
+  // Auto-launch once per game when it loads and the user is logged in.
   useEffect(() => {
-    if (autoLaunchDone.current) return;
     if (!game || !isAggregatorGame || !token) return;
-    autoLaunchDone.current = true;
+    if (autoLaunchedSlug.current === slug) return;
+    autoLaunchedSlug.current = slug;
     launchGame();
-  }, [game, isAggregatorGame, token, launchGame]);
+  }, [game, isAggregatorGame, token, launchGame, slug]);
 
   return {
     game,

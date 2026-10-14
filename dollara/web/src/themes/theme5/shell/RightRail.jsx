@@ -10,7 +10,7 @@
 
 import { useEffect } from 'react';
 import Link from 'next/link';
-import { Smartphone, Trophy, User } from 'lucide-react';
+import { Smartphone, User } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import { useBigWins } from '@/components/BigWins';
 import { T5PanelHead } from '../components/ui';
@@ -96,13 +96,58 @@ function ProfilePanel() {
   );
 }
 
+// Avatar tints for the winners feed. The API sends no avatar, so each row gets a
+// stable colour derived from its masked name — the same player keeps the same
+// disc across refreshes instead of the palette reshuffling on every poll.
+const AVATAR_TINTS = [
+  'from-[#1e3a8a] to-[#3b82f6]',
+  'from-[#7f1d1d] to-[#ef4444]',
+  'from-[#14532d] to-[#22c55e]',
+  'from-[#4c1d95] to-[#a855f7]',
+  'from-[#78350f] to-[#f59e0b]',
+  'from-[#831843] to-[#ec4899]',
+  'from-[#134e4a] to-[#14b8a6]',
+];
+
+function tintFor(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  return AVATAR_TINTS[Math.abs(hash) % AVATAR_TINTS.length];
+}
+
+function WinRow({ win }) {
+  const name = win.username || 'Player';
+  return (
+    <li className="flex items-center gap-2.5 px-3 py-2">
+      <span
+        className={`grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br ${tintFor(name)}`}
+      >
+        {win.thumbnail_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={win.thumbnail_url} alt="" className="h-full w-full object-cover" loading="lazy" />
+        ) : (
+          <span className="text-xs font-black uppercase text-white/90">{name[0]}</span>
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-xs font-black text-[#0f1b33]">{name}</span>
+        <span className="block truncate text-[0.65rem] text-[#94a3b8]">{win.game_name}</span>
+      </span>
+      <span className="shrink-0 text-xs font-black text-[#0f1b33]">
+        ₹{Number(win.win_amount ?? 0).toLocaleString('en-IN')}
+      </span>
+    </li>
+  );
+}
+
 function BigWinsPanel() {
-  const { wins, loading } = useBigWins(10);
+  // Poll a deeper slice than fits — the list scrolls, as in the reference.
+  const { wins, loading } = useBigWins(20);
 
   return (
     <section className="overflow-hidden rounded-xl bg-white shadow-sm">
       <T5PanelHead icon="🏆">Recent Big Wins</T5PanelHead>
-      <ul className="divide-y divide-black/[0.05]">
+      <ul className="max-h-[420px] divide-y divide-black/[0.05] overflow-y-auto scrollbar-hide">
         {loading &&
           [0, 1, 2, 3].map((i) => <li key={i} className="h-14 animate-pulse bg-[#f6f8fa]" />)}
 
@@ -110,25 +155,7 @@ function BigWinsPanel() {
           <li className="px-4 py-6 text-center text-xs text-[#94a3b8]">No big wins yet today.</li>
         )}
 
-        {wins.map((w) => (
-          <li key={w.id} className="flex items-center gap-2.5 px-3 py-2.5">
-            <span className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full bg-[#eef2f7]">
-              {w.thumbnail_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={w.thumbnail_url} alt="" className="h-full w-full object-cover" loading="lazy" />
-              ) : (
-                <Trophy className="h-4 w-4 text-[#8fa3bd]" />
-              )}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-xs font-black text-[#0f1b33]">{w.username}</span>
-              <span className="block truncate text-[0.65rem] text-[#94a3b8]">{w.game_name}</span>
-            </span>
-            <span className="shrink-0 text-xs font-black text-[#0f1b33]">
-              ₹{Number(w.win_amount ?? 0).toLocaleString('en-IN')}
-            </span>
-          </li>
-        ))}
+        {wins.map((w) => <WinRow key={w.id} win={w} />)}
       </ul>
     </section>
   );

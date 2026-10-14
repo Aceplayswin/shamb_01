@@ -6,16 +6,15 @@
 
 import { useEffect } from 'react';
 import { X } from 'lucide-react';
-import { useBranding, onLogoError } from '@/hooks/useBranding';
 
 /**
  * @param onClose      close handler (backdrop / ✕ / Esc)
+ * @param brandInitial single letter for the little brand tile
  * @param brandName    header brand label
  * @param headline     small white caption in the teal header
  * @param children     the form (body content)
  */
-export function AuthModal({ onClose, brandName = '', headline, children }) {
-  const { logo_url: logoUrl } = useBranding();
+export function AuthModal({ onClose, brandInitial = 'D', brandName = '', headline, children }) {
   // Close on Escape and lock body scroll while the modal is open.
   useEffect(() => {
     const onKey = (e) => {
@@ -51,8 +50,9 @@ export function AuthModal({ onClose, brandName = '', headline, children }) {
             <X className="h-4 w-4" />
           </button>
           <div className="flex items-center gap-2.5">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={logoUrl} alt={brandName} onError={onLogoError} className="h-10 w-10 rounded bg-white/95 object-contain p-0.5" />
+            <span className="grid h-10 w-10 -skew-x-6 place-items-center rounded bg-white text-xl font-black italic text-[#0e7480]">
+              {brandInitial}
+            </span>
             <div>
               <p className="font-display text-lg font-black uppercase leading-none tracking-wide text-white">
                 {brandName}
