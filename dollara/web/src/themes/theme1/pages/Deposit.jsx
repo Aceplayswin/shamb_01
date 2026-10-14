@@ -1,7 +1,7 @@
 'use client';
 
-// Deposit — amount, then Paygate checkout (Razorpay widget). The wallet is
-// credited when the gateway confirms the payment.
+// Deposit — amount, then Paygate checkout (Razorpay widget). Payment success
+// queues the deposit for admin approval; the wallet is credited only then.
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -210,14 +210,18 @@ export default function Theme1Deposit() {
                 ? 'Deposit successful'
                 : receipt.status === 'failed'
                   ? 'Payment failed'
-                  : 'Payment pending'}
+                  : receipt.status === 'awaiting_approval'
+                    ? 'Payment received'
+                    : 'Payment pending'}
             </h2>
             <p className="mt-1 text-sm text-slate-400">
               {receipt.status === 'success'
                 ? `₹${Number(receipt.amount).toLocaleString('en-IN')} has been credited to your wallet.`
                 : receipt.status === 'failed'
                   ? 'The payment did not go through. You can try again.'
-                  : 'Waiting for the gateway to confirm this payment.'}
+                  : receipt.status === 'awaiting_approval'
+                    ? `₹${Number(receipt.amount).toLocaleString('en-IN')} is awaiting admin approval. It will be credited once approved.`
+                    : 'Waiting for the gateway to confirm this payment.'}
             </p>
             <div className="mt-6 space-y-2 rounded-xl border border-white/5 bg-white/[0.02] p-4 text-left text-sm">
               <Row label="Amount" value={`₹${Number(receipt.amount).toLocaleString('en-IN')}`} />
@@ -229,7 +233,9 @@ export default function Theme1Deposit() {
                     ? 'Completed'
                     : receipt.status === 'failed'
                       ? 'Failed'
-                      : 'Pending'
+                      : receipt.status === 'awaiting_approval'
+                        ? 'Awaiting approval'
+                        : 'Pending'
                 }
                 last
               />

@@ -498,7 +498,7 @@ def wallet_deposit_checkout(request):
 @require_auth(['user'])
 @require_http_methods(['POST'])
 def wallet_deposit_verify(request):
-    """Forward the Razorpay checkout result to Paygate and credit on success."""
+    """Forward the Razorpay checkout result to Paygate; queue for admin on success."""
     try:
         body = _json_body(request)
         result = deposit_gateway.verify_checkout(

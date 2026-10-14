@@ -1,8 +1,10 @@
 'use client';
 
 // Player deposit checkout: create a Paygate order, open Razorpay with the
-// per-order payload, verify the result, then poll until the wallet is credited.
-// Merchant keys stay on the API; this hook only sees the one-order checkout object.
+// per-order payload, verify the result, then poll until payment is confirmed
+// (or fails). Wallet credit happens only after admin approval — same as manual
+// deposits. Merchant keys stay on the API; this hook only sees the one-order
+// checkout object.
 
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/services/api';
@@ -44,11 +46,17 @@ function loadRazorpay() {
 
 async function pollStatus(transactionId, attempt = 0) {
   const data = await api(`/api/v1/wallet/deposit/order/${transactionId}`);
+  // Keep polling only while the gateway has not settled yet. Admin-wait
+  // (`awaiting_approval`) and terminal states stop the loop.
   if (data.status === 'pending' && attempt < 6) {
     await new Promise((resolve) => setTimeout(resolve, 2500));
     return pollStatus(transactionId, attempt + 1);
   }
   return data;
+}
+
+function shouldRefreshSession(status) {
+  return status === 'success' || status === 'awaiting_approval';
 }
 
 export function usePaygateDeposit() {
@@ -150,7 +158,7 @@ export function usePaygateDeposit() {
         });
 
         setReceipt(settled);
-        if (settled?.status === 'success') refreshSession?.();
+        if (shouldRefreshSession(settled?.status)) refreshSession?.();
         return settled;
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Payment failed.';
@@ -173,7 +181,7 @@ export function usePaygateDeposit() {
       .then((data) => {
         if (cancelled) return;
         setReceipt(data);
-        if (data.status === 'success') refreshSession?.();
+        if (shouldRefreshSession(data.status)) refreshSession?.();
       })
       .catch((err) => {
         if (!cancelled) {
