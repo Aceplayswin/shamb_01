@@ -14,6 +14,7 @@ import { useRouter } from 'next/navigation';
 import { ChevronDown, Clock, Loader2 } from 'lucide-react';
 import { api } from '@/services/api';
 import { useAuthStore } from '@/store/auth';
+import { formatDateTime as formatDate, formatDateTime as formatTime } from '@/lib/datetime';
 
 const inr = (n) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 
@@ -298,29 +299,3 @@ function Summary({ label, value, tone, hint }) {
   );
 }
 
-function formatDate(iso) {
-  if (!iso) return '';
-  try {
-    return new Date(iso).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  } catch {
-    return '';
-  }
-}
-
-function formatTime(iso) {
-  if (!iso) return '';
-  try {
-    return new Date(iso).toLocaleString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return '';
-  }
-}

@@ -106,7 +106,6 @@ export default function Theme1Profile() {
               <Row label="Full name" value={user?.full_name} />
               <Row label="MemberId" value={user?.username} />
               <Row label="Phone" value={user?.phone} />
-              <Row label="KYC status" value={user?.kyc_status} />
               <Row label="Account status" value={user?.account_status} last />
             </div>
           </section>
@@ -119,15 +118,14 @@ export default function Theme1Profile() {
               <ActionTile href="/withdraw" label="Withdraw" icon="↓" />
               <ActionTile href="/bet-history" label="Bet History" icon="🎲" />
               <ActionTile href="/promotions" label="Promos" icon="🎁" />
-              <ActionTile href="/refer" label="Refer" icon="👥" />
             </div>
           </section>
 
           <Link
-            href="/settings"
+            href="/change-password"
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 py-3 text-sm font-semibold text-white transition hover:bg-white/5"
           >
-            Settings
+            Change Password
           </Link>
 
           <button
