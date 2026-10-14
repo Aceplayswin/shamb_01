@@ -22,7 +22,7 @@ import { adminApi } from '@/services/adminApi';
 
 export default function AgentApplicationsPage() {
   const { data, loading, error, reload } = useAdminData(
-    '/api/v1/admin/agents/applications?limit=200',
+    '/api/v1/admin/agents/applications',
     [],
   );
   const { data: settings } = useAdminData('/api/v1/admin/agents/settings', []);

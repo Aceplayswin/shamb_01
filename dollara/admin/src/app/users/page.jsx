@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { Users, Eye, Wallet, Phone, Mail, ShieldAlert, PlusCircle, MinusCircle, UserPlus } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
+import { Users, Eye, Wallet, PlusCircle, MinusCircle, UserPlus } from 'lucide-react';
 import { adminApi } from '@/services/adminApi';
+import PlayerProfileModal from '@/components/admin/PlayerProfileModal';
 import {
   AdminShell,
   DataTable,
@@ -12,15 +13,66 @@ import {
   Button,
   Field,
   Input,
-  Card,
   toast,
   useAdminData,
   inr,
   fmtDate,
 } from '@/components/admin/AdminShell';
 
+const emptySearch = {
+  dateFrom: '',
+  dateTo: '',
+  userId: '',
+  affiliateId: '',
+  username: '',
+  fullName: '',
+  phone: '',
+  ip: '',
+};
+
+function usersListPath(applied, serverQuery) {
+  const params = new URLSearchParams();
+  if (serverQuery) params.set('search', serverQuery);
+  if (applied.dateFrom) params.set('dateFrom', applied.dateFrom);
+  if (applied.dateTo) params.set('dateTo', applied.dateTo);
+  if (applied.userId.trim()) params.set('userId', applied.userId.trim());
+  if (applied.affiliateId.trim()) params.set('affiliateId', applied.affiliateId.trim());
+  if (applied.username.trim()) params.set('username', applied.username.trim());
+  if (applied.fullName.trim()) params.set('fullName', applied.fullName.trim());
+  if (applied.phone.trim()) params.set('phone', applied.phone.trim());
+  if (applied.ip.trim()) params.set('ip', applied.ip.trim());
+  const qs = params.toString();
+  return `/api/v1/admin/users${qs ? `?${qs}` : ''}`;
+}
+
 export default function AdminUsersPage() {
-  const { data: users, loading, reload } = useAdminData('/api/v1/admin/users?limit=200', []);
+  // Search panel above the table. `draft` is what the operator is typing;
+  // `applied` is what actually filters the rows, so nothing narrows until Search.
+  const [draft, setDraft] = useState(emptySearch);
+  const [applied, setApplied] = useState(emptySearch);
+  // Term from the table search box. Sent to the API so the match is looked up
+  // across every player, not only the rows already on screen.
+  const [serverQuery, setServerQuery] = useState('');
+
+  const listPath = useMemo(
+    () => usersListPath(applied, serverQuery),
+    [applied, serverQuery],
+  );
+  const { data: users, loading, reload } = useAdminData(listPath, [listPath]);
+
+  const setDraftField = (key) => (e) =>
+    setDraft((f) => ({ ...f, [key]: e.target.value }));
+
+  const searchActive = Object.values(applied).some((v) => v !== '');
+  const narrowed = searchActive || !!serverQuery;
+
+  const handleServerSearch = useCallback(
+    (term) => {
+      if (term === serverQuery) return;
+      setServerQuery(term);
+    },
+    [serverQuery],
+  );
 
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -33,7 +85,6 @@ export default function AdminUsersPage() {
   const emptyCreateForm = {
     full_name: '',
     phone: '',
-    email: '',
     password: '',
     country_code: 'IN',
     initial_balance: '',
@@ -59,7 +110,6 @@ export default function AdminUsersPage() {
         body: JSON.stringify({
           full_name: createForm.full_name,
           phone: createForm.phone,
-          email: createForm.email || undefined,
           password: createForm.password,
           country_code: createForm.country_code || 'IN',
           initial_balance: parseFloat(createForm.initial_balance) || 0,
@@ -109,6 +159,107 @@ export default function AdminUsersPage() {
     }
   };
 
+  // ---- Profile popup actions -------------------------------------------
+  // Each opens its own sub-modal or fires a status change; the profile stays
+  // open behind them so the operator keeps their place.
+  const [editUser, setEditUser] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [resetUser, setResetUser] = useState(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [duplicates, setDuplicates] = useState(null);
+  const [duplicatesLoading, setDuplicatesLoading] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
+
+  const openEdit = (u) => {
+    setEditForm({
+      username: u.username || '',
+      full_name: u.full_name || '',
+      phone: u.phone || '',
+      account_status: u.account_status || 'active',
+      fraud_score: u.fraud_score ?? 0,
+    });
+    setEditUser(u);
+  };
+
+  const submitEdit = async (e) => {
+    e.preventDefault();
+    setActionBusy(true);
+    try {
+      const updated = await adminApi(`/api/v1/admin/users/${editUser.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          username: editForm.username.trim(),
+          full_name: editForm.full_name.trim(),
+          phone: editForm.phone.trim(),
+          account_status: editForm.account_status,
+          fraud_score: Number(editForm.fraud_score) || 0,
+        }),
+      });
+      toast.success('User updated');
+      setDetail((d) => (d ? { ...d, ...updated } : d));
+      setEditUser(null);
+      reload();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const openReset = (u) => {
+    setResetPassword('');
+    setResetUser(u);
+  };
+
+  const submitReset = async (e) => {
+    e.preventDefault();
+    setActionBusy(true);
+    try {
+      await adminApi(`/api/v1/admin/users/${resetUser.id}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify({ password: resetPassword }),
+      });
+      toast.success('Password reset');
+      setResetUser(null);
+      setResetPassword('');
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const openDuplicates = async (u) => {
+    setDuplicatesLoading(true);
+    setDuplicates({ user: u, rows: [] });
+    try {
+      const rows = await adminApi(`/api/v1/admin/users/${u.id}/duplicates`);
+      setDuplicates({ user: u, rows });
+    } catch (err) {
+      toast.error(err.message);
+      setDuplicates(null);
+    } finally {
+      setDuplicatesLoading(false);
+    }
+  };
+
+  // Kicking a player out ends their access by deactivating the account; the
+  // API has no session-revocation endpoint, so this is the closest real effect.
+  const kickOut = async (u) => {
+    await patchUser(u.id, { account_status: 'inactive' }, 'Player kicked out');
+    setDetail((d) => (d ? { ...d, account_status: 'inactive' } : d));
+  };
+
+  const toggleFreeze = async (u) => {
+    const next = u.account_status === 'suspended' ? 'active' : 'suspended';
+    await patchUser(
+      u.id,
+      { account_status: next },
+      next === 'suspended' ? 'Account frozen' : 'Account unfrozen',
+    );
+    setDetail((d) => (d ? { ...d, account_status: next } : d));
+  };
+
   const submitAdjust = async (e) => {
     e.preventDefault();
     const magnitude = Math.abs(parseFloat(adjustAmount) || 0);
@@ -137,54 +288,40 @@ export default function AdminUsersPage() {
 
   const columns = [
     {
+      key: 'created_at',
+      label: 'Signup Date',
+      render: (r) => fmtDate(r.created_at),
+    },
+    {
       key: 'username',
-      label: 'Member ID',
+      label: 'Username',
       render: (r) => (
         <span className="font-mono text-sm text-slate-300">{r.username || '—'}</span>
       ),
     },
+    { key: 'full_name', label: 'Full Name', render: (r) => r.full_name || '—' },
+    { key: 'country_code', label: 'Country', render: (r) => r.country_code || '—' },
     {
-      key: 'full_name',
-      label: 'User',
-      render: (r) => (
-        <div>
-          <p className="font-medium text-white">{r.full_name || r.username}</p>
-          <p className="text-xs text-slate-500">{r.phone || r.email || '—'}</p>
-        </div>
-      ),
+      key: 'ip',
+      label: 'IP',
+      render: (r) => <span className="font-mono text-xs">{r.ip || '—'}</span>,
     },
-    { key: 'main_balance', label: 'Balance', render: (r) => inr(r.main_balance) },
-    { key: 'bonus_balance', label: 'Bonus', render: (r) => inr(r.bonus_balance) },
+    { key: 'phone', label: 'Phone', render: (r) => r.phone || '—' },
     {
-      key: 'kyc_status',
-      label: 'KYC',
-      render: (r) => <StatusBadge status={r.kyc_status} />,
-      filter: 'select',
-      filterLabel: 'KYC status',
-      filterOptions: [
-        { value: 'verified', label: 'Verified' },
-        { value: 'pending', label: 'Pending' },
-        { value: 'rejected', label: 'Rejected' },
-        { value: 'none', label: 'None' },
-      ],
+      key: 'created_by_type',
+      label: 'Created By',
+      render: (r) => <StatusBadge status={r.created_by_type} />,
     },
+    { key: 'affiliate_id', label: 'Affiliate ID', render: (r) => r.affiliate_id ?? '—' },
+    { key: 'agent_name', label: 'Agent Name', render: (r) => r.agent_name || '—' },
     {
-      key: 'account_status',
-      label: 'Status',
-      render: (r) => <StatusBadge status={r.account_status} />,
-      filter: 'select',
-      filterLabel: 'Account status',
-      filterOptions: [
-        { value: 'active', label: 'Active' },
-        { value: 'suspended', label: 'Suspended' },
-        { value: 'blocked', label: 'Blocked' },
-        { value: 'inactive', label: 'Inactive' },
-      ],
+      key: 'main_balance',
+      label: 'Balance',
+      render: (r) => inr((r.main_balance || 0) + (r.bonus_balance || 0)),
     },
-    { key: 'created_at', label: 'Joined', render: (r) => fmtDate(r.created_at), filter: 'date' },
     {
       key: 'actions',
-      label: '',
+      label: 'Action',
       render: (r) => (
         <div className="flex justify-end gap-1.5">
           <Button variant="secondary" size="sm" icon={Eye} onClick={() => openDetail(r.id)}>
@@ -201,7 +338,11 @@ export default function AdminUsersPage() {
   return (
     <AdminShell
       title="Users"
-      subtitle={`${users?.length ?? 0} registered players`}
+      subtitle={
+        narrowed
+          ? `${users?.length ?? 0} players match`
+          : `${users?.length ?? 0} registered players`
+      }
       actions={
         <Button icon={UserPlus} onClick={openCreate}>
           Create user
@@ -211,10 +352,49 @@ export default function AdminUsersPage() {
       <DataTable
         columns={columns}
         rows={users}
+        filters={
+          <div className="space-y-4">
+            <Field label="Signup Date">
+              <div className="flex items-center gap-2">
+                <Input type="date" value={draft.dateFrom} onChange={setDraftField('dateFrom')} />
+                <span className="text-slate-500">–</span>
+                <Input type="date" value={draft.dateTo} onChange={setDraftField('dateTo')} />
+              </div>
+            </Field>
+            <Field label="User ID">
+              <Input value={draft.userId} onChange={setDraftField('userId')} />
+            </Field>
+            <Field label="Affiliate ID">
+              <Input value={draft.affiliateId} onChange={setDraftField('affiliateId')} />
+            </Field>
+            <Field label="Username">
+              <Input value={draft.username} onChange={setDraftField('username')} />
+            </Field>
+            <Field label="Full Name">
+              <Input value={draft.fullName} onChange={setDraftField('fullName')} />
+            </Field>
+            <Field label="Phone Number">
+              <Input value={draft.phone} onChange={setDraftField('phone')} />
+            </Field>
+            <Field label="IP Address">
+              <Input value={draft.ip} onChange={setDraftField('ip')} />
+            </Field>
+          </div>
+        }
+        filterActive={searchActive}
+        onFilterApply={() => setApplied(draft)}
+        onFilterClear={() => {
+          setDraft(emptySearch);
+          setApplied(emptySearch);
+        }}
         loading={loading}
         searchable
-        searchKeys={['username', 'full_name', 'phone', 'email']}
-        searchPlaceholder="Search by name, member ID, phone, email…"
+        serverSearch
+        onServerSearch={handleServerSearch}
+        searchingServer={loading && !!serverQuery}
+        serverQuery={serverQuery}
+        searchKeys={['username', 'full_name', 'phone', 'id', 'ip']}
+        searchPlaceholder="Search by name, member ID, phone, IP…"
         noun="user"
         pageSize={15}
         emptyIcon={Users}
@@ -256,14 +436,6 @@ export default function AdminUsersPage() {
               required
             />
           </Field>
-          <Field label="Email">
-            <Input
-              type="email"
-              placeholder="Optional"
-              value={createForm.email}
-              onChange={setCreateField('email')}
-            />
-          </Field>
           <Field label="Password">
             <Input
               type="password"
@@ -295,113 +467,18 @@ export default function AdminUsersPage() {
         </form>
       </Modal>
 
-      {/* Detail modal */}
-      <Modal open={!!detail} onClose={() => setDetail(null)} title="User profile" size="lg">
-        {detailLoading || !detail?.username ? (
-          <div className="space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="h-12 animate-pulse rounded-lg bg-slate-800/60" />
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-5">
-            <div className="flex items-center gap-4">
-              <span className="grid h-14 w-14 place-items-center rounded-xl bg-indigo-500/15 font-display text-xl font-bold text-indigo-300 ring-1 ring-inset ring-indigo-500/30">
-                {(detail.full_name || detail.username || '?').slice(0, 1).toUpperCase()}
-              </span>
-              <div>
-                <p className="font-display text-lg font-bold text-white">
-                  {detail.full_name || detail.username}
-                </p>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <StatusBadge status={detail.account_status} />
-                  <StatusBadge status={detail.kyc_status} />
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Card className="p-4">
-                <p className="text-xs text-slate-500">Main balance</p>
-                <p className="mt-1 font-display text-lg font-bold text-white">{inr(detail.main_balance)}</p>
-              </Card>
-              <Card className="p-4">
-                <p className="text-xs text-slate-500">Bonus balance</p>
-                <p className="mt-1 font-display text-lg font-bold text-white">{inr(detail.bonus_balance)}</p>
-              </Card>
-              <Card className="p-4">
-                <p className="text-xs text-slate-500">Fraud score</p>
-                <p className="mt-1 font-display text-lg font-bold text-white">{detail.fraud_score ?? 0}</p>
-              </Card>
-            </div>
-
-            <div className="grid gap-2 text-sm sm:grid-cols-2">
-              <p className="flex items-center gap-2 text-slate-400"><Phone className="h-4 w-4" /> {detail.phone || '—'}</p>
-              <p className="flex items-center gap-2 text-slate-400"><Mail className="h-4 w-4" /> {detail.email || '—'}</p>
-              <p className="flex items-center gap-2 text-slate-400"><ShieldAlert className="h-4 w-4" /> {detail.country_code} · {detail.currency}</p>
-              <p className="text-slate-400">Joined {fmtDate(detail.created_at)}</p>
-            </div>
-
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Recent transactions
-              </p>
-              <div className="max-h-40 space-y-1.5 overflow-y-auto">
-                {detail.transactions?.length ? (
-                  detail.transactions.map((t) => (
-                    <div key={t.id} className="flex items-center justify-between rounded-lg bg-slate-950/50 px-3 py-2 text-sm">
-                      <span className="capitalize text-slate-300">{t.type.replace(/_/g, ' ')}</span>
-                      <span className="font-medium text-white">{inr(t.amount)}</span>
-                      <StatusBadge status={t.status} />
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-slate-500">No transactions</p>
-                )}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Select
-                value={detail.account_status}
-                onChange={(e) => {
-                  patchUser(detail.id, { account_status: e.target.value }, 'Status updated');
-                  setDetail({ ...detail, account_status: e.target.value });
-                }}
-                className="max-w-[160px]"
-              >
-                <option value="active">active</option>
-                <option value="suspended">suspended</option>
-                <option value="blocked">blocked</option>
-                <option value="inactive">inactive</option>
-              </Select>
-              <Select
-                value={detail.kyc_status}
-                onChange={(e) => {
-                  patchUser(detail.id, { kyc_status: e.target.value }, 'KYC updated');
-                  setDetail({ ...detail, kyc_status: e.target.value });
-                }}
-                className="max-w-[160px]"
-              >
-                <option value="none">KYC: none</option>
-                <option value="pending">KYC: pending</option>
-                <option value="verified">KYC: verified</option>
-                <option value="rejected">KYC: rejected</option>
-              </Select>
-              <Button
-                variant="secondary"
-                icon={Wallet}
-                onClick={() => {
-                  openAdjust(detail);
-                  setDetail(null);
-                }}
-              >
-                Adjust wallet
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
+      {/* Player profile popup — the full reference player screen */}
+      <PlayerProfileModal
+        open={!!detail}
+        detail={detail}
+        loading={detailLoading}
+        onClose={() => setDetail(null)}
+        onEdit={openEdit}
+        onResetPassword={openReset}
+        onDuplicateAccounts={openDuplicates}
+        onKickOut={kickOut}
+        onFreeze={toggleFreeze}
+      />
 
       {/* Wallet adjust modal */}
       <Modal
@@ -514,6 +591,173 @@ export default function AdminUsersPage() {
           </Field>
         </form>
       </Modal>
+
+      {/* Edit user */}
+      <Modal
+        open={!!editUser}
+        onClose={() => setEditUser(null)}
+        title="Edit user"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditUser(null)}>
+              Cancel
+            </Button>
+            <Button form="edit-user-form" type="submit" disabled={actionBusy}>
+              {actionBusy ? 'Saving…' : 'Save changes'}
+            </Button>
+          </>
+        }
+      >
+        <form id="edit-user-form" onSubmit={submitEdit} className="space-y-4">
+          <p className="text-sm text-slate-400">
+            Editing{' '}
+            <span className="font-semibold text-white">
+              {editUser?.full_name || editUser?.username}
+            </span>
+          </p>
+          <Field label="Username">
+            <Input
+              value={editForm.username}
+              onChange={(e) =>
+                setEditForm((f) => ({ ...f, username: e.target.value }))
+              }
+              required
+            />
+          </Field>
+          <Field label="Full name">
+            <Input
+              value={editForm.full_name}
+              onChange={(e) =>
+                setEditForm((f) => ({ ...f, full_name: e.target.value }))
+              }
+              required
+            />
+          </Field>
+          <Field label="Phone">
+            <Input
+              value={editForm.phone}
+              onChange={(e) =>
+                setEditForm((f) => ({ ...f, phone: e.target.value }))
+              }
+              required
+            />
+          </Field>
+          <Field label="Account status">
+            <Select
+              value={editForm.account_status}
+              onChange={(e) =>
+                setEditForm((f) => ({ ...f, account_status: e.target.value }))
+              }
+            >
+              <option value="active">active</option>
+              <option value="suspended">suspended</option>
+              <option value="blocked">blocked</option>
+              <option value="inactive">inactive</option>
+            </Select>
+          </Field>
+          <Field label="Fraud score">
+            <Input
+              type="number"
+              min="0"
+              max="100"
+              value={editForm.fraud_score}
+              onChange={(e) =>
+                setEditForm((f) => ({ ...f, fraud_score: e.target.value }))
+              }
+            />
+          </Field>
+        </form>
+      </Modal>
+
+      {/* Reset password */}
+      <Modal
+        open={!!resetUser}
+        onClose={() => setResetUser(null)}
+        title="Reset password"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setResetUser(null)}>
+              Cancel
+            </Button>
+            <Button form="reset-pw-form" type="submit" disabled={actionBusy}>
+              {actionBusy ? 'Resetting…' : 'Reset password'}
+            </Button>
+          </>
+        }
+      >
+        <form id="reset-pw-form" onSubmit={submitReset} className="space-y-4">
+          <p className="text-sm text-slate-400">
+            Setting a new password for{' '}
+            <span className="font-semibold text-white">
+              {resetUser?.full_name || resetUser?.username}
+            </span>
+            . They will need this to sign in.
+          </p>
+          <Field label="New password">
+            <Input
+              type="text"
+              placeholder="At least 6 characters"
+              value={resetPassword}
+              onChange={(e) => setResetPassword(e.target.value)}
+              required
+              minLength={6}
+            />
+          </Field>
+        </form>
+      </Modal>
+
+      {/* Duplicate accounts */}
+      <Modal
+        open={!!duplicates}
+        onClose={() => setDuplicates(null)}
+        title="Duplicate accounts"
+        size="lg"
+      >
+        {duplicatesLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-12 animate-pulse rounded-lg bg-slate-800/60" />
+            ))}
+          </div>
+        ) : duplicates?.rows?.length ? (
+          <div className="overflow-x-auto rounded-lg border border-slate-800">
+            <table className="w-full min-w-max text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-800 bg-slate-950/60">
+                  {['ID', 'Username', 'Full Name', 'Phone', 'Signup IP', 'Balance', 'Status', 'Matched on'].map(
+                    (h) => (
+                      <th key={h} className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold text-slate-300">
+                        {h}
+                      </th>
+                    ),
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {duplicates.rows.map((r) => (
+                  <tr key={r.id} className="border-b border-slate-800/60 last:border-0">
+                    <td className="px-3 py-2.5 text-slate-300">{r.id}</td>
+                    <td className="px-3 py-2.5 font-mono text-xs text-slate-300">{r.username || '—'}</td>
+                    <td className="px-3 py-2.5 text-slate-300">{r.full_name || '—'}</td>
+                    <td className="px-3 py-2.5 text-slate-300">{r.phone || '—'}</td>
+                    <td className="px-3 py-2.5 font-mono text-xs text-slate-300">{r.signup_ip || '—'}</td>
+                    <td className="px-3 py-2.5 text-slate-300">
+                      {inr((r.main_balance || 0) + (r.bonus_balance || 0))}
+                    </td>
+                    <td className="px-3 py-2.5"><StatusBadge status={r.account_status} /></td>
+                    <td className="px-3 py-2.5 text-xs text-amber-400">{r.matched_on?.join(', ')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">
+            No other account shares this player&apos;s IP or phone.
+          </p>
+        )}
+      </Modal>
+
     </AdminShell>
   );
 }

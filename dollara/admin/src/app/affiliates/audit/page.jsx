@@ -17,8 +17,8 @@ import { ShieldAlert, History, AlertTriangle, EyeOff, PlayCircle } from 'lucide-
 export default function FraudAuditPage() {
   const [activeTab, setActiveTab] = useState('fraud');
 
-  const fraudQuery = useAdminData('/api/v1/admin/affiliates/fraud-flags?limit=200', []);
-  const auditQuery = useAdminData('/api/v1/admin/affiliates/audit?limit=200', []);
+  const fraudQuery = useAdminData('/api/v1/admin/affiliates/fraud-flags', []);
+  const auditQuery = useAdminData('/api/v1/admin/affiliates/audit', []);
   const runsQuery = useAdminData('/api/v1/admin/affiliates/commissions/runs?limit=50', []);
 
   const flags = fraudQuery.data?.records ?? [];

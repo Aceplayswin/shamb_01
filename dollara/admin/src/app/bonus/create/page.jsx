@@ -111,7 +111,7 @@ export default function CreateBonusPage() {
 
   // Affiliate list drives both the General tab's Affiliate/Ad picker and the
   // Exclude Affiliates checkbox list.
-  const { data: affiliates } = useAdminData('/api/v1/admin/affiliates?limit=200', []);
+  const { data: affiliates } = useAdminData('/api/v1/admin/affiliates', []);
   const affiliateRows = Array.isArray(affiliates) ? affiliates : affiliates?.rows ?? [];
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));

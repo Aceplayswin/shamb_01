@@ -14,7 +14,7 @@ import {
 } from '@/components/admin/AdminShell';
 
 export default function AdminAiCallsPage() {
-  const { data: calls, loading } = useAdminData('/api/v1/admin/ai-calls?limit=200');
+  const { data: calls, loading } = useAdminData('/api/v1/admin/ai-calls');
   const [transcript, setTranscript] = useState(null);
 
   const columns = [

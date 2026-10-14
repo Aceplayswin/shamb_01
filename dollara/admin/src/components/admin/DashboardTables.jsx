@@ -5,31 +5,13 @@
  * than the full DataTable — these are static, unpaginated, read-only panels.
  */
 
-import { Card, inr } from '@/components/admin/AdminShell';
+import { Card, inr, fmtTime } from '@/components/admin/AdminShell';
 
 const num = (n) =>
   Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// dollara's AdminShell does not export a seconds-precision time formatter
-// (only `fmtDate`, which rounds to the minute and uses the browser's local
-// zone), so it is defined locally here rather than editing that shared file.
-// Pinned to IST to match the player site, same as the API's UTC stamps
-// require.
-const TIME_PARTS = {
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-  hour12: true,
-  timeZone: 'Asia/Kolkata',
-};
-
 // Seconds included: two rows landing in the same minute must stay orderable.
-const time = (s) => {
-  if (!s) return '—';
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleTimeString('en-IN', TIME_PARTS);
-};
+const time = (s) => fmtTime(s);
 
 function Panel({ title, columns, rows, renderRow }) {
   return (
