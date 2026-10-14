@@ -7,12 +7,10 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, X, Wallet, Download, Play, Loader2 } from 'lucide-react';
+import { Menu, X, Wallet } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
-import { useBranding, onLogoError } from '@/hooks/useBranding';
-import { useDemoLogin } from '@/hooks/useDemoLogin';
+import { useBranding } from '@/hooks/useBranding';
 import { ProfileMenu } from '@/components/ProfileMenu';
-import { GetAppModal } from '@/components/GetAppModal';
 import { NAV_GAME_LINKS } from '@/lib/gameRoutes';
 import { useAuthModal } from './authModalContext';
 
@@ -27,11 +25,11 @@ const NAV = [
 ];
 
 function BrandMark({ name }) {
-  const { logo_url: logoUrl } = useBranding();
   return (
     <Link href="/" className="flex shrink-0 items-center gap-2">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={logoUrl} alt={name || 'VELPLAY'} onError={onLogoError} className="h-9 w-9 shrink-0 rounded-xl object-contain" />
+      <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-[#e9c56b] to-[#b8862f] text-sm font-black text-[#241b0e] shadow-[0_6px_16px_-6px_rgba(199,154,59,0.9)]">
+        {(name || 'V').charAt(0).toUpperCase()}
+      </span>
       <span className="hidden font-display text-base font-black tracking-tight text-[#1b1726] sm:block">
         {name || 'VELPLAY'}
       </span>
@@ -44,15 +42,13 @@ export function Theme3TopNav() {
   const branding = useBranding();
   const { open } = useAuthModal();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [getAppOpen, setGetAppOpen] = useState(false);
 
   const token = useAuthStore((s) => s.token);
   const wallet = useAuthStore((s) => s.wallet);
   const isHydrated = useAuthStore((s) => s.isHydrated);
-  // Real balance, not `available` — a pending withdrawal only holds funds, it
-  // does not debit them, so netting the hold off made this read ₹0.00.
-  const balance = wallet?.main ?? wallet?.real ?? 0;
-  const { tryDemo, demoLoading } = useDemoLogin({ redirectTo: '/' });
+  // Real + bonus, not `available` — a pending withdrawal only holds funds, it
+  // does not debit them, so netting the hold off made this read too low.
+  const balance = wallet?.total ?? 0;
 
   const isActive = (href) => (href === '/' ? pathname === '/' : pathname?.startsWith(href));
 
@@ -81,31 +77,6 @@ export function Theme3TopNav() {
 
         {/* Right actions */}
         <div className="ml-auto flex items-center gap-2 lg:ml-0">
-          <button
-            type="button"
-            onClick={() => setGetAppOpen(true)}
-            title="Get the app"
-            className="hidden items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-black text-[#1b1726] shadow-sm transition hover:border-[#c79a3b]/50 sm:inline-flex"
-          >
-            <Download className="h-4 w-4" />
-            <span className="hidden md:inline">Get the app</span>
-          </button>
-
-          {/* Play Demo — reachable at every width; icon-only on narrow screens. */}
-          {isHydrated && !token && (
-            <button
-              type="button"
-              onClick={tryDemo}
-              disabled={demoLoading}
-              title="Play Demo"
-              aria-label="Play Demo"
-              className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-black/10 bg-white px-2.5 py-2 text-xs font-black text-[#1b1726] shadow-sm transition hover:border-[#c79a3b]/50 disabled:opacity-60 lg:px-4"
-            >
-              {demoLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              <span className="hidden lg:inline">{demoLoading ? 'Starting…' : 'Play Demo'}</span>
-            </button>
-          )}
-
           {isHydrated && token ? (
             <>
               <div className="hidden items-center gap-2 rounded-full border border-black/[0.06] bg-white py-1 pl-3 pr-1 shadow-sm sm:flex">
@@ -169,8 +140,6 @@ export function Theme3TopNav() {
           ))}
         </div>
       )}
-
-      <GetAppModal open={getAppOpen} onClose={() => setGetAppOpen(false)} />
     </div>
   );
 }

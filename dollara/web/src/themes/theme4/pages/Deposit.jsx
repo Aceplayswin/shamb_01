@@ -1,88 +1,64 @@
 'use client';
 
-// Theme4 Deposit — choose amount → choose method → pay → request submitted for
-// review. Two ways to pay sit side by side at the Method step, switched by a
-// tab pill (there was no such switcher before this):
-//   • "Quick Pay"     — the original sandbox flow: a fixed method list feeding
-//     <PaymentGateway/> (the app's one checkout surface), unchanged.
-//   • "Bank / UPI"    — the admin's real, configured payment destinations
-//     (useDepositMethods) rendered through the shared <ReceivingDetails/>
-//     (QR / account / wallet address), for a player who pays by hand and
-//     reports the UTR/reference themselves.
-// Either path ends the same way: the deposit stays PENDING until the product
-// admin confirms it from the admin panel — nothing here credits the wallet.
+// Theme4 Deposit — same data flow as theme2/3 (shared wallet endpoints), teal
+// style. Methods come from the admin console; the block under the chosen one
+// is decided by its TYPE (UPI: QR + ID, bank: account, crypto: wallet address).
 
-import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Clock, Smartphone, Landmark, Bitcoin, CreditCard, Wallet2 } from 'lucide-react';
 import { api } from '@/services/api';
+import { affiliateAttribution } from '@/lib/referral';
 import { useAuthStore } from '@/store/auth';
 import { useDepositMethods } from '@/hooks/useDepositMethods';
-import { PaymentGateway } from '@/components/payments/PaymentGateway';
 import { ReceivingDetails } from '@/components/payments/ReceivingDetails';
-import { TYPE_LABELS, methodDescription, amountWithinLimits } from '@/lib/paymentDestination';
-import { T4Card, t4Input, t4BtnPrimary, t4BtnOutline, T4FormPage } from '../components/ui';
+import { amountWithinLimits, hasDestination, methodDescription } from '@/lib/paymentDestination';
+import { T4Card, t4Input, t4BtnPrimary, T4FormPage } from '../components/ui';
 
-const MIN_DEPOSIT = 100;
 const QUICK_AMOUNTS = [500, 1000, 2500, 5000, 10000];
-const PAYMENT_METHODS = [
-  { id: 'upi', label: 'UPI (Instant)', desc: 'Google Pay, PhonePe, Paytm', icon: Smartphone, eta: 'Instant' },
-  { id: 'imps', label: 'IMPS', desc: 'Instant transfer', icon: Landmark, eta: 'Instant' },
-  { id: 'bank_transfer', label: 'Bank Transfer', desc: '5-30 min verification', icon: Landmark, eta: '5-30 min' },
-  { id: 'crypto', label: 'Cryptocurrency', desc: 'BTC, ETH, USDT', icon: Bitcoin, eta: '10-30 min' },
-];
 
-const MANUAL_TYPE_ICON = { upi: Smartphone, bank: Landmark, crypto: Bitcoin, wallet: Wallet2, card: CreditCard, other: Landmark };
-
-// theme4 skin for the shared <ReceivingDetails/> — same structure every theme
-// renders, teal borders/buttons instead of the component's neutral defaults.
-const T4_RECEIVING_STYLES = {
-  card: 'mt-4 rounded border border-black/[0.07] bg-[#f7fafa] p-5',
-  title: 'font-display text-sm font-black uppercase tracking-wide text-[#13272b]',
-  note: 'mt-1 text-xs text-[#5d7378]',
+// Theme4 (teal) palette for the shared "send payment to" block.
+const RECEIVING_STYLES = {
+  card: '',
+  title: 'font-black text-[#13272b]',
+  note: 'mt-1 text-xs text-[#8aa0a4]',
   rows: 'mt-4 space-y-2',
   row: 'flex items-center justify-between gap-3 rounded border border-black/10 bg-white px-4 py-3',
-  label: 'text-[0.65rem] font-bold uppercase tracking-wide text-[#8aa0a4]',
-  value: 'break-all font-semibold text-[#13272b]',
+  label: 'text-[0.65rem] font-black uppercase tracking-wide text-[#8aa0a4]',
+  value: 'break-all font-bold text-[#13272b]',
   mono: 'font-mono text-sm',
-  copyBtn: 'shrink-0 rounded border border-[#0e7480]/30 px-3 py-1.5 text-xs font-bold text-[#0e7480] transition hover:bg-[#eef6f7]',
+  copyBtn:
+    'shrink-0 rounded border border-[#0e7480]/25 px-3 py-1.5 text-xs font-bold text-[#0e7480] transition hover:border-[#0e7480] hover:bg-[#eef6f7]',
   qrFrame: 'mt-4 flex justify-center',
   qrImg: 'h-44 w-44 max-w-full rounded border border-black/10 bg-white object-contain p-1',
-  instructions: 'mt-4 whitespace-pre-line rounded bg-black/[0.03] p-3 text-xs text-[#5d7378]',
+  instructions: 'mt-4 whitespace-pre-line rounded bg-[#eef6f7] p-3 text-xs text-[#13272b]',
 };
-
-const STEPS = ['Amount', 'Method', 'Payment'];
 
 export default function Theme4Deposit() {
   const router = useRouter();
   const { token, isHydrated, hydrate } = useAuthStore();
-
-  const [step, setStep] = useState('amount'); // amount | method | pay | done
   const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState('upi');
-  const [transactionId, setTransactionId] = useState(null);
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState(null);
-  const [receipt, setReceipt] = useState(null); // { amount, reference }
-
-  // Method-step tab: the original sandbox list, or the admin's real,
-  // configured deposit destinations (bank/UPI/crypto — paid by hand).
-  const [payMode, setPayMode] = useState('quick'); // 'quick' | 'manual'
-  const [manualMethodId, setManualMethodId] = useState(null);
-  const [manualReference, setManualReference] = useState('');
-  const { methods: manualMethods, loading: manualLoading, error: manualError } = useDepositMethods(
-    isHydrated && !!token,
-  );
-  const selectedManual = useMemo(
-    () => manualMethods.find((m) => m.id === manualMethodId) ?? null,
-    [manualMethods, manualMethodId],
-  );
+  const [method, setMethod] = useState('');
+  const [reference, setReference] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  // One request at a time, same as withdrawals: the form stays locked until
+  // the open deposit is approved or rejected.
+  const [hasPending, setHasPending] = useState(false);
+  const {
+    methods,
+    loading: methodsLoading,
+    error: methodsError,
+  } = useDepositMethods(isHydrated && Boolean(token));
 
   const numAmount = parseFloat(amount) || 0;
-  const valid = numAmount >= MIN_DEPOSIT;
-  const bonus = numAmount >= 1000 ? numAmount * 0.5 : 0;
-  const manualLimit = selectedManual ? amountWithinLimits(selectedManual, numAmount) : { ok: true, message: null };
+  const selected = methods.find((m) => m.code === method) ?? null;
+  const limit = amountWithinLimits(selected, numAmount);
+  const canSubmit = !loading && !hasPending && numAmount > 0 && Boolean(selected) && limit.ok;
+
+  const loadPending = () =>
+    api('/api/v1/wallet')
+      .then((w) => setHasPending(Boolean(w?.hasPendingDeposit)))
+      .catch(() => {});
 
   useEffect(() => {
     hydrate();
@@ -92,383 +68,151 @@ export default function Theme4Deposit() {
     if (isHydrated && !token) router.replace('/login');
   }, [isHydrated, token, router]);
 
-  const stepIndex = { amount: 0, method: 1, pay: 2, done: 2 }[step];
+  useEffect(() => {
+    if (token) loadPending();
+  }, [token]);
 
-  // Create the pending deposit (the "order"). Shared by both the sandbox
-  // gateway flow (moves on to the 'pay' step) and the manual-transfer flow
-  // (moves straight to confirmPayment once the player supplies a reference).
-  // Returns the new transaction id, or null on failure (error state is set).
-  const createDeposit = async (paymentMethod) => {
-    setError(null);
-    setCreating(true);
+  // A method the admin has since disabled must not stay selected.
+  useEffect(() => {
+    if (method && !methods.some((m) => m.code === method)) setMethod('');
+  }, [methods, method]);
+
+  const submit = async () => {
+    if (!selected || hasPending) return;
+    setLoading(true);
     try {
       const res = await api('/api/v1/wallet/deposit', {
         method: 'POST',
-        body: JSON.stringify({ amount: numAmount, paymentMethod }),
+        body: JSON.stringify({
+          amount: numAmount,
+          paymentMethod: selected.code,
+          referenceNumber: reference.trim() || null,
+          ...affiliateAttribution(),
+        }),
       });
-      setTransactionId(res.transactionId);
-      return res.transactionId;
+      setResult(res);
+      setHasPending(true);
+      setReference('');
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Could not start payment';
+      const msg = e instanceof Error ? e.message : 'Deposit failed';
       if (/log in again|unauthorized/i.test(msg)) {
         router.replace('/login');
-        return null;
+        return;
       }
-      setError(msg);
-      return null;
+      alert(msg);
     } finally {
-      setCreating(false);
+      setLoading(false);
+      loadPending();
     }
   };
 
-  const startPayment = async () => {
-    const id = await createDeposit(method);
-    if (id) setStep('pay');
-  };
-
-  // Called by the gateway once the user completes "payment". This does NOT
-  // credit the wallet — it just records the reference the user supplied so the
-  // admin can match it. The deposit created above stays pending until an
-  // admin confirms it.
-  const confirmPayment = async (reference) => {
-    setReceipt({ amount: numAmount, reference });
-    setStep('done');
-  };
-
-  // Manual bank/UPI/crypto transfer: the player has already sent the money
-  // outside the platform and is reporting the UTR/reference for the admin to
-  // match against the destination they were shown.
-  const submitManualTransfer = async () => {
-    if (!selectedManual || !manualReference.trim() || !manualLimit.ok) return;
-    const id = await createDeposit(selectedManual.method_type);
-    if (id) confirmPayment(manualReference.trim());
-  };
-
-  const reset = () => {
-    setStep('amount');
-    setAmount('');
-    setMethod('upi');
-    setPayMode('quick');
-    setManualMethodId(null);
-    setManualReference('');
-    setTransactionId(null);
-    setReceipt(null);
-    setError(null);
-  };
-
-  if (!isHydrated || !token) return null;
-
   return (
     <T4FormPage title="Deposit">
-      {step !== 'done' && <Stepper steps={STEPS} current={stepIndex} />}
-
-      {error && (
-        <p className="mt-4 rounded border border-[#e5342c]/30 bg-[#e5342c]/10 px-3 py-2 text-sm text-[#c0342c]">
-          {error}
+      {hasPending ? (
+        <p className="mt-4 rounded border border-[#0e7480]/30 bg-[#eefafa] px-3 py-2 text-xs font-bold text-[#0e7480]">
+          You have a deposit request awaiting approval. You can place a new
+          request once it has been approved or rejected.
         </p>
-      )}
-
-      {/* ── Step 1: Amount ── */}
-      {step === 'amount' && (
-        <div className="mt-6 space-y-6">
-          <T4Card className="p-6">
-            <label className="text-sm text-[#5d7378]">Enter Amount (₹)</label>
-            <input
-              type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0"
-              className={`${t4Input} mt-2 text-2xl`}
-              autoFocus
-            />
-            <div className="mt-4 flex flex-wrap gap-2">
-              {QUICK_AMOUNTS.map((a) => (
-                <button
-                  key={a}
-                  type="button"
-                  onClick={() => setAmount(String(a))}
-                  className="rounded border border-[#0e7480]/25 bg-white px-4 py-2 text-sm text-[#13272b] shadow-sm transition hover:border-[#0e7480] hover:text-[#0e7480]"
-                >
-                  ₹{a.toLocaleString('en-IN')}
-                </button>
-              ))}
-            </div>
-            {numAmount > 0 && (
-              <div className="mt-4 rounded border border-[#2fbf71]/25 bg-[#2fbf71]/10 p-4 text-sm text-[#1c8a52]">
-                <p>You deposit: ₹{numAmount.toLocaleString('en-IN')}</p>
-                {bonus > 0 && <p>You get bonus: ₹{bonus.toLocaleString('en-IN')}</p>}
-                <p className="font-black">Total playable: ₹{(numAmount + bonus).toLocaleString('en-IN')}</p>
-              </div>
-            )}
-            <p className="mt-3 text-xs text-[#8aa0a4]">Minimum deposit ₹{MIN_DEPOSIT}.</p>
-          </T4Card>
-
-          <button
-            type="button"
-            onClick={() => valid && setStep('method')}
-            disabled={!valid}
-            className={`${t4BtnPrimary} w-full`}
-          >
-            Continue
-          </button>
+      ) : null}
+      <T4Card className="mt-6 p-6">
+        <label className="text-sm text-[#5d7378]">Enter Amount (₹)</label>
+        <input
+          type="number"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="0"
+          className={`${t4Input} mt-2 text-2xl`}
+        />
+        <div className="mt-4 flex flex-wrap gap-2">
+          {QUICK_AMOUNTS.map((a) => (
+            <button
+              key={a}
+              type="button"
+              onClick={() => setAmount(String(a))}
+              className="rounded border border-[#0e7480]/25 bg-white px-4 py-2 text-sm text-[#13272b] shadow-sm transition hover:border-[#0e7480] hover:text-[#0e7480]"
+            >
+              ₹{a.toLocaleString('en-IN')}
+            </button>
+          ))}
         </div>
-      )}
+      </T4Card>
 
-      {/* ── Step 2: Method ── */}
-      {step === 'method' && (
-        <div className="mt-6 space-y-6">
-          <T4Card className="p-6">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-[#5d7378]">Depositing</span>
-              <span className="text-lg font-black text-[#0e7480]">
-                ₹{numAmount.toLocaleString('en-IN')}
-              </span>
-            </div>
-
-            {/* Pay-mode switcher — sandbox checkout vs. a real, admin-configured
-                destination the player pays into by hand. */}
-            <div className="mt-5 inline-flex rounded-full border border-[#0e7480]/25 bg-white p-1">
-              {[
-                { id: 'quick', label: 'Quick Pay' },
-                { id: 'manual', label: 'Bank / UPI Transfer' },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setPayMode(tab.id)}
-                  className={`rounded-full px-4 py-1.5 text-xs font-black uppercase tracking-wide transition ${
-                    payMode === tab.id
-                      ? 'bg-gradient-to-b from-[#17a2b0] to-[#0e7480] text-white shadow-sm'
-                      : 'text-[#5d7378] hover:text-[#0e7480]'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {payMode === 'quick' ? (
-              <>
-                <h2 className="mt-5 text-sm font-black uppercase tracking-wide text-[#5d7378]">
-                  Choose payment method
-                </h2>
-                <div className="mt-4 space-y-2">
-                  {PAYMENT_METHODS.map((pm) => {
-                    const Icon = pm.icon;
-                    const active = method === pm.id;
-                    return (
-                      <button
-                        key={pm.id}
-                        type="button"
-                        onClick={() => setMethod(pm.id)}
-                        className={`flex w-full items-center gap-3 rounded border p-4 text-left transition ${
-                          active ? 'border-[#0e7480] bg-[#eef6f7]' : 'border-black/10 bg-white hover:bg-[#f7fafa]'
-                        }`}
-                      >
-                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-[#eef6f7] text-[#0e7480]">
-                          <Icon className="h-5 w-5" />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block font-bold text-[#13272b]">{pm.label}</span>
-                          <span className="block text-xs text-[#8aa0a4]">{pm.desc}</span>
-                        </span>
-                        <span className="shrink-0 text-xs text-[#8aa0a4]">{pm.eta}</span>
-                      </button>
-                    );
-                  })}
+      <T4Card className="mt-6 p-6">
+        <h2 className="font-black text-[#13272b]">Payment Method</h2>
+        {methodsLoading ? (
+          <p className="mt-4 text-sm text-[#8aa0a4]">Loading payment methods…</p>
+        ) : methods.length === 0 ? (
+          <p className="mt-4 rounded border border-black/10 bg-white p-4 text-sm text-[#5d7378]">
+            {methodsError
+              ? 'Payment methods are temporarily unavailable. Please try again shortly.'
+              : 'No payment methods are available right now. Please contact support.'}
+          </p>
+        ) : (
+          <div className="mt-4 space-y-2">
+            {methods.map((pm) => (
+              <label
+                key={pm.code}
+                className={`flex cursor-pointer items-center gap-3 rounded border p-4 transition ${
+                  method === pm.code ? 'border-[#0e7480] bg-[#eef6f7]' : 'border-black/10 bg-white'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="method"
+                  value={pm.code}
+                  checked={method === pm.code}
+                  onChange={() => setMethod(pm.code)}
+                  className="accent-[#0e7480]"
+                />
+                <div className="min-w-0">
+                  <p className="font-bold text-[#13272b]">{pm.name}</p>
+                  <p className="text-xs text-[#8aa0a4]">{methodDescription(pm)}</p>
                 </div>
-              </>
-            ) : (
-              <>
-                <h2 className="mt-5 text-sm font-black uppercase tracking-wide text-[#5d7378]">
-                  Choose a deposit method
-                </h2>
-                <p className="mt-1 text-xs text-[#8aa0a4]">
-                  Pay directly into one of our accounts, then report your reference below.
-                </p>
-
-                {manualLoading ? (
-                  <div className="mt-4 space-y-2">
-                    {[0, 1].map((i) => (
-                      <div key={i} className="h-16 animate-pulse rounded bg-black/[0.04]" />
-                    ))}
-                  </div>
-                ) : manualError ? (
-                  <p className="mt-4 rounded border border-[#e5342c]/30 bg-[#e5342c]/10 px-3 py-2 text-sm text-[#c0342c]">
-                    {manualError}
-                  </p>
-                ) : manualMethods.length === 0 ? (
-                  <p className="mt-4 rounded border border-black/[0.06] bg-[#f7fafa] px-3 py-2 text-sm text-[#5d7378]">
-                    No manual transfer methods are available right now — use Quick Pay instead.
-                  </p>
-                ) : (
-                  <div className="mt-4 space-y-2">
-                    {manualMethods.map((m) => {
-                      const Icon = MANUAL_TYPE_ICON[m.method_type] ?? Landmark;
-                      const active = manualMethodId === m.id;
-                      return (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onClick={() => setManualMethodId(m.id)}
-                          className={`flex w-full items-center gap-3 rounded border p-4 text-left transition ${
-                            active ? 'border-[#0e7480] bg-[#eef6f7]' : 'border-black/10 bg-white hover:bg-[#f7fafa]'
-                          }`}
-                        >
-                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-[#eef6f7] text-[#0e7480]">
-                            <Icon className="h-5 w-5" />
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block font-bold text-[#13272b]">{m.name}</span>
-                            <span className="block text-xs text-[#8aa0a4]">{methodDescription(m)}</span>
-                          </span>
-                          <span className="shrink-0 rounded-sm bg-[#eef6f7] px-1.5 py-0.5 text-[0.6rem] font-black uppercase text-[#0e7480]">
-                            {TYPE_LABELS[m.method_type] ?? m.method_type}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {selectedManual && (
-                  <>
-                    <ReceivingDetails method={selectedManual} styles={T4_RECEIVING_STYLES} />
-
-                    {!manualLimit.ok && (
-                      <p className="mt-3 rounded border border-[#e5342c]/30 bg-[#e5342c]/10 px-3 py-2 text-sm text-[#c0342c]">
-                        {manualLimit.message}
-                      </p>
-                    )}
-
-                    <div className="mt-4">
-                      <label className="text-sm text-[#5d7378]">UTR / Transaction reference</label>
-                      <input
-                        value={manualReference}
-                        onChange={(e) => setManualReference(e.target.value)}
-                        placeholder="Enter the reference from your bank/UPI app"
-                        className={`${t4Input} mt-2`}
-                      />
-                      <p className="mt-2 text-xs text-[#8aa0a4]">
-                        Send this exactly once you have transferred the amount above, so our team can
-                        match it to your account.
-                      </p>
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-          </T4Card>
-
-          <div className="flex gap-3">
-            <button type="button" onClick={() => setStep('amount')} className={`${t4BtnOutline} flex-1`}>
-              Back
-            </button>
-            {payMode === 'quick' ? (
-              <button
-                type="button"
-                onClick={startPayment}
-                disabled={creating}
-                className={`${t4BtnPrimary} flex-[2]`}
-              >
-                {creating ? 'Starting…' : `Proceed to pay ₹${numAmount.toLocaleString('en-IN')}`}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={submitManualTransfer}
-                disabled={creating || !selectedManual || !manualReference.trim() || !manualLimit.ok}
-                className={`${t4BtnPrimary} flex-[2]`}
-              >
-                {creating ? 'Submitting…' : "I've completed this transfer"}
-              </button>
-            )}
+              </label>
+            ))}
           </div>
-        </div>
+        )}
+        {selected && numAmount > 0 && !limit.ok && (
+          <p className="mt-3 text-sm font-bold text-[#b45309]">{limit.message}</p>
+        )}
+      </T4Card>
+
+      {/* What the player pays into — the block for the selected method's type. */}
+      {selected && hasDestination(selected) && (
+        <T4Card className="mt-6 p-6">
+          <ReceivingDetails method={selected} styles={RECEIVING_STYLES} />
+        </T4Card>
       )}
 
-      {/* ── Step 3: Payment (shared gateway) ── */}
-      {step === 'pay' && (
-        <div className="mt-6">
-          <PaymentGateway
-            amount={numAmount}
-            method={method}
-            onConfirm={confirmPayment}
-            onCancel={() => setStep('method')}
+      {selected && (
+        <T4Card className="mt-6 p-6">
+          <label className="text-sm text-[#5d7378]">
+            UTR / reference number <span className="text-[#8aa0a4]">(optional)</span>
+          </label>
+          <input
+            type="text"
+            value={reference}
+            onChange={(e) => setReference(e.target.value)}
+            placeholder="e.g. 412345678901"
+            className={`${t4Input} mt-2`}
           />
-        </div>
+          <p className="mt-2 text-xs text-[#8aa0a4]">
+            Pay using {selected.name}, then paste the reference from your payment app so our team can match it.
+          </p>
+        </T4Card>
       )}
 
-      {/* ── Done (submitted, pending admin approval) ── */}
-      {step === 'done' && receipt && (
-        <div className="mt-8 space-y-6">
-          <T4Card className="p-8 text-center">
-            <Clock className="mx-auto h-14 w-14 text-[#0e7480]" />
-            <h2 className="mt-4 text-xl font-black text-[#13272b]">Deposit submitted</h2>
-            <p className="mt-1 text-sm text-[#5d7378]">
-              ₹{Number(receipt.amount).toLocaleString('en-IN')} is awaiting confirmation. Your wallet will
-              be credited once our team approves the payment.
-            </p>
-            <div className="mt-6 space-y-2 rounded border border-black/[0.06] bg-[#f7fafa] p-4 text-left text-sm">
-              <Row label="Amount" value={`₹${Number(receipt.amount).toLocaleString('en-IN')}`} />
-              <Row label="Reference" value={receipt.reference} />
-              <Row label="Transaction ID" value={`#${transactionId}`} />
-              <Row label="Status" value="Pending approval" last />
-            </div>
-          </T4Card>
-          <div className="flex gap-3">
-            <button type="button" onClick={reset} className={`${t4BtnOutline} flex-1`}>
-              New deposit
-            </button>
-            <Link href="/wallet" className={`${t4BtnPrimary} flex-1 text-center`}>
-              Go to wallet
-            </Link>
-          </div>
+      <button type="button" onClick={submit} disabled={!canSubmit} className={`${t4BtnPrimary} mt-6 w-full`}>
+        {hasPending ? 'Deposit Pending Approval' : loading ? 'Processing...' : 'Submit deposit request'}
+      </button>
+      {result && (
+        <div className="mt-4 rounded border border-[#0e7480]/30 bg-[#eefafa] p-4 text-center">
+          <p className="text-sm font-black text-[#0e7480]">Deposit submitted — pending approval</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Request ID: {result.transactionId}. Your wallet will be credited once our team confirms the payment.
+          </p>
         </div>
       )}
     </T4FormPage>
-  );
-}
-
-function Stepper({ steps, current }) {
-  return (
-    <div className="mt-6 flex items-center">
-      {steps.map((label, i) => {
-        const done = i < current;
-        const active = i === current;
-        return (
-          <div key={label} className="flex flex-1 items-center last:flex-none">
-            <div className="flex flex-col items-center">
-              <span
-                className={`grid h-8 w-8 place-items-center rounded-full text-xs font-bold transition ${
-                  done
-                    ? 'bg-[#2fbf71] text-white'
-                    : active
-                      ? 'bg-[#0e7480] text-white'
-                      : 'bg-[#eef1f2] text-[#8aa0a4]'
-                }`}
-              >
-                {done ? '✓' : i + 1}
-              </span>
-              <span className={`mt-1.5 text-[0.7rem] ${active ? 'font-bold text-[#13272b]' : 'text-[#8aa0a4]'}`}>
-                {label}
-              </span>
-            </div>
-            {i < steps.length - 1 && (
-              <div className={`mx-2 h-px flex-1 ${i < current ? 'bg-[#2fbf71]/60' : 'bg-black/10'}`} />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function Row({ label, value, last }) {
-  return (
-    <div className={`flex items-center justify-between py-1.5 ${last ? '' : 'border-b border-black/[0.06]'}`}>
-      <span className="text-[#8aa0a4]">{label}</span>
-      <span className="font-bold text-[#13272b]">{value}</span>
-    </div>
   );
 }

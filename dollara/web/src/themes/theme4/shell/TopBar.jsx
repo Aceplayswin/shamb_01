@@ -7,12 +7,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Megaphone, User, Wallet, Download, Play, Loader2 } from 'lucide-react';
+import { Megaphone, User, Wallet } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
-import { useBranding, onLogoError } from '@/hooks/useBranding';
-import { useDemoLogin } from '@/hooks/useDemoLogin';
+import { useBranding } from '@/hooks/useBranding';
 import { ProfileMenu } from '@/components/ProfileMenu';
-import { GetAppModal } from '@/components/GetAppModal';
 import { useAuthModal } from './authModalContext';
 
 const TICKER = 'Unmatched Betting Excitement and Access 500+ Casino and Online Games';
@@ -39,16 +37,15 @@ function Clock() {
 
 export function Theme4BrandMark({ name, dark = false }) {
   const label = name || 'DOLLARA';
-  const { logo_url: logoUrl } = useBranding();
   return (
     <Link href="/" className="flex shrink-0 items-center gap-2">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={logoUrl}
-        alt={label}
-        onError={onLogoError}
-        className={`h-9 w-9 shrink-0 rounded object-contain ${dark ? '' : 'bg-white/95'} p-0.5 shadow-sm`}
-      />
+      <span
+        className={`grid h-9 w-9 -skew-x-6 place-items-center rounded ${
+          dark ? 'bg-[#0a5560] text-white' : 'bg-white text-[#0e7480]'
+        } text-lg font-black italic shadow-sm`}
+      >
+        {label.charAt(0).toUpperCase()}
+      </span>
       <span className={`font-display text-lg font-black uppercase leading-none tracking-wide ${dark ? 'text-[#13272b]' : 'text-white'}`}>
         {label}
         <span className={`block text-[0.5rem] font-bold tracking-[0.4em] ${dark ? 'text-[#0e7480]' : 'text-white/70'}`}>
@@ -66,11 +63,9 @@ export function Theme4TopBar() {
   const token = useAuthStore((s) => s.token);
   const wallet = useAuthStore((s) => s.wallet);
   const isHydrated = useAuthStore((s) => s.isHydrated);
-  // Real balance, not `available` — a pending withdrawal only holds funds, it
-  // does not debit them, so netting the hold off made this read ₹0.00.
-  const balance = wallet?.main ?? wallet?.real ?? 0;
-  const { tryDemo, demoLoading } = useDemoLogin({ redirectTo: '/' });
-  const [getAppOpen, setGetAppOpen] = useState(false);
+  // Real + bonus, not `available` — a pending withdrawal only holds funds, it
+  // does not debit them, so netting the hold off made this read too low.
+  const balance = wallet?.total ?? 0;
 
   return (
     <header className="sticky top-0 z-40">
@@ -94,63 +89,34 @@ export function Theme4TopBar() {
         <div className="mx-auto flex max-w-[1200px] items-center justify-between px-3 py-2.5">
           <Theme4BrandMark name={branding.product_name} />
 
-          <div className="flex items-center gap-2">
+          {isHydrated && token ? (
+            <div className="flex items-center gap-2">
+              <div className="hidden items-center gap-2 rounded border border-white/25 bg-[#0a5560]/60 py-1 pl-3 pr-1 sm:flex">
+                <Wallet className="h-4 w-4 text-white/80" />
+                <span className="text-sm font-black text-white">
+                  ₹{Number(balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                <Link
+                  href="/deposit"
+                  className="rounded bg-white px-3 py-1 text-xs font-black uppercase text-[#0e7480] transition hover:brightness-95"
+                >
+                  Deposit
+                </Link>
+              </div>
+              <ProfileMenu variant="theme4" />
+            </div>
+          ) : isHydrated ? (
             <button
-              type="button"
-              onClick={() => setGetAppOpen(true)}
-              title="Get the app"
-              className="hidden items-center gap-1.5 rounded border border-white/30 bg-[#0a5560] px-3 py-1.5 text-xs font-black uppercase tracking-wide text-white transition hover:bg-[#094b55] sm:inline-flex"
+              onClick={() => open('login')}
+              className="flex items-center gap-1.5 rounded border border-white/30 bg-[#0a5560] px-4 py-1.5 text-xs font-black uppercase tracking-wide text-white shadow-sm transition hover:bg-[#094b55]"
             >
-              <Download className="h-3.5 w-3.5" />
-              <span className="hidden md:inline">Get the app</span>
+              <User className="h-3.5 w-3.5" /> Log In
             </button>
-
-            {/* Play Demo — reachable at every width; icon-only on narrow screens. */}
-            {isHydrated && !token && (
-              <button
-                type="button"
-                onClick={tryDemo}
-                disabled={demoLoading}
-                title="Play Demo"
-                aria-label="Play Demo"
-                className="inline-flex shrink-0 items-center gap-1.5 rounded border border-white/30 px-2.5 py-1.5 text-xs font-black uppercase tracking-wide text-white transition hover:bg-white/10 disabled:opacity-60 lg:px-4"
-              >
-                {demoLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-                <span className="hidden lg:inline">{demoLoading ? 'Starting…' : 'Play Demo'}</span>
-              </button>
-            )}
-
-            {isHydrated && token ? (
-              <>
-                <div className="hidden items-center gap-2 rounded border border-white/25 bg-[#0a5560]/60 py-1 pl-3 pr-1 sm:flex">
-                  <Wallet className="h-4 w-4 text-white/80" />
-                  <span className="text-sm font-black text-white">
-                    ₹{Number(balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                  <Link
-                    href="/deposit"
-                    className="rounded bg-white px-3 py-1 text-xs font-black uppercase text-[#0e7480] transition hover:brightness-95"
-                  >
-                    Deposit
-                  </Link>
-                </div>
-                <ProfileMenu variant="theme4" />
-              </>
-            ) : isHydrated ? (
-              <button
-                onClick={() => open('login')}
-                className="flex items-center gap-1.5 rounded border border-white/30 bg-[#0a5560] px-4 py-1.5 text-xs font-black uppercase tracking-wide text-white shadow-sm transition hover:bg-[#094b55]"
-              >
-                <User className="h-3.5 w-3.5" /> Log In
-              </button>
-            ) : (
-              <span className="inline-block h-8 w-24" aria-hidden />
-            )}
-          </div>
+          ) : (
+            <span className="inline-block h-8 w-24" aria-hidden />
+          )}
         </div>
       </div>
-
-      <GetAppModal open={getAppOpen} onClose={() => setGetAppOpen(false)} />
     </header>
   );
 }

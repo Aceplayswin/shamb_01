@@ -7,11 +7,13 @@ import Link from 'next/link';
 
 function PosterImage({ poster, className = '' }) {
   return (
+    // Natural aspect ratio — a fixed 16:9 cover crop was slicing off the
+    // sides of wide offer artwork ("20% weekly reload" read as "20% W").
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={poster.image_url}
       alt={poster.title || 'Promotion'}
-      className={`h-full w-full object-cover ${className}`}
+      className={`block h-auto w-full ${className}`}
     />
   );
 }
@@ -24,9 +26,7 @@ export default function PromotionPosterCard({ poster, className = '' }) {
   // image and the title never appeared on the site.
   const body = (
     <>
-      <div className="aspect-[16/9] w-full bg-black/20">
-        <PosterImage poster={poster} />
-      </div>
+      <PosterImage poster={poster} />
       {poster.title && (
         <div className="bg-white/[0.04] px-3 py-2">
           <p className="truncate text-sm font-black text-current">{poster.title}</p>

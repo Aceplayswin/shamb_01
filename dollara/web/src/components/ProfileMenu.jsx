@@ -6,13 +6,12 @@ import { useRouter } from 'next/navigation';
 import {
   Gift,
   History,
+  KeyRound,
   LogOut,
-  ScrollText,
-  Settings,
+  ReceiptText,
   Smartphone,
   Sparkles,
   User,
-  Users,
   Wallet,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
@@ -135,6 +134,10 @@ export function ProfileMenu({ variant = 'theme1', buttonClassName }) {
             <History className="h-4 w-4" />
             Bet History
           </Link>
+          <Link href="/transactions" role="menuitem" className={styles.item} onClick={() => setOpen(false)}>
+            <ReceiptText className="h-4 w-4" />
+            Transactions
+          </Link>
           <Link href="/promotions" role="menuitem" className={styles.item} onClick={() => setOpen(false)}>
             <Gift className="h-4 w-4" />
             Promotions
@@ -143,21 +146,13 @@ export function ProfileMenu({ variant = 'theme1', buttonClassName }) {
             <Sparkles className="h-4 w-4" />
             My Bonuses
           </Link>
-          <Link href="/refer" role="menuitem" className={styles.item} onClick={() => setOpen(false)}>
-            <Users className="h-4 w-4" />
-            Refer &amp; Earn
-          </Link>
-          <Link href="/settings" role="menuitem" className={styles.item} onClick={() => setOpen(false)}>
-            <Settings className="h-4 w-4" />
-            Settings
+          <Link href="/change-password" role="menuitem" className={styles.item} onClick={() => setOpen(false)}>
+            <KeyRound className="h-4 w-4" />
+            Change Password
           </Link>
           <Link href="/app" role="menuitem" className={styles.item} onClick={() => setOpen(false)}>
             <Smartphone className="h-4 w-4" />
             Get the App
-          </Link>
-          <Link href="/rules" role="menuitem" className={styles.item} onClick={() => setOpen(false)}>
-            <ScrollText className="h-4 w-4" />
-            Rules
           </Link>
           <button type="button" role="menuitem" className={styles.logout} onClick={handleLogout}>
             <LogOut className="h-4 w-4" />

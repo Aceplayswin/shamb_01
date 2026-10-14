@@ -2,13 +2,13 @@
 
 import Link from 'next/link';
 import { ShieldCheck } from 'lucide-react';
-import { useBranding, onLogoError } from '@/hooks/useBranding';
+import { useBranding } from '@/hooks/useBranding';
 import { useAuthStore } from '@/store/auth';
-import { SocialIconRow } from '@/components/SocialLinks';
+import { SocialIconRow, WhatsAppSupportLink } from '@/components/SocialLinks';
 
 const LINK_GROUPS = [
   { title: 'Play', links: ['Sports', 'Live Casino', 'Slots', 'Crash Games', 'Lottery'] },
-  { title: 'Account', links: ['Deposit', 'Withdraw', 'My Bets', 'Bonuses', 'KYC'] },
+  { title: 'Account', links: ['Deposit', 'Withdraw', 'My Bets', 'Bonuses'] },
   { title: 'Company', links: ['About', 'Affiliates', 'Blog', 'Careers', 'Contact'] },
   { title: 'Legal', links: ['Terms', 'Privacy', 'Responsible Gaming', 'Fairness'] },
 ];
@@ -28,16 +28,21 @@ export function Footer() {
         <div className="mx-auto max-w-[1400px]">
           <div className="flex flex-col items-center justify-between gap-3 border-t border-hairline/[0.06] py-5 sm:flex-row">
             <div className="flex items-center gap-2.5">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={branding.logo_url}
-                alt={brandName}
-                onError={onLogoError}
-                className="h-7 w-7 rounded-lg object-contain"
-              />
+              <span
+                className="grid h-7 w-7 place-items-center rounded-lg text-surface-950"
+                style={{ background: `linear-gradient(135deg, ${branding.theme_color}, ${branding.secondary_color})` }}
+              >
+                <span className="font-display text-xs font-black">
+                  {brandName.charAt(0).toUpperCase()}
+                </span>
+              </span>
               <span className="text-xs text-muted">© 2026 {brandName}</span>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-muted">
+              <WhatsAppSupportLink
+                className="inline-flex items-center gap-1.5 font-bold text-emerald-400 transition-colors hover:text-emerald-300"
+                iconClassName="h-3.5 w-3.5"
+              />
               <span className="rounded border border-hairline/10 px-1.5 py-0.5 text-red-400">18+</span>
               <span>Play responsibly</span>
             </div>
@@ -73,25 +78,27 @@ export function Footer() {
           {/* Brand + support — spans wider */}
           <div className="col-span-2 space-y-4">
             <div className="flex items-center gap-2.5">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={branding.logo_url}
-                alt={brandName}
-                onError={onLogoError}
-                className="h-9 w-9 rounded-xl object-contain"
-              />
+              <span
+                className="grid h-9 w-9 place-items-center rounded-xl text-surface-950 shadow-glow"
+                style={{ background: `linear-gradient(135deg, ${branding.theme_color}, ${branding.secondary_color})` }}
+              >
+                <span className="font-display text-sm font-black">
+                  {brandName.charAt(0).toUpperCase()}
+                </span>
+              </span>
               <span className="font-display text-xl font-extrabold text-app-fg">{brandName}</span>
             </div>
             <p className="max-w-xs text-xs leading-relaxed text-muted">
               The premier platform for live, uninterrupted betting across Cricket, Soccer, Aviator, Andar Bahar and 2,000+ games.
             </p>
-            {/* Social channels — admin-controlled (Admin → Content → Social
-                Links). Renders nothing until at least one is configured, so an
-                unconfigured product shows no empty row here. */}
             <SocialIconRow
-              className="flex items-center gap-2.5"
-              itemClassName="grid h-8 w-8 place-items-center rounded-full border border-hairline/10 text-muted transition hover:border-brand-400/40 hover:text-brand-400"
+              className="flex gap-3"
+              itemClassName="grid h-9 w-9 place-items-center rounded-full border border-hairline/10 text-muted transition hover:border-brand-400/50 hover:text-brand-400"
             />
+            <div className="space-y-2">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-app-fg">Support</h3>
+              <WhatsAppSupportLink className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm font-bold text-emerald-400 transition-colors hover:bg-emerald-500/20" />
+            </div>
           </div>
 
           {LINK_GROUPS.map((group) => (

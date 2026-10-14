@@ -8,6 +8,9 @@ import { useAuthStore } from '@/store/auth';
 
 const SWAL_BASE = { confirmButtonColor: '#F5C542', background: '#0d1420', color: '#e2e8f0' };
 
+/** Flip to true to show Play Demo CTAs again. Hook/API path stays in place. */
+export const DEMO_ACCOUNT_ENABLED = false;
+
 /**
  * Activates a disposable demo session (virtual balance, playable like a real
  * account, flagged is_demo on the backend). Shared by the header CTA and login.
@@ -21,7 +24,7 @@ export function useDemoLogin({ swal = {}, redirectTo = '/' } = {}) {
   optsRef.current = { swal, redirectTo };
 
   const tryDemo = useCallback(async () => {
-    if (busyRef.current) return;
+    if (!DEMO_ACCOUNT_ENABLED || busyRef.current) return;
     busyRef.current = true;
     setDemoLoading(true);
     try {

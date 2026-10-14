@@ -1,8 +1,8 @@
 'use client';
 
 // Theme5 home — VELPLAY light portal. Sections in reference order:
-//   hero banner · bonus strip (first deposit / reload / refer) · Live Sports rail ·
-//   Casino provider lobby · Trending Games · Trending Slot · Exclusive Elite
+//   hero banner · bonus strip (first deposit / reload / cashback) · Live Sports rail ·
+//   Casino provider lobby · All Games · Fantasy · Trending Slot · Exclusive Elite
 //   Offers · Game Providers · Why Choose · FAQ.
 //
 // Games come from the shared useGameCatalog and the provider circles are derived
@@ -32,10 +32,9 @@ import { usePromotions } from '@/hooks/usePromotions';
 import BannerCarousel from '@/components/BannerCarousel';
 import { useBranding } from '@/hooks/useBranding';
 import { useAuthStore } from '@/store/auth';
-import { filterByCategory, filterFeatured, NAV_GAME_LINKS, playPath } from '@/lib/gameRoutes';
+import { NAV_GAME_LINKS, playPath, providerEntries, providerHref, PROVIDERS_HREF } from '@/lib/gameRoutes';
 import { useAuthModal } from '../shell/authModalContext';
 import { T5SectionBar, T5Card } from '../components/ui';
-import SupportFab from '@/components/SupportFab';
 
 /* ── hero fallback (only when the product admin has uploaded no banners) ── */
 const SLIDES = [
@@ -58,6 +57,38 @@ const SLIDES = [
     bg: 'linear-gradient(120deg, #0f1b33 0%, #1d2b52 45%, #2a1a3f 100%)',
   },
 ];
+
+// Landing-page registration call to action, shown to signed-out visitors only.
+function SignupPrompt({ onSignup, onLogin }) {
+  return (
+    <section className="mt-3 flex flex-col items-center justify-between gap-3 rounded-xl bg-[#101c33] px-5 py-4 text-center shadow-sm sm:flex-row sm:text-left">
+      <div>
+        <p className="font-display text-base font-black text-white sm:text-lg">
+          Create your free account
+        </p>
+        <p className="mt-0.5 text-xs text-white/70">
+          Sign up in seconds to claim your welcome bonus and start playing.
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <button
+          type="button"
+          onClick={onSignup}
+          className="rounded-lg bg-[#f5c518] px-6 py-2.5 text-sm font-black uppercase tracking-wide text-[#101c33] shadow transition hover:brightness-110"
+        >
+          Sign Up
+        </button>
+        <button
+          type="button"
+          onClick={onLogin}
+          className="rounded-lg border border-white/25 px-5 py-2.5 text-sm font-black uppercase tracking-wide text-white transition hover:bg-white/10"
+        >
+          Log In
+        </button>
+      </div>
+    </section>
+  );
+}
 
 function HeroFallback({ onCta }) {
   const [slide, setSlide] = useState(0);
@@ -112,34 +143,37 @@ const BONUSES = [
     href: '/promotions',
   },
   {
-    icon: '👥',
-    label: 'Refer & Earn',
-    headline: '₹500 PER',
-    sub: 'Per friend referred & deposited',
-    href: '/refer',
+    icon: '🔄',
+    label: 'Loss Cashback',
+    headline: '10% BACK',
+    sub: 'Weekly cashback on net losses',
+    href: '/promotions',
   },
 ];
 
 function BonusStrip() {
   return (
-    <section className="mt-3 grid gap-3 sm:grid-cols-3">
+    // Three across at every width. On mobile the card stacks its icon above the
+    // text and drops the long sub-line, since a third of a phone screen cannot
+    // hold the icon-beside-text layout the wider breakpoints use.
+    <section className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
       {BONUSES.map((b) => (
         <Link
           key={b.label}
           href={b.href}
-          className="flex items-center gap-3 rounded-xl bg-white p-4 shadow-sm transition hover:shadow-md"
+          className="flex flex-col items-center gap-1.5 rounded-xl bg-white p-2.5 text-center shadow-sm transition hover:shadow-md sm:flex-row sm:items-center sm:gap-3 sm:p-4 sm:text-left"
         >
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[#f1f4f8] text-xl">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#f1f4f8] text-base sm:h-11 sm:w-11 sm:text-xl">
             {b.icon}
           </span>
-          <span className="min-w-0">
-            <span className="block text-[0.6rem] font-black uppercase tracking-[0.14em] text-[#94a3b8]">
+          <span className="min-w-0 w-full">
+            <span className="block truncate text-[0.5rem] font-black uppercase tracking-[0.1em] text-[#94a3b8] sm:text-[0.6rem] sm:tracking-[0.14em]">
               {b.label}
             </span>
-            <span className="block truncate font-display text-lg font-black uppercase text-[#0f1b33]">
+            <span className="block truncate font-display text-[0.7rem] font-black uppercase text-[#0f1b33] sm:text-lg">
               {b.headline}
             </span>
-            <span className="block truncate text-[0.7rem] text-[#64748b]">{b.sub}</span>
+            <span className="hidden truncate text-[0.7rem] text-[#64748b] sm:block">{b.sub}</span>
           </span>
         </Link>
       ))}
@@ -211,7 +245,35 @@ function GameRail({ icon, title, games, seeAllHref, loading, onPlay }) {
 /* ── exclusive elite offers ── */
 function EliteOffers({ promotions }) {
   const offers = promotions.slice(0, 2);
-  if (offers.length === 0) return null;
+
+  // No promotable bonuses configured yet. The section used to disappear
+  // entirely, which read as a broken/empty band where the heading had been —
+  // so it keeps its place and says plainly that offers are on the way.
+  if (offers.length === 0) {
+    return (
+      <section className="mt-4">
+        <T5SectionBar title="Exclusive Elite Offers" seeAllHref="/promotions" seeAllLabel="View All" />
+        <div
+          className="mt-2 flex min-h-[132px] flex-col items-center justify-center rounded-xl p-6 text-center shadow-sm"
+          style={{ background: 'linear-gradient(120deg, #101c33 0%, #1e2f56 55%, #3a2a14 100%)' }}
+        >
+          <p className="font-display text-lg font-black italic uppercase tracking-tight text-[#f5c518]">
+            New offers coming soon
+          </p>
+          <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-white/70">
+            Elite promotions land here the moment they go live. Check the
+            promotions page for everything running right now.
+          </p>
+          <Link
+            href="/promotions"
+            className="mt-3 inline-block text-[0.65rem] font-black uppercase tracking-wide text-white/80 transition hover:text-white"
+          >
+            View promotions →
+          </Link>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="mt-4">
@@ -249,18 +311,32 @@ function GameProviders({ providers }) {
 
   return (
     <section className="mt-4">
-      <T5SectionBar title="Game Providers" seeAllHref={NAV_GAME_LINKS.slots} seeAllLabel="View All" />
+      <T5SectionBar title="Game Providers" seeAllHref={PROVIDERS_HREF} seeAllLabel="View All" />
       <div className="mt-2 rounded-xl bg-white p-4 shadow-sm">
         <div className="flex gap-4 overflow-x-auto pb-1 scrollbar-hide">
-          {providers.map((name) => (
+          {providers.map(({ name, logoUrl }) => (
             <Link
               key={name}
-              href={NAV_GAME_LINKS.slots}
-              className="grid h-20 w-20 shrink-0 place-items-center rounded-full border border-black/[0.07] bg-white px-2 text-center shadow-sm transition hover:border-[#1d4ed8] hover:shadow-md"
+              href={providerHref(name)}
+              title={name}
+              className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-full border border-black/[0.07] bg-white p-2 text-center shadow-sm transition hover:border-[#1d4ed8] hover:shadow-md"
             >
-              <span className="line-clamp-2 text-[0.6rem] font-black uppercase leading-tight tracking-wide text-[#0f1b33]">
-                {name}
-              </span>
+              {logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={logoUrl}
+                  alt={name}
+                  loading="lazy"
+                  className="h-full w-full object-contain"
+                  // A dead logo URL must not leave an empty circle — drop the
+                  // image and let the name show through instead.
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+              ) : (
+                <span className="line-clamp-2 text-[0.6rem] font-black uppercase leading-tight tracking-wide text-[#0f1b33]">
+                  {name}
+                </span>
+              )}
             </Link>
           ))}
         </div>
@@ -281,18 +357,25 @@ function WhyChoose({ name }) {
   return (
     <section className="mt-4">
       <T5SectionBar title={`Why Choose ${name}?`} />
-      <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Four across at every width. On mobile the card centres its icon over
+          the label — a quarter of a phone screen is too narrow for the
+          icon-beside-text row the wider breakpoints use — and the label wraps
+          instead of truncating, since both words carry meaning. */}
+      <div className="mt-2 grid grid-cols-4 gap-2 sm:gap-3">
         {WHY.map(({ n, label, Icon }) => (
-          <T5Card key={n} className="flex items-center gap-3 p-4">
-            <div className="min-w-0 flex-1">
-              <p className="font-display text-xl font-black text-[#cbd5e1]">{n}</p>
-              <p className="mt-1 truncate text-xs font-black uppercase tracking-wide text-[#0f1b33]">
+          <T5Card
+            key={n}
+            className="flex flex-col items-center gap-1.5 p-2.5 text-center sm:flex-row sm:items-center sm:gap-3 sm:p-4 sm:text-left"
+          >
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#f1f4f8] text-[#1d4ed8] sm:order-2 sm:h-9 sm:w-9">
+              <Icon className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 w-full sm:order-1 sm:flex-1">
+              <p className="font-display text-sm font-black text-[#cbd5e1] sm:text-xl">{n}</p>
+              <p className="mt-0.5 text-[0.55rem] font-black uppercase leading-tight tracking-tight text-[#0f1b33] sm:mt-1 sm:truncate sm:text-xs sm:tracking-wide">
                 {label}
               </p>
             </div>
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#f1f4f8] text-[#1d4ed8]">
-              <Icon className="h-4 w-4" />
-            </span>
           </T5Card>
         ))}
       </div>
@@ -338,34 +421,64 @@ function Faq() {
   );
 }
 
+// How many tiles each home rail holds. The rails scroll horizontally, so this
+// is the depth of the row rather than a hard cap on the category.
+const RAIL_SIZE = 24;
+
 /* ── page ── */
 export default function Theme5Home() {
   const router = useRouter();
   const { open } = useAuthModal();
   const branding = useBranding();
+  // One request per rail. A single limited catalog call cannot back these rows:
+  // the catalog is ordered by sort_order, so the biggest categories fill the
+  // window and the smaller ones (sports, fantasy) get truncated to a tile or
+  // two. Asking per category guarantees each rail sees its own games. The hook
+  // caches by category, so these are one-time fetches per session.
+  const { games: sportsGames, loading: sportsLoading } = useGameCatalog({
+    category: 'sports',
+    limit: RAIL_SIZE,
+  });
+  const { games: casinoGames, loading: casinoLoading } = useGameCatalog({
+    category: 'live_casino',
+    limit: RAIL_SIZE,
+  });
+  const { games: slotGames, loading: slotsLoading } = useGameCatalog({
+    category: 'slots',
+    limit: RAIL_SIZE,
+  });
+  const { games: fantasyGames, loading: fantasyLoading } = useGameCatalog({
+    category: 'fantasy',
+    limit: RAIL_SIZE,
+  });
   const { games, loading } = useGameCatalog();
   const { banners } = useBanners();
   const { promotions } = usePromotions();
   const token = useAuthStore((s) => s.token);
 
-  const name = branding.product_name || 'DOLLARA';
+  const name = branding.product_name || 'MAHAKAL WORLD';
 
-  const sports = useMemo(() => filterByCategory(games, 'sports').slice(0, 14), [games]);
-  const casino = useMemo(() => filterByCategory(games, 'live_casino').slice(0, 14), [games]);
-  const slots = useMemo(() => filterByCategory(games, 'slots').slice(0, 14), [games]);
-  const trending = useMemo(() => filterFeatured(games, 14), [games]);
+  const sports = sportsGames;
+  const casino = casinoGames;
+  const slots = slotGames;
+  // "All Games" is the whole catalog, not the admin-flagged subset: the rail
+  // used to read the `featured: true` feed, so it showed only the handful of
+  // games an admin had flagged. It scrolls horizontally, so it takes a
+  // rail-sized window of the catalog and "See All" opens the rest.
+  const allGames = useMemo(() => games.slice(0, RAIL_SIZE), [games]);
 
   // Provider circles derived from the live catalog — no hardcoded logo list.
-  const providers = useMemo(() => {
-    const seen = [];
-    games.forEach((g) => {
-      if (g.provider_name && !seen.includes(g.provider_name)) seen.push(g.provider_name);
-    });
-    return seen.slice(0, 16);
-  }, [games]);
+  // Shared with the /providers directory so the rail and the full listing can't
+  // drift on what a provider is called or which logo it carries; the rail just
+  // takes the first screenful.
+  const providers = useMemo(() => providerEntries(games).slice(0, 16), [games]);
 
   const onPlay = (game) => {
-    if (game?.slug) router.push(playPath(game));
+    if (!game) return;
+    // Fall back to the game_uid when a game has no slug: silently ignoring the
+    // click made those tiles look like broken games that "do nothing".
+    if (game.slug) router.push(playPath(game));
+    else if (game.game_uid) router.push(`/play/${encodeURIComponent(game.game_uid)}`);
   };
 
   // Hero CTA: signed-in players go to the casino lobby; guests get the login modal.
@@ -382,6 +495,11 @@ export default function Theme5Home() {
         <HeroFallback onCta={onCta} />
       )}
 
+      {/* Guests get an explicit way to register from the landing page itself.
+          Sign-up previously existed only as a small header button, so a new
+          visitor landing here had no obvious route into creating an account. */}
+      {!token && <SignupPrompt onSignup={() => open('register')} onLogin={() => open('login')} />}
+
       <BonusStrip />
 
       <GameRail
@@ -389,7 +507,7 @@ export default function Theme5Home() {
         title="Live Sports"
         games={sports}
         seeAllHref={NAV_GAME_LINKS.sports}
-        loading={loading}
+        loading={sportsLoading}
         onPlay={onPlay}
       />
       <GameRail
@@ -397,23 +515,31 @@ export default function Theme5Home() {
         title="Casino (Provider Lobby)"
         games={casino}
         seeAllHref={NAV_GAME_LINKS.liveCasino}
-        loading={loading}
+        loading={casinoLoading}
         onPlay={onPlay}
       />
       <GameRail
         icon="🔥"
-        title="Trending Games"
-        games={trending}
-        seeAllHref={NAV_GAME_LINKS.liveCasino}
+        title="All Games"
+        games={allGames}
+        seeAllHref={NAV_GAME_LINKS.allGames}
         loading={loading}
         onPlay={onPlay}
       />
       <GameRail
         icon="🎮"
+        title="Fantasy"
+        games={fantasyGames}
+        seeAllHref={NAV_GAME_LINKS.fantasy}
+        loading={fantasyLoading}
+        onPlay={onPlay}
+      />
+      <GameRail
+        icon="🎰"
         title="Trending Slot"
         games={slots}
         seeAllHref={NAV_GAME_LINKS.slots}
-        loading={loading}
+        loading={slotsLoading}
         onPlay={onPlay}
       />
 
@@ -421,7 +547,6 @@ export default function Theme5Home() {
       <GameProviders providers={providers} />
       <WhyChoose name={name} />
       <Faq />
-      <SupportFab />
     </div>
   );
 }

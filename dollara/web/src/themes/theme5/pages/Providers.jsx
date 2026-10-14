@@ -12,37 +12,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Play } from 'lucide-react';
 import { useGameCatalog } from '@/hooks/useGameCatalog';
-import { filterByProvider, playPath } from '@/lib/gameRoutes';
+import { filterByProvider, playPath, providerEntries, providerHref, PROVIDERS_HREF } from '@/lib/gameRoutes';
 import { T5SectionBar } from '../components/ui';
-
-// dollara's shared lib/gameRoutes.js does not (yet) carry a provider-directory
-// helper the way mahakalworld's does (PROVIDERS_HREF / providerHref /
-// providerEntries) — kept here, local to this page, rather than reaching into
-// the shared lib from a single-theme change, so no other theme's build is
-// affected by this port.
-const PROVIDERS_HREF = '/providers';
-
-function providerHref(providerName) {
-  return providerName
-    ? `${PROVIDERS_HREF}?provider=${encodeURIComponent(providerName)}`
-    : PROVIDERS_HREF;
-}
-
-// Distinct provider names present in a catalog, in catalog order, each with
-// the vendor logo the admin set against it (games API: `provider_logo_url`).
-// `logoUrl` is null when the provider has no logo, so callers fall back to
-// rendering the name.
-function providerEntries(games) {
-  const seen = new Map();
-  games.forEach((g) => {
-    if (!g.provider_name || seen.has(g.provider_name)) return;
-    seen.set(g.provider_name, {
-      name: g.provider_name,
-      logoUrl: g.provider_logo_url || null,
-    });
-  });
-  return [...seen.values()];
-}
 
 // Above the whole catalog, so every provider and every game is represented.
 const CATALOG_LIMIT = 2000;
@@ -164,8 +135,8 @@ export default function Theme5Providers() {
         {/* Wraps instead of scrolling horizontally: this is the full directory,
             so every provider should be reachable without dragging a rail. */}
         <div className="flex flex-wrap gap-4">
-          {providers.map(({ name, logoUrl, count }) => (
-            <ProviderCircle key={name} name={name} logoUrl={logoUrl} count={count} />
+          {providers.map(({ name, count }) => (
+            <ProviderCircle key={name} name={name} count={count} />
           ))}
         </div>
         {!loading && providers.length === 0 && (

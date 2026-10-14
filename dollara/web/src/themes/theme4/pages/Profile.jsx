@@ -40,7 +40,6 @@ export default function Theme4Profile() {
         <Row label="Name" value={user?.full_name} />
         <Row label="MemberId" value={user?.username} />
         <Row label="Phone" value={user?.phone} />
-        <Row label="KYC" value={user?.kyc_status} />
         <Row label="Account" value={user?.account_status} />
       </T4Card>
 

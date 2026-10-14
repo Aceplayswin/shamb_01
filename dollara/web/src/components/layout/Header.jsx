@@ -20,17 +20,16 @@ import {
   Spade,
   Tv,
   HeartHandshake,
-  Settings,
+  KeyRound,
   Search,
   Download,
   Wallet,
   Plus,
+  Sparkles,
   User,
-  Play,
-  Loader2,
 } from 'lucide-react';
-import { useBranding, onLogoError } from '@/hooks/useBranding';
-import { useDemoLogin } from '@/hooks/useDemoLogin';
+import { useBranding } from '@/hooks/useBranding';
+import { DEMO_ACCOUNT_ENABLED, useDemoLogin } from '@/hooks/useDemoLogin';
 import { NAV_GAME_LINKS } from '@/lib/gameRoutes';
 import { ThemeToggleButton } from '@/components/ThemeToggle';
 import { UserAuthActions } from '@/components/UserAuthActions';
@@ -123,11 +122,12 @@ export function Header() {
     ...MOBILE_TABS_BASE,
     { label: 'Account', href: token ? '/profile' : '/login', icon: User },
   ];
-  // Show the player's real balance, NOT `available`. A pending withdrawal only
-  // holds funds — nothing is debited until an admin approves it — so netting the
-  // hold off here made the pill read ₹0.00 and look like the money was already
-  // taken. The hold is called out in the tooltip and on the wallet page instead.
-  const balance = wallet?.main ?? wallet?.real ?? 0;
+  // Show the player's real + bonus balance, NOT `available`. A pending
+  // withdrawal only holds funds — nothing is debited until an admin approves
+  // it — so netting the hold off here made the pill read too low and look
+  // like the money was already taken. The hold is called out in the tooltip
+  // and on the wallet page instead.
+  const balance = wallet?.total ?? 0;
   const heldForWithdrawal = wallet?.pendingWithdrawal ?? wallet?.locked ?? 0;
   return (
     <>
@@ -138,8 +138,23 @@ export function Header() {
           title={brandName}
           className="flex h-16 shrink-0 items-center justify-center border-b border-hairline/[0.06]"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={branding.logo_url} alt={brandName} onError={onLogoError} className="h-10 w-10 rounded-xl object-contain" />
+          {branding.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={branding.logo_url} alt={brandName} className="h-10 w-10 rounded-xl object-contain" />
+          ) : (
+            <span className="relative grid h-10 w-10 place-items-center">
+              <span
+                className="absolute inset-0 rounded-xl blur-[6px] opacity-60"
+                style={{ backgroundColor: branding.theme_color }}
+              />
+              <span
+                className="relative grid h-10 w-10 place-items-center rounded-xl shadow-glow"
+                style={{ background: `linear-gradient(135deg, ${branding.theme_color}, ${branding.secondary_color})` }}
+              >
+                <Sparkles className="h-4 w-4 text-surface-950" strokeWidth={2.5} />
+              </span>
+            </span>
+          )}
         </Link>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-3 pt-3 scrollbar-hide">
@@ -153,7 +168,7 @@ export function Header() {
         </nav>
 
         <div className="shrink-0 space-y-1 border-t border-hairline/[0.06] px-2 py-3">
-          <RailItem item={{ label: 'Settings', href: token ? '/settings' : '/login', icon: Settings }} />
+          <RailItem item={{ label: 'Change Password', href: token ? '/change-password' : '/login', icon: KeyRound }} />
         </div>
       </aside>
 
@@ -167,8 +182,17 @@ export function Header() {
       <header className="fixed inset-x-0 top-0 z-30 flex h-16 items-center gap-2 border-b border-hairline/[0.06] bg-panel-strong/80 px-3 backdrop-blur-xl sm:gap-3 sm:px-4 lg:left-[92px]">
         {/* Brand: logo + name on mobile; name only on desktop (logo lives in side rail) */}
         <Link href="/" className="flex min-w-0 items-center gap-2 lg:hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={branding.logo_url} alt={brandName} onError={onLogoError} className="h-9 w-9 shrink-0 rounded-xl object-contain" />
+          {branding.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={branding.logo_url} alt={brandName} className="h-9 w-9 shrink-0 rounded-xl object-contain" />
+          ) : (
+            <span
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-xl shadow-glow"
+              style={{ background: `linear-gradient(135deg, ${branding.theme_color}, ${branding.secondary_color})` }}
+            >
+              <Sparkles className="h-4 w-4 text-surface-950" strokeWidth={2.5} />
+            </span>
+          )}
           <span className="truncate font-display text-base font-extrabold text-app-fg sm:text-lg">{brandName}</span>
         </Link>
         <Link href="/" className="hidden shrink-0 font-display text-lg font-extrabold text-app-fg lg:block">
@@ -209,20 +233,14 @@ export function Header() {
             <span className="hidden sm:inline">Get the app</span>
           </button>
 
-          {/* Play Demo — reachable at every width. Icon-only on narrow screens
-              (the same shape as "Get the app" above) so phones keep the action
-              instead of dropping it out of the bar. */}
-          {!token && (
+          {DEMO_ACCOUNT_ENABLED && !token && (
             <button
               type="button"
               onClick={tryDemo}
               disabled={demoLoading}
-              title="Play Demo"
-              aria-label="Play Demo"
-              className="inline-flex items-center gap-2 rounded-xl border border-hairline/10 px-2.5 py-2 text-xs font-bold text-app-fg transition hover:border-brand-400/50 hover:bg-panel disabled:opacity-60 xl:px-4"
+              className="hidden rounded-xl border border-hairline/10 px-4 py-2 text-xs font-bold text-app-fg transition hover:border-brand-400/50 hover:bg-panel disabled:opacity-60 xl:inline-flex"
             >
-              {demoLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              <span className="hidden xl:inline">{demoLoading ? 'Starting…' : 'Play Demo'}</span>
+              {demoLoading ? 'Starting…' : 'Play Demo'}
             </button>
           )}
 

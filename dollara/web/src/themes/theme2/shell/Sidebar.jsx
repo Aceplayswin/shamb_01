@@ -5,7 +5,6 @@ import {
   Home, Dices, Trophy, Tv, Gift, Crown, Medal, Ticket, LifeBuoy,
 } from 'lucide-react';
 import { NAV_GAME_LINKS } from '@/lib/gameRoutes';
-import { useBranding, onLogoError } from '@/hooks/useBranding';
 
 const NAV = [
   { label: 'Home', href: '/', icon: Home },
@@ -20,9 +19,6 @@ const NAV = [
 ];
 
 export function Theme2Sidebar({ open, onClose }) {
-  const branding = useBranding();
-  const brandName = branding.product_name || 'WAXCASINO';
-
   return (
     <>
       {/* Mobile overlay */}
@@ -36,17 +32,12 @@ export function Theme2Sidebar({ open, onClose }) {
         } group/sidebar`}
       >
         {/* Brand */}
-        <Link href="/" title={brandName} className="flex h-16 items-center gap-2.5 border-b border-white/5 px-5">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={branding.logo_url} alt={brandName} onError={onLogoError} className="h-9 w-9 shrink-0 rounded-full object-contain" />
+        <Link href="/" className="flex h-16 items-center gap-2.5 border-b border-white/5 px-5">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-black shadow-[0_0_18px_-4px_rgba(245,197,66,0.8)]">
+            <Dices className="h-5 w-5" strokeWidth={2.5} />
+          </span>
           <span className="whitespace-nowrap font-display text-base font-black leading-none text-white lg:opacity-0 lg:transition-opacity group-hover/sidebar:lg:opacity-100">
-            {branding.product_name ? (
-              brandName
-            ) : (
-              <>
-                WAX<span className="text-amber-400">CASINO</span>
-              </>
-            )}
+            WAX<span className="text-amber-400">CASINO</span>
             <span className="block text-[0.55rem] font-bold tracking-[0.3em] text-amber-400/70">WIN BIG</span>
           </span>
         </Link>

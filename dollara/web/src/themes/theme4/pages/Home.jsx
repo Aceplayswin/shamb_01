@@ -20,7 +20,6 @@ import { useAuthStore } from '@/store/auth';
 import { filterFeatured, NAV_GAME_LINKS, playPath } from '@/lib/gameRoutes';
 import { useAuthModal } from '../shell/authModalContext';
 import { T4SectionBar } from '../components/ui';
-import SupportFab from '@/components/SupportFab';
 
 /* ── hero carousel ── */
 const SLIDES = [
@@ -260,10 +259,12 @@ const BOARDS = [
   },
 ];
 
+// Fixture labels carry the year too, so a date never reads ambiguously across
+// a year boundary. Kick-off times live in the row's own time column.
 function fixtureDate(dayOffset) {
   const d = new Date();
   d.setDate(d.getDate() + dayOffset);
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 function OddsCell({ value, kind }) {
@@ -421,7 +422,6 @@ export default function Theme4Home() {
         {BOARDS.map((b) => <OddsBoard key={b.title} board={b} />)}
         <Theme4Faq />
       </div>
-      <SupportFab />
     </div>
   );
 }

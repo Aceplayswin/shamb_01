@@ -1,7 +1,6 @@
 /* ── Theme 5 (Velplay) ───────────────────────────────────────────────────────
-   A light three-column portal (Velplay365 reference): black news ticker, white
-   nav header on a blue rule, gray page surface, white cards, and navy angled
-   section tabs. Scoped to `.theme5-root` so the palette holds regardless of the
+   A light three-column portal (Velplay365 reference): white nav header on a
+   blue rule, gray page surface, white cards, and navy angled section tabs. Scoped to `.theme5-root` so the palette holds regardless of the
    app-wide light/dark toggle (mirrors theme2/3/4 scoping).
 
    Loaded by this theme's manifest (./index.js), so it ships only when theme5
@@ -42,7 +41,74 @@
   background: linear-gradient(90deg, var(--t5-navy) 0%, #1b2a48 100%);
 }
 
-/* Blue underline under the active top-nav item. */
-.theme5-nav-active {
-  box-shadow: inset 0 -3px 0 0 var(--t5-blue);
+
+/* ── Nav strips ──────────────────────────────────────────────────────────────
+   The category bar is navy (matching the section tabs and panel heads), with
+   the lighter subcategory rail beneath it. Inverting the two gives the nav a
+   solid anchor instead of two near-white strips stacked on each other. */
+.theme5-catbar {
+  background: linear-gradient(180deg, var(--t5-navy) 0%, #16243f 100%);
+  box-shadow: inset 0 -1px 0 0 rgb(255 255 255 / 8%);
+}
+
+/* Edge fades over the navy bar — must match its gradient, not a flat colour. */
+.theme5-fade-l {
+  background: linear-gradient(90deg, var(--t5-navy) 0%, transparent 100%);
+}
+
+.theme5-fade-r {
+  background: linear-gradient(270deg, var(--t5-navy) 0%, transparent 100%);
+}
+
+/* The lit panel behind the active category tab. */
+.theme5-cat-active {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px 8px 0 0;
+  background: linear-gradient(180deg, rgb(255 255 255 / 4%) 0%, rgb(245 197 24 / 14%) 100%);
+}
+
+/* Scroll chevrons. Sized in px because globals.css sets html{font-size:14px},
+   so rem-based sizing would render these below a comfortable touch target.
+   A transparent ::before pads the hit area to 44px square on touch without
+   enlarging the visible disc. */
+.theme5-scroll-btn {
+  width: 34px;
+  height: 34px;
+  position: absolute;
+}
+
+.theme5-scroll-btn::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 9999px;
+}
+
+@media (min-width: 768px) {
+  .theme5-scroll-btn {
+    width: 30px;
+    height: 30px;
+  }
+
+  /* Pointer devices don't need the padded hit area. */
+  .theme5-scroll-btn::before {
+    content: none;
+  }
+}
+
+/* Both nav rails centre their items while they fit, and scroll normally once
+   they overflow.
+
+   `justify-content: center` alone would be wrong here: on an overflowing
+   scroller it pushes the first items past the left edge, where they can't be
+   scrolled back to. Auto margins on the flex children centre the row only when
+   there is slack to distribute, and collapse to zero when there isn't — so the
+   overflow case degrades to a plain left-aligned scroller. */
+.theme5-rail-center > :first-child {
+  margin-left: auto;
+}
+
+.theme5-rail-center > :last-child {
+  margin-right: auto;
 }
