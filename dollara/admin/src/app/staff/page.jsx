@@ -25,7 +25,6 @@ import {
 const BLANK = {
   username: '',
   full_name: '',
-  email: '',
   password: '',
   account_status: 'active',
 };
@@ -45,7 +44,6 @@ export default function AdminStaffPage() {
     setForm({
       username: row.username ?? '',
       full_name: row.full_name ?? '',
-      email: row.email ?? '',
       password: '',
       account_status: row.account_status,
     });
@@ -109,7 +107,7 @@ export default function AdminStaffPage() {
           </span>
           <div>
             <p className="font-medium text-white">{r.username}</p>
-            <p className="text-xs text-slate-500">{r.email || r.full_name || '—'}</p>
+            <p className="text-xs text-slate-500">{r.full_name || '—'}</p>
           </div>
         </div>
       ),
@@ -155,7 +153,7 @@ export default function AdminStaffPage() {
         rows={staff}
         loading={loading}
         searchable
-        searchKeys={['username', 'email']}
+        searchKeys={['username', 'full_name']}
         searchPlaceholder="Search staff…"
         noun="admin"
         emptyIcon={ShieldCheck}
@@ -193,14 +191,6 @@ export default function AdminStaffPage() {
             <Input
               value={form.full_name}
               onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-              placeholder="Optional"
-            />
-          </Field>
-          <Field label="Email">
-            <Input
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
               placeholder="Optional"
             />
           </Field>

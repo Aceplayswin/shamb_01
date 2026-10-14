@@ -25,7 +25,7 @@ import { adminApi } from '@/services/adminApi';
 export default function AgentListPage() {
   const router = useRouter();
   const { data, loading, error, reload, setData } = useAdminData(
-    '/api/v1/admin/agents?limit=200',
+    '/api/v1/admin/agents',
     [],
   );
 

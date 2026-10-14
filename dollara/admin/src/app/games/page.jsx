@@ -18,14 +18,14 @@ import {
   useAdminData,
 } from '@/components/admin/AdminShell';
 
-const CATEGORIES = ['slots', 'live_casino', 'sports', 'lottery', 'ai_games', 'fantasy', 'virtual_sports'];
-
+// Categories are managed under Catalog ▸ Category and loaded from the API, so a
+// new vertical shows up here without a code change.
 const catLabel = (c) => c.replace(/_/g, ' ');
 
 const emptyGame = {
   name: '',
   slug: '',
-  category: 'slots',
+  category_id: '',
   provider_id: '',
   game_uid: '',
   game_type: '',
@@ -42,19 +42,21 @@ const emptyGame = {
 export default function AdminGamesPage() {
   const { data: games, loading, reload } = useAdminData('/api/v1/admin/games');
   const { data: providers } = useAdminData('/api/v1/admin/providers');
+  const { data: categories } = useAdminData('/api/v1/admin/categories');
+  const activeCategories = categories?.filter((c) => c.is_active) ?? [];
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyGame);
   const [busy, setBusy] = useState(false);
 
   const openCreate = () => {
-    setForm(emptyGame);
+    setForm({ ...emptyGame, category_id: activeCategories[0]?.id ?? '' });
     setEditing('new');
   };
   const openEdit = (g) => {
     setForm({
       name: g.name,
       slug: g.slug,
-      category: g.category,
+      category_id: g.category_id || '',
       provider_id: g.provider_id || '',
       game_uid: g.game_uid || '',
       game_type: g.game_type || '',
@@ -76,6 +78,7 @@ export default function AdminGamesPage() {
     const payload = {
       ...form,
       provider_id: form.provider_id || null,
+      category_id: form.category_id || null,
       game_uid: form.game_uid?.trim() || null,
       game_type: form.game_type?.trim() || null,
       thumbnail_url: form.thumbnail_url?.trim() || null,
@@ -126,9 +129,15 @@ export default function AdminGamesPage() {
     {
       key: 'category',
       label: 'Category',
-      render: (r) => <span className="capitalize text-slate-300">{r.category.replace(/_/g, ' ')}</span>,
+      render: (r) => (
+        <span className="capitalize text-slate-300">
+          {r.category_name || catLabel(r.category ?? '')}
+        </span>
+      ),
       filter: 'select',
-      filterOptions: CATEGORIES.map((c) => ({ value: c, label: catLabel(c) })),
+      // Filter on the display name so the dropdown reads "Live Casino" rather
+      // than the raw slug; options are derived from whatever the catalog holds.
+      filterAccessor: (r) => r.category_name || catLabel(r.category ?? ''),
     },
     {
       key: 'provider_name',
@@ -204,9 +213,14 @@ export default function AdminGamesPage() {
               <Input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} required />
             </Field>
             <Field label="Category">
-              <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>
+              <Select
+                value={form.category_id}
+                onChange={(e) => setForm({ ...form, category_id: e.target.value })}
+                required
+              >
+                <option value="" disabled>Select a category</option>
+                {activeCategories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </Select>
             </Field>

@@ -13,14 +13,13 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Search, X, Download, Inbox } from 'lucide-react';
+import { Search, X, Inbox } from 'lucide-react';
 import { adminApi } from '@/services/adminApi';
 import {
   AdminShell,
   Button,
   Card,
   DataTable,
-  EmptyState,
   ErrorState,
   Field,
   Input,
@@ -342,157 +341,6 @@ export function SearchPage({
         {children}
       </div>
     </AdminShell>
-  );
-}
-
-/* --------------------------- report scaffolding ------------------------- */
-
-/** Headline figure above a report, as the reference's "Total …" banner. */
-export function TotalBanner({ label, value, tone = 'default' }) {
-  const tones = {
-    default: 'text-white',
-    positive: 'text-emerald-400',
-    negative: 'text-rose-400',
-  };
-  return (
-    <Card className="px-5 py-4 text-center">
-      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-        {label}
-      </p>
-      <p className={`mt-1 font-display text-2xl font-bold ${tones[tone] ?? tones.default}`}>
-        {value}
-      </p>
-    </Card>
-  );
-}
-
-/**
- * A "name / amount / %" breakdown block — the shape every finance report uses
- * for its By Web, By Currency and By Country sections.
- */
-export function BreakdownTable({ title, data, money = true }) {
-  const rows = data?.rows ?? [];
-  return (
-    <Card className="overflow-hidden">
-      <div className="border-b border-slate-800 px-5 py-4">
-        <h2 className="font-display text-sm font-bold text-white">{title}</h2>
-      </div>
-      {rows.length === 0 ? (
-        <div className="px-5 py-8">
-          <EmptyState title="No Records Found" />
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-800 text-left">
-                <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  {data?.label ?? 'Name'}
-                </th>
-                <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Amount
-                </th>
-                <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  %
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.name} className="border-b border-slate-800/60 last:border-0">
-                  <td className="px-5 py-3 text-slate-200">{r.name}</td>
-                  <td className="px-5 py-3 font-medium text-white">
-                    {money ? inr(r.amount) : Number(r.amount).toLocaleString('en-IN')}
-                  </td>
-                  <td className="px-5 py-3 text-slate-400">{r.percent ?? 0}%</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Card>
-  );
-}
-
-/**
- * Day-by-day evolution rendered as bars.
- *
- * Deliberately plain CSS rather than a charting library: the console ships no
- * chart dependency and a bar per day is all the reference shows.
- */
-export function EvolutionChart({ title, series = [], valueKey = 'amount', money = true }) {
-  const max = Math.max(...series.map((s) => Number(s[valueKey]) || 0), 0);
-
-  return (
-    <Card className="p-5">
-      <h2 className="font-display text-sm font-bold text-white">{title}</h2>
-      {series.length === 0 ? (
-        <p className="mt-6 text-center text-sm text-slate-500">No Records Found</p>
-      ) : (
-        <div className="mt-5 flex h-48 items-end gap-1 overflow-x-auto">
-          {series.map((s) => {
-            const value = Number(s[valueKey]) || 0;
-            // Keep a hairline for zero days so the axis still reads as a series.
-            const height = max > 0 ? Math.max(2, (value / max) * 100) : 2;
-            return (
-              <div
-                key={s.date}
-                className="group relative flex min-w-[14px] flex-1 flex-col justify-end"
-                title={`${s.date}: ${money ? inr(value) : value}`}
-              >
-                <div
-                  className="rounded-t bg-indigo-500/70 transition group-hover:bg-indigo-400"
-                  style={{ height: `${height}%` }}
-                />
-              </div>
-            );
-          })}
-        </div>
-      )}
-      {series.length > 0 && (
-        <div className="mt-2 flex justify-between text-[10px] text-slate-500">
-          <span>{series[0]?.date}</span>
-          <span>{series[series.length - 1]?.date}</span>
-        </div>
-      )}
-    </Card>
-  );
-}
-
-/** Download the current report as Excel, honouring the applied filters. */
-export function ExportButton({ slug, filters }) {
-  const [busy, setBusy] = useState(false);
-
-  const download = async () => {
-    setBusy(true);
-    try {
-      const { API_URL } = await import('@/services/tenant');
-      const token = localStorage.getItem('admin_token');
-      const res = await fetch(
-        `${API_URL}/api/v1/admin/bo/reports/${slug}/export${toQuery(filters)}`,
-        { headers: token ? { Authorization: `Bearer ${token}` } : {} },
-      );
-      if (!res.ok) throw new Error('Export failed');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${slug}-${new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-')}.xlsx`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      // Surfacing this via toast would need the caller's context; the button
-      // simply stops spinning and the operator can retry.
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Button size="sm" variant="secondary" icon={Download} busy={busy} onClick={download}>
-      Download Excel
-    </Button>
   );
 }
 

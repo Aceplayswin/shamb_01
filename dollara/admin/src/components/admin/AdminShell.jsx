@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { createPortal } from 'react-dom';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -12,10 +12,9 @@ import {
   ArrowUpFromLine,
   Gamepad2,
   Building2,
-  Dices,
+  Layers,
   Gift,
   Settings,
-  PhoneCall,
   ShieldCheck,
   LogOut,
   Menu,
@@ -36,7 +35,6 @@ import {
   Image as ImageIcon,
   UploadCloud,
   History,
-  Smartphone,
   FileSpreadsheet,
   HelpCircle,
   CreditCard,
@@ -44,7 +42,6 @@ import {
   Wallet,
   ScrollText,
   Share2,
-  Layers,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { adminApi, adminUploadImage, clearAdminToken, getAdminRole, getAdminToken } from '@/services/adminApi';
@@ -62,9 +59,8 @@ const NAV_GROUPS = [
     label: 'Players',
     items: [
       { href: '/users', label: 'Users', icon: Users },
-      { href: '/bet-history', label: 'Bet History', icon: History },
-      { href: '/bets', label: 'Bets', icon: Dices },
       { href: '/players/online', label: 'Players Online', icon: Users },
+      { href: '/bet-history', label: 'Bet History', icon: History },
     ],
   },
   {
@@ -77,11 +73,6 @@ const NAV_GROUPS = [
     label: 'Cashier',
     items: [
       { href: '/cashier/methods', label: 'Payment Methods', icon: CreditCard },
-      { href: '/cashier/providers', label: 'Providers', icon: Building2 },
-      { href: '/cashier/bin-rules', label: 'BIN Rules', icon: ShieldCheck },
-      { href: '/cashier/frontend-rules', label: 'Front End Rules', icon: SlidersHorizontal },
-      { href: '/cashier/decline-queue', label: 'Decline Queue', icon: Inbox },
-      { href: '/cashier/upgrade-queue', label: 'Upgrade Queue', icon: Inbox },
     ],
   },
   {
@@ -91,42 +82,24 @@ const NAV_GROUPS = [
       { href: '/deposits', label: 'Deposits', icon: ArrowDownToLine },
       { href: '/withdrawals', label: 'Withdrawals', icon: ArrowUpFromLine },
       { href: '/bonuses', label: 'Bonuses', icon: Gift },
-      { href: '/bonus/list', label: 'Bonus List (New)', icon: Gift },
-      { href: '/bonus/create', label: 'Create Bonus', icon: Gift },
-      { href: '/bonus/exchange', label: 'Exchange Bonus', icon: Gift },
     ],
   },
   {
     label: 'Content',
     items: [
       { href: '/banners', label: 'Banners', icon: ImageIcon },
-      { href: '/faqs', label: 'FAQs', icon: HelpCircle },
-      { href: '/app', label: 'App Download', icon: Smartphone },
       { href: '/promotions', label: 'Promotions', icon: Sparkles },
+      { href: '/faqs', label: 'FAQs', icon: HelpCircle },
       { href: '/social-links', label: 'Social Links', icon: Share2 },
     ],
   },
   {
     label: 'Catalog',
     items: [
-      { href: '/games', label: 'Games', icon: Gamepad2 },
       { href: '/providers', label: 'Providers', icon: Building2 },
       { href: '/categories', label: 'Category', icon: Layers },
+      { href: '/games', label: 'Games', icon: Gamepad2 },
       { href: '/games/sort-order', label: 'Sort by Web', icon: SlidersHorizontal },
-    ],
-  },
-  {
-    label: 'Mailing',
-    items: [
-      { href: '/mailing/templates', label: 'Templates', icon: FileSpreadsheet },
-      { href: '/mailing/casino-config', label: 'Casino Configuration', icon: Settings },
-      { href: '/mailing/emailsms-config', label: 'Email/SMS Configuration', icon: Settings },
-    ],
-  },
-  {
-    label: 'Configurations',
-    items: [
-      { href: '/config/groups', label: 'User Groups', icon: ShieldCheck },
     ],
   },
   {
@@ -153,7 +126,6 @@ const NAV_GROUPS = [
     label: 'System',
     items: [
       { href: '/reports', label: 'Reports', icon: FileSpreadsheet },
-      { href: '/ai-calls', label: 'AI Calls', icon: PhoneCall },
       { href: '/settings', label: 'Settings', icon: Settings },
       { href: '/staff', label: 'Manage Admin', icon: ShieldCheck },
     ],
@@ -205,6 +177,14 @@ export async function confirmDialog({
 
 /* --------------------------------- Shell ---------------------------------- */
 
+// Is the element wholly inside its scroll container? A link that is merely
+// clipped at the edge still counts as off-screen for the operator.
+function isFullyVisible(el, container) {
+  const item = el.getBoundingClientRect();
+  const box = container.getBoundingClientRect();
+  return item.top >= box.top && item.bottom <= box.bottom;
+}
+
 function NavLink({ href, label, icon: Icon, exact, onNavigate }) {
   const pathname = usePathname();
   const active = exact ? pathname === href : pathname.startsWith(href);
@@ -212,6 +192,7 @@ function NavLink({ href, label, icon: Icon, exact, onNavigate }) {
     <Link
       href={href}
       onClick={onNavigate}
+      data-active={active ? 'true' : undefined}
       className={`group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${active
           ? 'bg-indigo-500/10 text-white'
           : 'text-slate-400 hover:bg-slate-800/70 hover:text-white'
@@ -229,9 +210,51 @@ function NavLink({ href, label, icon: Icon, exact, onNavigate }) {
   );
 }
 
+// Each admin page renders its own <AdminShell>, so every navigation unmounts and
+// remounts the sidebar — which would otherwise drop its scroll position and jump
+// back to the top, hiding the item the operator just clicked. Remembering the
+// offset at module scope (not state) survives those remounts within the session;
+// sessionStorage carries it across a full page refresh.
+const NAV_SCROLL_KEY = 'adminNavScroll';
+
+function readNavScroll() {
+  if (typeof window === 'undefined') return 0;
+  try {
+    return Number(window.sessionStorage.getItem(NAV_SCROLL_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 function SidebarContent({ onNavigate }) {
   const branding = useBranding();
   const brandName = branding.product_name;
+  const navRef = useRef(null);
+  const pathname = usePathname();
+
+  // Restore before paint so the sidebar never flashes at the top, then make sure
+  // the active link is actually on screen — on a deep link or a hard refresh
+  // there is no saved offset yet, and the current page may sit far down the list.
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    nav.scrollTop = readNavScroll();
+    const active = nav.querySelector('[data-active="true"]');
+    if (active && !isFullyVisible(active, nav)) {
+      active.scrollIntoView({ block: 'center' });
+    }
+  }, [pathname]);
+
+  // Persist as the operator scrolls, so the position is already saved by the time
+  // a click tears this component down.
+  const rememberScroll = useCallback((e) => {
+    try {
+      window.sessionStorage.setItem(NAV_SCROLL_KEY, String(e.currentTarget.scrollTop));
+    } catch {
+      // Private mode / storage disabled — the in-session position still works.
+    }
+  }, []);
+
   return (
     <>
       <Link
@@ -257,7 +280,11 @@ function SidebarContent({ onNavigate }) {
         </span>
       </Link>
 
-      <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-5 scrollbar-hide">
+      <nav
+        ref={navRef}
+        onScroll={rememberScroll}
+        className="flex-1 space-y-6 overflow-y-auto px-3 py-5 scrollbar-hide"
+      >
         {NAV_GROUPS.map((group) => (
           <div key={group.label}>
             <p className="px-3 pb-2 text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-slate-600">
@@ -401,6 +428,7 @@ const ACCENTS = {
   emerald: 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/20',
   rose: 'bg-rose-500/10 text-rose-400 ring-rose-500/20',
   sky: 'bg-sky-500/10 text-sky-400 ring-sky-500/20',
+  amber: 'bg-amber-500/10 text-amber-400 ring-amber-500/20',
 };
 
 export function StatCard({ label, value, icon: Icon, accent = 'brand', hint, trend }) {
@@ -504,7 +532,7 @@ export function ErrorState({ message, onRetry, className = '' }) {
   );
 }
 
-export function Field({ label, children, className = '' }) {
+export function Field({ label, children, hint, className = '' }) {
   return (
     <label className={`block ${className}`}>
       {label && (
@@ -513,6 +541,7 @@ export function Field({ label, children, className = '' }) {
         </span>
       )}
       {children}
+      {hint && <span className="mt-1.5 block text-xs text-slate-500">{hint}</span>}
     </label>
   );
 }
@@ -803,6 +832,9 @@ export function StatusBadge({ status }) {
     actioned: 'bg-red-500/15 text-red-400 ring-red-500/30',
     dismissed: 'bg-slate-500/15 text-slate-400 ring-slate-500/30',
     closed: 'bg-slate-500/15 text-slate-400 ring-slate-500/30',
+    // How a player account came to exist, shown on the users listing.
+    self_registered: 'bg-sky-500/15 text-sky-400 ring-sky-500/30',
+    admin_registered: 'bg-amber-500/15 text-amber-400 ring-amber-500/30',
     // Fraud risk levels, shown through the same badge.
     low: 'bg-slate-500/15 text-slate-400 ring-slate-500/30',
     medium: 'bg-amber-500/15 text-amber-400 ring-amber-500/30',
@@ -890,14 +922,51 @@ export function TxReference({ reference, transaction }) {
               <TxDetailRow label="Type">
                 <span className="capitalize">{String(tx.type).replace(/_/g, ' ')}</span>
               </TxDetailRow>
-              <TxDetailRow label="Amount">{inr(tx.amount)}</TxDetailRow>
+              {tx.type === 'bet_settlement' && (
+                <>
+                  <TxDetailRow label="Game">{tx.game_name || '—'}</TxDetailRow>
+                  <TxDetailRow label="Provider">{tx.game_provider || '—'}</TxDetailRow>
+                </>
+              )}
+              {tx.type === 'bet_settlement' && tx.bet_amount != null ? (
+                <>
+                  <TxDetailRow label="Balance before bet">
+                    {tx.balance_before == null ? '—' : inr(tx.balance_before)}
+                  </TxDetailRow>
+                  <TxDetailRow label="Bet amount">{inr(tx.bet_amount)}</TxDetailRow>
+                  <TxDetailRow label="Balance after bet">
+                    {tx.balance_after == null ? '—' : inr(tx.balance_after)}
+                  </TxDetailRow>
+                  <TxDetailRow label="Result">
+                    {tx.result === 'pending' ? (
+                      <span className="text-amber-400">Pending</span>
+                    ) : (
+                      <span
+                        className={
+                          (tx.profit_loss ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }
+                      >
+                        {(tx.profit_loss ?? 0) >= 0 ? 'Win' : 'Loss'}{' '}
+                        {(tx.profit_loss ?? 0) >= 0 ? '+' : '−'}
+                        {inr(Math.abs(tx.profit_loss ?? 0))}
+                      </span>
+                    )}
+                  </TxDetailRow>
+                </>
+              ) : (
+                <TxDetailRow label="Amount">{inr(tx.amount)}</TxDetailRow>
+              )}
               <TxDetailRow label="Status">
                 <StatusBadge status={tx.status} />
               </TxDetailRow>
               <TxDetailRow label="Method">{tx.payment_method || '—'}</TxDetailRow>
               <TxDetailRow label="Date">{fmtDate(tx.created_at)}</TxDetailRow>
             </dl>
-            {tx.notes && (
+            {tx.notes &&
+              !(
+                tx.type === 'bet_settlement' &&
+                (tx.notes === 'Win' || tx.notes === 'Loss')
+              ) && (
               <div className="rounded-lg border border-slate-800 bg-slate-950/40 px-4 py-3 text-sm text-slate-400">
                 {tx.notes}
               </div>
@@ -1049,6 +1118,10 @@ export function Pagination({
   );
 }
 
+// How long the search box waits for the admin to finish typing before the
+// query counts as committed.
+const SEARCH_DEBOUNCE_MS = 400;
+
 export function DataTable({
   columns,
   rows,
@@ -1059,6 +1132,17 @@ export function DataTable({
   searchable = false,
   searchKeys,
   searchPlaceholder = 'Search…',
+  // Server fallback. When the on-page filter finds nothing for a committed
+  // query, the table asks the parent to search the whole dataset. The parent
+  // echoes back the term it has already fetched (`serverQuery`) and whether
+  // that request is still in flight (`searchingServer`).
+  onServerSearch,
+  searchingServer = false,
+  serverQuery = '',
+  // When set, the search box does not filter the rows already on screen. Every
+  // committed term is sent to `onServerSearch` and the table shows whatever
+  // the parent fetched.
+  serverSearch = false,
   filters,
   filterTitle = 'Filters',
   filterSubtitle,
@@ -1076,6 +1160,10 @@ export function DataTable({
   selectedIds,
   onSelectionChange,
   rowId = (row) => row.id,
+  // Totals row. Rendered when any column defines `footer(pageRows, allRows)`:
+  // `pageRows` are the rows on screen, `allRows` every row that survived
+  // search/filters across all pages. The first cell falls back to this label.
+  footerLabel = 'Total',
 }) {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -1085,10 +1173,16 @@ export function DataTable({
   const [sort, setSort] = useState({ key: null, dir: 'asc' });
   const [colFilters, setColFilters] = useState({});
 
+  // The query is only "committed" once the admin stops typing (or presses
+  // Enter / leaves the field). Filtering on every keystroke makes the table
+  // flicker and, with a server fallback attached, fires a request per letter.
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(query), 300);
+    if (query === debouncedQuery) return undefined;
+    const t = setTimeout(() => setDebouncedQuery(query), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, debouncedQuery]);
+
+  const commitQuery = useCallback(() => setDebouncedQuery(query), [query]);
 
   const isSortable = (col) => col.sortable !== false && !!col.label && col.key !== 'actions';
 
@@ -1155,7 +1249,7 @@ export function DataTable({
 
   const filtered = useMemo(() => {
     let out = rows ?? [];
-    if (searchable && debouncedQuery.trim()) {
+    if (searchable && debouncedQuery.trim() && !serverSearch) {
       const q = debouncedQuery.toLowerCase();
       const keys = searchKeys ?? columns.map((c) => c.key);
       out = out.filter((row) => keys.some((k) => String(row[k] ?? '').toLowerCase().includes(q)));
@@ -1183,7 +1277,28 @@ export function DataTable({
       }
     }
     return out;
-  }, [rows, searchable, debouncedQuery, searchKeys, columns, activeColFilters, colFilters]);
+  }, [rows, searchable, serverSearch, debouncedQuery, searchKeys, columns, activeColFilters, colFilters]);
+
+  // Server fallback: the on-page rows are searched first, and only when a
+  // committed query matches nothing here do we ask the backend for the term
+  // across the whole dataset. Comparing against the term the parent already
+  // fetched keeps an empty server result empty instead of re-requesting it.
+  const trimmedQuery = debouncedQuery.trim();
+  const serverSearched = !!trimmedQuery && serverQuery === trimmedQuery;
+  useEffect(() => {
+    if (!searchable || !onServerSearch) return;
+    if (!trimmedQuery) {
+      if (serverQuery) onServerSearch('');
+      return;
+    }
+    // `serverSearch` asks the database for every term. Otherwise the loaded
+    // rows are tried first and the server is only asked when they have no hit.
+    const shouldAskServer = serverSearch || filtered.length === 0;
+    if (shouldAskServer && !searchingServer && !serverSearched) {
+      onServerSearch(trimmedQuery);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trimmedQuery, filtered.length, searchable, serverSearch, searchingServer, serverSearched, serverQuery]);
 
   const sorted = useMemo(() => {
     if (!sort.key) return filtered;
@@ -1330,12 +1445,79 @@ export function DataTable({
     </>
   );
 
+  const searchBar = (searchable || hasFilterUi) ? (
+    <div className="rounded-xl border border-slate-800 bg-slate-900 p-2">
+      <div className="flex items-center gap-2">
+        {searchable && (
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setPage(0);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commitQuery();
+                } else if (e.key === 'Escape') {
+                  setQuery('');
+                  setDebouncedQuery('');
+                }
+              }}
+              onBlur={commitQuery}
+              placeholder={searchPlaceholder}
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 py-2.5 pl-10 pr-9 text-sm text-white placeholder-slate-500 transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery('');
+                  setDebouncedQuery('');
+                  setPage(0);
+                }}
+                aria-label="Clear search"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-slate-300"
+              >
+                {searchingServer ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+                ) : (
+                  <X className="h-4 w-4" />
+                )}
+              </button>
+            )}
+          </div>
+        )}
+        {hasFilterUi && (
+          <button
+            type="button"
+            onClick={() => setShowFilters(true)}
+            className={`relative inline-flex shrink-0 items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition ${showFilters || filterActiveResolved
+                ? 'border-indigo-500 bg-indigo-500/10 text-indigo-300'
+                : 'border-slate-700 text-slate-200 hover:border-slate-600 hover:bg-slate-800'
+              }`}
+          >
+            <SlidersHorizontal className="h-4 w-4" /> Filters
+            {filterActiveResolved && (
+              <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-indigo-400 ring-2 ring-slate-900" />
+            )}
+          </button>
+        )}
+      </div>
+    </div>
+  ) : null;
+
+  // A server-search refetch keeps the real search bar mounted — swapping it for
+  // a skeleton would steal focus from the box the admin is still typing in.
   if (loading) {
     return (
       <div className="space-y-3">
-        {(searchable || hasFilterUi) && (
-          <div className="h-14 w-full animate-pulse rounded-xl bg-slate-800" />
-        )}
+        {(searchable || hasFilterUi) &&
+          (searchingServer ? searchBar : (
+            <div className="h-14 w-full animate-pulse rounded-xl bg-slate-800" />
+          ))}
         <TableSkeleton cols={displayColumns.length} />
       </div>
     );
@@ -1343,48 +1525,27 @@ export function DataTable({
 
   return (
     <div className="space-y-3">
-      {(searchable || hasFilterUi) && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-2">
-          <div className="flex items-center gap-2">
-            {searchable && (
-              <div className="relative flex-1">
-                <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-                <input
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setPage(0);
-                  }}
-                  placeholder={searchPlaceholder}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 py-2.5 pl-10 pr-3 text-sm text-white placeholder-slate-500 transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                />
-              </div>
-            )}
-            {hasFilterUi && (
-              <button
-                type="button"
-                onClick={() => setShowFilters(true)}
-                className={`relative inline-flex shrink-0 items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition ${showFilters || filterActiveResolved
-                    ? 'border-indigo-500 bg-indigo-500/10 text-indigo-300'
-                    : 'border-slate-700 text-slate-200 hover:border-slate-600 hover:bg-slate-800'
-                  }`}
-              >
-                <SlidersHorizontal className="h-4 w-4" /> Filters
-                {filterActiveResolved && (
-                  <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-indigo-400 ring-2 ring-slate-900" />
-                )}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      {searchBar}
 
       {!pageRows.length ? (
-        <EmptyState
-          icon={emptyIcon}
-          title={emptyMessage}
-          hint={emptyHint ?? (query ? 'Try a different search term.' : undefined)}
-        />
+        searchingServer ? (
+          <div className="flex items-center justify-center gap-3 rounded-xl border border-slate-800 bg-slate-900 py-16 text-sm text-slate-400">
+            <Loader2 className="h-5 w-5 animate-spin text-indigo-400" />
+            Searching all records for “{trimmedQuery}”…
+          </div>
+        ) : (
+          <EmptyState
+            icon={emptyIcon}
+            title={trimmedQuery ? `No matches for “${trimmedQuery}”` : emptyMessage}
+            hint={
+              trimmedQuery
+                ? serverSearched
+                  ? 'Searched every record — nothing matched this term.'
+                  : 'Try a different search term.'
+                : emptyHint
+            }
+          />
+        )
       ) : (
         <>
           <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900">
@@ -1445,6 +1606,29 @@ export function DataTable({
                   </tr>
                 ))}
               </tbody>
+              {displayColumns.some((col) => col.footer) && (
+                <tfoot>
+                  <tr className="border-t border-slate-700 bg-slate-950/40">
+                    {displayColumns.map((col, ci) => (
+                      <td
+                        key={col.key}
+                        className={`whitespace-nowrap px-4 py-3.5 align-middle font-semibold text-slate-200 ${col.align === 'right'
+                            ? 'text-right'
+                            : col.align === 'center'
+                              ? 'text-center'
+                              : ''
+                          }`}
+                      >
+                        {col.footer ? (
+                          col.footer(pageRows, sorted)
+                        ) : ci === 0 ? (
+                          <span className="text-xs uppercase tracking-wider text-slate-400">{footerLabel}</span>
+                        ) : null}
+                      </td>
+                    ))}
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
 
@@ -1552,4 +1736,49 @@ export function useAdminData(fetcher, deps = []) {
 }
 
 export const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
-export const fmtDate = (s) => (s ? new Date(s).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
+// Dates are shown in full across the console — day, month, year and a
+// wall-clock time down to the second. Ops and finance reconcile against these
+// strings, and a stamp rounded to the minute loses the ordering of events that
+// land in the same minute. `dateStyle`/`timeStyle` cannot be combined with a
+// `second` field, so the parts are spelled out explicitly.
+//
+// The API sends UTC instants. Without an explicit `timeZone` the browser would
+// render them in whatever zone the operator's device is set to, so staff in
+// different countries would read different times for the same event. Every
+// stamp is pinned to IST, matching the player site.
+const TIME_ZONE = 'Asia/Kolkata';
+const DATE_PARTS = { day: '2-digit', month: 'short', year: 'numeric', timeZone: TIME_ZONE };
+const TIME_PARTS = {
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: true,
+  timeZone: TIME_ZONE,
+};
+
+/** "12 Mar 2024, 10:00:45 pm" */
+export const fmtDate = (s) => {
+  if (!s) return '—';
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('en-IN', { ...DATE_PARTS, ...TIME_PARTS });
+};
+
+/** Alias of {@link fmtDate}, for call sites that want to say so. */
+export const fmtDateTime = fmtDate;
+
+/** "12 Mar 2024" — only where there is genuinely no time of day to show. */
+export const fmtDateOnly = (s) => {
+  if (!s) return '—';
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-IN', DATE_PARTS);
+};
+
+/** "10:00:45 pm" — the time half, when the date is already shown alongside. */
+export const fmtTime = (s) => {
+  if (!s) return '—';
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleTimeString('en-IN', TIME_PARTS);
+};

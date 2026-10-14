@@ -4,7 +4,7 @@
 // drill-down. A session still awaiting the provider's result reads Pending
 // rather than being reported as a loss.
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Clock, Dices } from 'lucide-react';
 import { adminApi } from '@/services/adminApi';
 import {
@@ -21,6 +21,8 @@ import {
   toast,
   inr,
   fmtDate,
+  fmtDateOnly,
+  fmtTime,
 } from '@/components/admin/AdminShell';
 
 const PAGE_SIZE = 50;
@@ -29,26 +31,58 @@ const PAGE_SIZE = 50;
 const ROUND_COLUMNS = [
   {
     key: 'game_round',
-    label: 'Round',
+    label: 'Round / Reference',
     sortValue: (r) => r.serial_number ?? r.game_round,
+    // The round id and its transaction reference identify the same event, so
+    // they share one column: id on top, the clickable reference beneath it.
     render: (r) => (
-      <span className="font-mono text-xs text-slate-400">{r.game_round || r.serial_number}</span>
+      <div className="flex flex-col gap-1">
+        <span className="font-mono text-xs text-slate-400">
+          {r.game_round || r.serial_number}
+        </span>
+        <TxReference reference={r.serial_number} />
+      </div>
     ),
   },
-  { key: 'game_name', label: 'Game', render: (r) => r.game_name || '—' },
   {
-    key: 'reference',
-    label: 'Reference',
-    sortable: false,
-    render: (r) => <TxReference reference={r.serial_number} />,
+    key: 'game_name',
+    label: 'Game',
+    render: (r) => (
+      <div>
+        <p>{r.game_name || '—'}</p>
+        {r.provider && <p className="text-xs text-slate-500">{r.provider}</p>}
+        {r.category && (
+          <p className="text-xs capitalize text-slate-500">{r.category.replace(/_/g, ' ')}</p>
+        )}
+      </div>
+    ),
   },
+  // Placed and settled are separate moments for anything that resolves late
+  // (sports, lottery). One combined "Time" column could not show how long a
+  // stake waited for its result.
   {
     key: 'created_at',
-    label: 'Time',
+    label: 'Created',
     render: (r) => <span className="text-slate-400">{fmtDate(r.created_at)}</span>,
   },
-  { key: 'bet_amount', label: 'Stake', align: 'right', render: (r) => inr(r.bet_amount) },
-  { key: 'win_amount', label: 'Win', align: 'right', render: (r) => inr(r.win_amount) },
+  {
+    key: 'settled_at',
+    label: 'Settled',
+    render: (r) => (
+      <span className="text-slate-400">{r.settled_at ? fmtDate(r.settled_at) : '—'}</span>
+    ),
+  },
+  {
+    key: 'balance_before',
+    label: 'Balance before',
+    align: 'right',
+    render: (r) => (
+      <span className="text-slate-400">
+        {r.balance_before == null ? '—' : inr(r.balance_before)}
+      </span>
+    ),
+  },
+  { key: 'bet_amount', label: 'Bet amount', align: 'right', render: (r) => inr(r.bet_amount) },
   {
     key: 'balance_after',
     label: 'Balance after',
@@ -57,6 +91,9 @@ const ROUND_COLUMNS = [
       <span className="text-slate-400">{r.balance_after == null ? '—' : inr(r.balance_after)}</span>
     ),
   },
+  // One wager per row, so the result is that round's own outcome: the payout a
+  // provider sends as a second callback is folded into the stake it belongs to
+  // rather than listed as a separate +win line.
   {
     key: 'result',
     label: 'Result',
@@ -66,10 +103,15 @@ const ROUND_COLUMNS = [
       r.result === 'pending' ? (
         <span className="text-amber-400">Pending</span>
       ) : (
-        <span className={r.profit_loss >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-          {r.profit_loss >= 0 ? '+' : '−'}
-          {inr(Math.abs(r.profit_loss))}
-        </span>
+        <div className="flex flex-col items-end leading-tight">
+          <span className={r.profit_loss >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+            {r.profit_loss >= 0 ? '+' : '−'}
+            {inr(Math.abs(r.profit_loss))}
+          </span>
+          <span className="text-xs text-slate-500">
+            {r.profit_loss >= 0 ? 'Win' : 'Loss'}
+          </span>
+        </div>
       ),
   },
 ];
@@ -82,6 +124,10 @@ export default function AdminBetHistoryPage() {
   const [page, setPage] = useState(0);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  // Term the table escalated to the server because nothing on the loaded page
+  // matched it. Empty means we are showing the plain, unsearched listing.
+  const [serverQuery, setServerQuery] = useState('');
+  const [searchingServer, setSearchingServer] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -91,15 +137,31 @@ export default function AdminBetHistoryPage() {
       offset: String(page * PAGE_SIZE),
     });
     Object.entries(applied).forEach(([k, v]) => v && params.set(k, v));
+    if (serverQuery) params.set('search', serverQuery);
 
     adminApi(`/api/v1/admin/bet-history?${params}`)
       .then((res) => active && setData(res))
       .catch((e) => active && toast.error(e.message))
-      .finally(() => active && setLoading(false));
+      .finally(() => {
+        if (!active) return;
+        setLoading(false);
+        setSearchingServer(false);
+      });
     return () => {
       active = false;
     };
-  }, [applied, page]);
+  }, [applied, page, serverQuery]);
+
+  // Called by the table only after its own on-page search comes up empty.
+  const handleServerSearch = useCallback(
+    (term) => {
+      if (term === serverQuery) return;
+      if (term) setSearchingServer(true);
+      setPage(0);
+      setServerQuery(term);
+    },
+    [serverQuery],
+  );
 
   const openDetail = async (row) => {
     setDetailLoading(true);
@@ -143,19 +205,28 @@ export default function AdminBetHistoryPage() {
         </span>
       ),
     },
+    // Balance before → stake → balance after → result, so a row reads left to
+    // right as the money actually moved during the session.
+    {
+      key: 'first_balance',
+      label: 'Balance Before',
+      render: (r) => (
+        <span className="text-slate-400">
+          {r.first_balance != null ? inr(r.first_balance) : '—'}
+        </span>
+      ),
+    },
     { key: 'total_bet', label: 'Bet Amount', render: (r) => inr(r.total_bet) },
-    { key: 'result', label: 'Result', render: (r) => <ResultBadge record={r} /> },
     {
       key: 'last_balance',
-      label: 'Wallet Amount',
-      // Wallet balance the player had available after this session's latest
-      // round, so money on each account can be tracked over time.
+      label: 'Balance After',
       render: (r) => (
-        <span className="font-semibold text-white">
+        <span className="text-slate-400">
           {r.last_balance != null ? inr(r.last_balance) : '—'}
         </span>
       ),
     },
+    { key: 'result', label: 'Result', render: (r) => <ResultBadge record={r} /> },
     {
       key: 'created_at',
       label: 'Date',
@@ -165,8 +236,8 @@ export default function AdminBetHistoryPage() {
         const dt = new Date(d);
         return (
           <div className="whitespace-nowrap">
-            <p className="text-slate-200">{dt.toLocaleDateString('en-IN', { dateStyle: 'medium' })}</p>
-            <p className="text-xs text-slate-500">{dt.toLocaleTimeString('en-IN', { timeStyle: 'short' })}</p>
+            <p className="text-slate-200">{fmtDateOnly(dt)}</p>
+            <p className="text-xs text-slate-500">{fmtTime(dt)}</p>
           </div>
         );
       },
@@ -203,8 +274,11 @@ export default function AdminBetHistoryPage() {
         rows={data?.records ?? []}
         loading={loading}
         searchable
-        searchKeys={['username', 'game_name']}
-        searchPlaceholder="Search this page…"
+        searchKeys={['username', 'full_name', 'game_name', 'session_uid']}
+        searchPlaceholder="Search player, game or session…"
+        onServerSearch={handleServerSearch}
+        searchingServer={searchingServer}
+        serverQuery={serverQuery}
         paginate={false}
         emptyIcon={Dices}
         emptyMessage="No bet history yet"

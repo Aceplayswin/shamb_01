@@ -21,7 +21,7 @@ import { adminApi } from '@/services/adminApi';
 
 export default function AffiliateApplicationsPage() {
   const { data, loading, error, reload } = useAdminData(
-    '/api/v1/admin/affiliates/applications?limit=200',
+    '/api/v1/admin/affiliates/applications',
     [],
   );
   const { data: settings } = useAdminData('/api/v1/admin/affiliates/settings', []);
@@ -50,6 +50,9 @@ export default function AffiliateApplicationsPage() {
       cpaAmount: settings?.default_cpa_amount ?? 500,
       overrideRate: row.proposed_override_rate || settings?.default_override_rate || 5,
       tierLabel: 'Bronze',
+      minDeposit: settings?.default_min_deposit ?? 4000,
+      minRedeposits: settings?.default_min_redeposits ?? 5,
+      qualificationPeriodDays: settings?.default_qualification_period_days ?? 15,
     });
   };
 
@@ -287,6 +290,39 @@ export default function AffiliateApplicationsPage() {
                   </Field>
                 )}
               </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Field label="Minimum deposit (₹)">
+                  <Input
+                    type="number"
+                    min="0"
+                    value={terms.minDeposit}
+                    onChange={(e) => setTerms({ ...terms, minDeposit: e.target.value })}
+                  />
+                </Field>
+                <Field label="Minimum redeposits">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={terms.minRedeposits}
+                    onChange={(e) => setTerms({ ...terms, minRedeposits: e.target.value })}
+                  />
+                </Field>
+                <Field label="Qualification period (days)">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={terms.qualificationPeriodDays}
+                    onChange={(e) => setTerms({ ...terms, qualificationPeriodDays: e.target.value })}
+                  />
+                </Field>
+              </div>
+              <p className="text-xs text-slate-500">
+                Commission is processed only after the player deposits at least this amount,
+                across at least this many deposits, within this many days of signup.
+              </p>
             </>
           )}
         </form>

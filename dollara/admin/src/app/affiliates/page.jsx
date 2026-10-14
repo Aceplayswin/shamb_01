@@ -27,7 +27,7 @@ const TIER_COLORS = {
 export default function AffiliateListPage() {
   const router = useRouter();
   const { data, loading, error, reload, setData } = useAdminData(
-    '/api/v1/admin/affiliates?limit=200',
+    '/api/v1/admin/affiliates',
     [],
   );
   const [running, setRunning] = useState(false);
@@ -161,7 +161,7 @@ export default function AffiliateListPage() {
     },
     {
       key: 'commission_type',
-      label: 'Commission',
+      label: 'Plan',
       render: (r) => <span className="text-slate-300">{formatCommission(r)}</span>,
       filter: 'select',
       filterOptions: [
@@ -171,13 +171,32 @@ export default function AffiliateListPage() {
       ],
     },
     {
-      key: 'total_players',
-      label: 'Players',
-      render: (r) => <span className="font-semibold text-white">{r.total_players}</span>,
+      key: 'signups',
+      label: 'Signups',
+      render: (r) => (
+        <div>
+          <p className="font-semibold text-white">{r.signups ?? r.total_players ?? 0}</p>
+          <p className="text-xs text-slate-500">{r.clicks ?? 0} clicks</p>
+        </div>
+      ),
+    },
+    {
+      key: 'ftds',
+      label: 'FTDs',
+      render: (r) => <span className="font-semibold text-white">{r.ftds ?? 0}</span>,
+    },
+    {
+      key: 'conversion_rate',
+      label: 'Conv.',
+      render: (r) => (
+        <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-xs font-bold text-emerald-400">
+          {(r.conversion_rate ?? 0).toFixed(1)}%
+        </span>
+      ),
     },
     {
       key: 'total_earnings',
-      label: 'Earnings',
+      label: 'Commission',
       render: (r) => (
         <div>
           <p className="font-semibold text-emerald-400">{inr(r.total_earnings)}</p>

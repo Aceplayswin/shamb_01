@@ -2,10 +2,8 @@
 
 // Reports — the single export surface for the whole platform.
 //
-// Four tabs, in the order an operator reaches for them:
-//   Reports    the curated exports (players, money, play, bonuses) — dollara's
-//              original single-tab report screen, unchanged
-//   Backoffice the reference reports, each opened or downloaded in place
+// Three tabs, in the order an operator reaches for them:
+//   Reports    the curated Excel extracts (players, money, play, bonuses)
 //   Raw Tables every database table, foreign keys resolved to readable columns
 //   Combined   pre-joined cross-table sets, and the whole-database download
 //
@@ -14,86 +12,27 @@
 // Authorization header).
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
 import {
   Database, Download, FileSpreadsheet, Layers, Loader2, Search, Table2,
 } from 'lucide-react';
-import { API_URL, } from '@/services/tenant';
+import { API_URL } from '@/services/tenant';
 import { getAdminToken } from '@/services/adminApi';
 import {
-  AdminShell,
-  Button,
-  Card,
-  Field,
-  Input,
-  toast,
-  useAdminData,
+  AdminShell, Button, Card, Field, Input, toast, useAdminData,
 } from '@/components/admin/AdminShell';
 
 const DESCRIPTIONS = {
-  users: 'Every registered player with balances, KYC and activity dates.',
+  users: 'Every registered player with balances and activity dates.',
   transactions: 'All money movements — deposits, withdrawals, bonuses, settlements.',
-  deposits: 'Deposit transactions only, with method and reference.',
-  withdrawals: 'Withdrawal requests with their approval status.',
+  deposits: 'Player deposits and manual wallet credits, with method and reference.',
+  withdrawals: 'Withdrawal requests and manual wallet debits, with approval status.',
   'bet-history': 'Play sessions per player: stakes, payouts and result.',
   rounds: 'Individual game rounds, including unsettled ones.',
   bonuses: 'Issued bonuses with wagering progress.',
+  casino: 'Casino rounds only, with game, category and provider.',
+  sports: 'Sportsbook bets with event, market, odds and result.',
 };
 
-// The reference backoffice reports, grouped as they were on the old Backoffice
-// Reports page. Each still has its own screen; from here it can also be
-// downloaded directly without opening it first.
-const BO_GROUPS = [
-  {
-    title: 'Finances',
-    items: [
-      ['deposits', 'Player Deposits'], ['withdrawals', 'Player Withdrawals'],
-      ['bonuses', 'Player Bonuses'], ['refunds', 'Refunds Adjustments'],
-      ['chargebacks', 'Charge Back Adjustments'],
-      ['withdrawal-adjustments', 'Withdrawal Adjustments'],
-      ['other-adjustments', 'Other Adjustments'], ['gross-profit', 'Gross Profit'],
-      ['jackpot-contribution', 'Jackpot Contribution'],
-      ['providers-expense', 'Providers Expense'], ['net-profit', 'Net Profit'],
-      ['payment-methods', 'Payment Methods'],
-    ],
-  },
-  {
-    title: 'Management Reports',
-    items: [
-      ['attrition', 'Atterition Report'], ['real-revenue', 'Real Revenue'],
-      ['free-money-analysis', 'Free Money Analysis Report'],
-      ['active-players', 'Active Players Report'], ['aging', 'Aging Report'],
-      ['monthly-da', 'Month Wise DA Report'], ['daily-da', 'Day Wise DA Report'],
-      ['bonus-analysis', 'Bonus Analysis Report'], ['player-wise', 'Player Wise Report'],
-    ],
-  },
-  {
-    title: 'Downloadable Reports',
-    items: [
-      ['players-data', 'Players Data'], ['banned-players', 'Fraud/Banned Players Data'],
-      ['deposits-data', 'Deposits Data'], ['bonus-data', 'Player Bonus Data'],
-      ['transaction-history', 'Transaction History'], ['sports', 'Sports Report'],
-    ],
-  },
-  {
-    title: 'Players & Countries',
-    items: [
-      ['signups', 'Signups'], ['gender', 'Gender'],
-      ['countries-signups', 'Countries Signups'],
-      ['countries-profit', 'Countries Gross Profit'],
-      ['players-campaign', 'Players Campaign'],
-    ],
-  },
-  {
-    title: 'Games, Bets & Audit',
-    items: [
-      ['profitability', 'Games Profitability'], ['bets-done', 'Bets Done'],
-      ['log-history', 'Log History Report'], ['one-page', 'One Page Report'],
-    ],
-  },
-];
-
-// A quick range preset -> [from, to] as ISO dates.
 function preset(days) {
   const to = new Date();
   const from = new Date();
@@ -103,7 +42,6 @@ function preset(days) {
 
 const TABS = [
   { key: 'reports', label: 'Reports', icon: FileSpreadsheet },
-  { key: 'backoffice', label: 'Backoffice', icon: Layers },
   { key: 'tables', label: 'Raw Tables', icon: Table2 },
   { key: 'combined', label: 'Combined & Full DB', icon: Database },
 ];
@@ -113,55 +51,13 @@ export default function AdminReportsPage() {
   const { data: catalog, loading: catalogLoading } = useAdminData('/api/v1/admin/data/catalog');
   const [tab, setTab] = useState('reports');
   const [range, setRange] = useState({ from: '', to: '' });
-  const [memberId, setMemberId] = useState('');
+  const [player, setPlayer] = useState('');
   const [busy, setBusy] = useState(null);
   const [tableSearch, setTableSearch] = useState('');
 
-  // Dollara's original curated-exports download — unchanged: fetched with the
-  // admin token, then handed to the browser as a blob, since a plain link
-  // could not carry the Authorization header.
-  const download = async (kind) => {
-    setBusy(kind);
-    try {
-      const params = new URLSearchParams();
-      if (range.from) params.set('from', range.from);
-      if (range.to) params.set('to', range.to);
-      const trimmedMemberId = memberId.trim();
-      if (trimmedMemberId) params.set('memberId', trimmedMemberId);
-
-      const res = await fetch(
-        `${API_URL}/api/v1/admin/reports/${kind}/export?${params}`,
-        { headers: { Authorization: `Bearer ${getAdminToken()}` } },
-      );
-      if (!res.ok) throw new Error('Export failed');
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      const stampVal = new Date().toISOString().slice(0, 10);
-      link.download = trimmedMemberId
-        ? `${kind}-${trimmedMemberId}-${stampVal}.csv`
-        : `${kind}-${stampVal}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-      toast.success('Report downloaded');
-    } catch (e) {
-      toast.error(e.message);
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  // --- Backoffice / Raw Tables / Combined & Full DB — new tabs, ported from
-  // the Backoffice Parity build. Kept on a separate busy state (`busy2`) so
-  // they never interfere with the curated-exports tab above.
-  const [busy2, setBusy2] = useState(null);
-
+  // Every download goes through here: authorised fetch -> blob -> anchor click.
   const grab = async (id, url, filename) => {
-    setBusy2(id);
+    setBusy(id);
     try {
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${getAdminToken()}` },
@@ -180,8 +76,17 @@ export default function AdminReportsPage() {
     } catch (e) {
       toast.error(e.message);
     } finally {
-      setBusy2(null);
+      setBusy(null);
     }
+  };
+
+  const filterQuery = () => {
+    const params = new URLSearchParams();
+    if (range.from) params.set('from', range.from);
+    if (range.to) params.set('to', range.to);
+    const p = player.trim();
+    if (p) params.set('memberId', p);
+    return params;
   };
 
   // Date + time to the second, UTC, matching the stamp the API puts on the
@@ -189,14 +94,12 @@ export default function AdminReportsPage() {
   // two formats have to agree or the precision is lost on the way through.
   const stamp = () => new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-');
 
-  const downloadBo = (slug) => {
-    const params = new URLSearchParams();
-    if (range.from) params.set('dateFrom', range.from);
-    if (range.to) params.set('dateTo', range.to);
+  const downloadReport = (kind) => {
+    const p = player.trim().replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 40);
     return grab(
-      `bo:${slug}`,
-      `${API_URL}/api/v1/admin/bo/reports/${slug}/export?${params}`,
-      `${slug}-${stamp()}.xlsx`,
+      `report:${kind}`,
+      `${API_URL}/api/v1/admin/reports/${kind}/export?${filterQuery()}`,
+      p ? `${kind}-${p}-${stamp()}.xlsx` : `${kind}-${stamp()}.xlsx`,
     );
   };
 
@@ -238,9 +141,7 @@ export default function AdminReportsPage() {
   const rangeHint = range.from || range.to
     ? `Exporting ${range.from || 'the beginning'} → ${range.to || 'today'}`
     : 'No range set — exports cover all time';
-  const memberHint = memberId.trim()
-    ? ` · filtered to member ID ${memberId.trim()}`
-    : '';
+  const playerHint = player.trim() ? ` · filtered to "${player.trim()}"` : '';
 
   return (
     <AdminShell
@@ -266,22 +167,20 @@ export default function AdminReportsPage() {
         ))}
       </div>
 
-      {/* Date / member filters apply to the two report-style tabs. */}
-      {(tab === 'reports' || tab === 'backoffice') && (
+      {/* Date / player filters apply to the curated reports. */}
+      {tab === 'reports' && (
         <Card className="mb-5 p-5">
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
             Filters
           </h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {tab === 'reports' && (
-              <Field label="Member ID">
-                <Input
-                  placeholder="e.g. 10000001"
-                  value={memberId}
-                  onChange={(e) => setMemberId(e.target.value)}
-                />
-              </Field>
-            )}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+            <Field label="Player" className="lg:col-span-2">
+              <Input
+                placeholder="ID, username, phone or name"
+                value={player}
+                onChange={(e) => setPlayer(e.target.value)}
+              />
+            </Field>
             <Field label="From">
               <Input
                 type="date"
@@ -297,23 +196,21 @@ export default function AdminReportsPage() {
               />
             </Field>
             <div className="flex flex-wrap items-end gap-2 lg:col-span-2">
-              {[
-                ['Last 7 days', 7],
-                ['Last 30 days', 30],
-                ['Last 90 days', 90],
-              ].map(([label, days]) => (
-                <Button
-                  key={label}
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    const [from, to] = preset(days);
-                    setRange({ from, to });
-                  }}
-                >
-                  {label}
-                </Button>
-              ))}
+              {[['Last 7 days', 7], ['Last 30 days', 30], ['Last 90 days', 90]].map(
+                ([label, days]) => (
+                  <Button
+                    key={label}
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      const [from, to] = preset(days);
+                      setRange({ from, to });
+                    }}
+                  >
+                    {label}
+                  </Button>
+                ),
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -323,20 +220,14 @@ export default function AdminReportsPage() {
               </Button>
             </div>
           </div>
-          <p className="mt-3 text-xs text-slate-500">
-            {rangeHint}{tab === 'reports' ? memberHint : ''}.
-          </p>
+          <p className="mt-3 text-xs text-slate-500">{rangeHint}{playerHint}.</p>
         </Card>
       )}
 
-      {/* ---------------------------- Curated reports (dollara original) -------- */}
+      {/* ---------------------------- Curated reports --------------------------- */}
       {tab === 'reports' && (
         loading ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {[0, 1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-32 animate-pulse rounded-xl bg-slate-900" />
-            ))}
-          </div>
+          <SkeletonGrid />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {(kinds ?? []).map((k) => (
@@ -348,68 +239,25 @@ export default function AdminReportsPage() {
                   <div className="min-w-0">
                     <h3 className="font-semibold text-white">{k.label}</h3>
                     <p className="mt-1 text-xs text-slate-500">
-                      {DESCRIPTIONS[k.kind] ?? 'CSV export'}
+                      {DESCRIPTIONS[k.kind] ?? 'Excel export'}
                     </p>
                   </div>
                 </div>
                 <Button
                   className="mt-4 w-full"
                   variant="secondary"
-                  disabled={busy === k.kind}
-                  onClick={() => download(k.kind)}
-                  icon={busy === k.kind ? undefined : Download}
+                  disabled={busy === `report:${k.kind}`}
+                  onClick={() => downloadReport(k.kind)}
+                  icon={busy === `report:${k.kind}` ? undefined : Download}
                 >
-                  {busy === k.kind ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" /> Preparing…
-                    </>
-                  ) : (
-                    'Download CSV'
-                  )}
+                  {busy === `report:${k.kind}`
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Preparing…</>
+                    : 'Download Excel'}
                 </Button>
               </Card>
             ))}
           </div>
         )
-      )}
-
-      {/* -------------------------- Backoffice reports -------------------------- */}
-      {tab === 'backoffice' && (
-        <div className="grid gap-5 lg:grid-cols-2">
-          {BO_GROUPS.map((g) => (
-            <Card key={g.title} className="overflow-hidden">
-              <div className="border-b border-slate-800 px-5 py-4">
-                <h2 className="font-display text-sm font-bold text-white">{g.title}</h2>
-              </div>
-              <ul>
-                {g.items.map(([slug, label]) => (
-                  <li key={slug} className="border-b border-slate-800/60 last:border-0">
-                    <div className="flex items-center justify-between gap-3 px-5 py-2.5">
-                      <Link
-                        href={`/bo-reports/${slug}`}
-                        className="flex min-w-0 items-center gap-2.5 text-sm text-slate-300 transition hover:text-white"
-                      >
-                        <FileSpreadsheet className="h-4 w-4 shrink-0 text-slate-500" />
-                        <span className="truncate">{label}</span>
-                      </Link>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={busy2 === `bo:${slug}`}
-                        onClick={() => downloadBo(slug)}
-                        icon={busy2 === `bo:${slug}` ? undefined : Download}
-                      >
-                        {busy2 === `bo:${slug}`
-                          ? <Loader2 className="h-4 w-4 animate-spin" />
-                          : 'Excel'}
-                      </Button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          ))}
-        </div>
       )}
 
       {/* ------------------------------ Raw tables ------------------------------ */}
@@ -442,11 +290,7 @@ export default function AdminReportsPage() {
           </Card>
 
           {catalogLoading ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {[0, 1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="h-32 animate-pulse rounded-xl bg-slate-900" />
-              ))}
-            </div>
+            <SkeletonGrid />
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {visibleTables.map((t) => (
@@ -472,10 +316,10 @@ export default function AdminReportsPage() {
                       size="sm"
                       variant="secondary"
                       className="flex-1"
-                      disabled={busy2 === `table:${t.key}:csv`}
+                      disabled={busy === `table:${t.key}:csv`}
                       onClick={() => downloadTable(t.key, 'csv')}
                     >
-                      {busy2 === `table:${t.key}:csv`
+                      {busy === `table:${t.key}:csv`
                         ? <Loader2 className="h-4 w-4 animate-spin" />
                         : 'CSV'}
                     </Button>
@@ -483,10 +327,10 @@ export default function AdminReportsPage() {
                       size="sm"
                       variant="ghost"
                       className="flex-1"
-                      disabled={busy2 === `table:${t.key}:xlsx`}
+                      disabled={busy === `table:${t.key}:xlsx`}
                       onClick={() => downloadTable(t.key, 'xlsx')}
                     >
-                      {busy2 === `table:${t.key}:xlsx`
+                      {busy === `table:${t.key}:xlsx`
                         ? <Loader2 className="h-4 w-4 animate-spin" />
                         : 'Excel'}
                     </Button>
@@ -523,21 +367,21 @@ export default function AdminReportsPage() {
               </div>
               <div className="flex gap-2">
                 <Button
-                  disabled={busy2 === 'full:zip'}
+                  disabled={busy === 'full:zip'}
                   onClick={() => downloadEverything('zip')}
-                  icon={busy2 === 'full:zip' ? undefined : Download}
+                  icon={busy === 'full:zip' ? undefined : Download}
                 >
-                  {busy2 === 'full:zip'
+                  {busy === 'full:zip'
                     ? <><Loader2 className="h-4 w-4 animate-spin" /> Building…</>
                     : 'Download ZIP'}
                 </Button>
                 <Button
                   variant="secondary"
-                  disabled={busy2 === 'full:xlsx'}
+                  disabled={busy === 'full:xlsx'}
                   onClick={() => downloadEverything('xlsx')}
-                  icon={busy2 === 'full:xlsx' ? undefined : Download}
+                  icon={busy === 'full:xlsx' ? undefined : Download}
                 >
-                  {busy2 === 'full:xlsx'
+                  {busy === 'full:xlsx'
                     ? <><Loader2 className="h-4 w-4 animate-spin" /> Building…</>
                     : 'Download Excel'}
                 </Button>
@@ -566,10 +410,10 @@ export default function AdminReportsPage() {
                       size="sm"
                       variant="secondary"
                       className="flex-1"
-                      disabled={busy2 === `combo:${c.key}:csv`}
+                      disabled={busy === `combo:${c.key}:csv`}
                       onClick={() => downloadCombo(c.key, 'csv')}
                     >
-                      {busy2 === `combo:${c.key}:csv`
+                      {busy === `combo:${c.key}:csv`
                         ? <Loader2 className="h-4 w-4 animate-spin" />
                         : 'CSV'}
                     </Button>
@@ -577,10 +421,10 @@ export default function AdminReportsPage() {
                       size="sm"
                       variant="ghost"
                       className="flex-1"
-                      disabled={busy2 === `combo:${c.key}:xlsx`}
+                      disabled={busy === `combo:${c.key}:xlsx`}
                       onClick={() => downloadCombo(c.key, 'xlsx')}
                     >
-                      {busy2 === `combo:${c.key}:xlsx`
+                      {busy === `combo:${c.key}:xlsx`
                         ? <Loader2 className="h-4 w-4 animate-spin" />
                         : 'Excel'}
                     </Button>
@@ -597,5 +441,15 @@ export default function AdminReportsPage() {
         </div>
       )}
     </AdminShell>
+  );
+}
+
+function SkeletonGrid() {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <div key={i} className="h-32 animate-pulse rounded-xl bg-slate-900" />
+      ))}
+    </div>
   );
 }

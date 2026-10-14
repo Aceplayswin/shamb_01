@@ -11,7 +11,15 @@
 
 import { useState } from 'react';
 import { Receipt } from 'lucide-react';
-import { Modal, Button, StatusBadge, TxReference, inr, fmtDate } from './AdminShell';
+import {
+  Modal,
+  Button,
+  StatusBadge,
+  TxReference,
+  Pagination,
+  inr,
+  fmtDate,
+} from './AdminShell';
 
 const dash = (v) =>
   v === null || v === undefined || v === '' ? '—' : v;
@@ -61,8 +69,17 @@ function Panel({ title, children }) {
 /**
  * A read-only table panel. `columns` is [{ label, render }]; `rows` is the data.
  * Scrolls horizontally on its own so a wide table never widens the modal.
+ * Rows are paged client-side (the payload already carries them all) so no
+ * panel grows into one long list; `noun` names them in the pager's label.
  */
-function PanelTable({ title, columns, rows }) {
+function PanelTable({ title, columns, rows, noun, pageSize = 10 }) {
+  const [page, setPage] = useState(0);
+  const [perPage, setPerPage] = useState(pageSize);
+  const total = rows?.length ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  const safePage = Math.min(page, totalPages - 1);
+  const visible = rows?.slice(safePage * perPage, safePage * perPage + perPage);
+
   return (
     <Panel title={title}>
       <div className="overflow-x-auto rounded-lg border border-slate-800">
@@ -80,8 +97,8 @@ function PanelTable({ title, columns, rows }) {
             </tr>
           </thead>
           <tbody>
-            {rows?.length ? (
-              rows.map((r, i) => (
+            {visible?.length ? (
+              visible.map((r, i) => (
                 <tr
                   key={r.id ?? i}
                   className="border-b border-slate-800/60 last:border-0 hover:bg-slate-800/30"
@@ -109,6 +126,20 @@ function PanelTable({ title, columns, rows }) {
           </tbody>
         </table>
       </div>
+      <div className="mt-3">
+        <Pagination
+          page={safePage}
+          totalPages={totalPages}
+          onPage={setPage}
+          total={total}
+          perPage={perPage}
+          onPerPage={(n) => {
+            setPerPage(n);
+            setPage(0);
+          }}
+          noun={noun}
+        />
+      </div>
     </Panel>
   );
 }
@@ -129,7 +160,24 @@ function SportBetDetailModal({ bet, onClose }) {
           </div>
           <DetailRow label="Betted Time" value={fmtDate(bet.placed_at ?? bet.created_at)} />
           <DetailRow label="Sport Name" value={bet.sport} />
+          <DetailRow label="League Name" value={bet.league} />
           <DetailRow label="Market Name" value={bet.market_name} />
+          {/* The market's winning side — set once it resolves. Left blank
+              rather than guessed where it can't be said for sure (still
+              pending, or not a clean two-way market). */}
+          <DetailRow label="Won" value={bet.winner} />
+          <DetailRow
+            label="Profit/Loss"
+            value={
+              bet.profit_loss == null ? null : (
+                <span
+                  className={bet.profit_loss >= 0 ? 'text-emerald-400' : 'text-rose-400'}
+                >
+                  {inr(bet.profit_loss)}
+                </span>
+              )
+            }
+          />
         </div>
       )}
     </Modal>
@@ -246,6 +294,7 @@ export default function PlayerProfileModal({
           <PanelTable
             title="Game Statistics Since Forever (Real Money)"
             rows={d.game_stats_real}
+            noun="game"
             columns={[
               {
                 label: 'Game Id',
@@ -285,6 +334,7 @@ export default function PlayerProfileModal({
           <PanelTable
             title="Recevied Bonuses"
             rows={d.received_bonuses}
+            noun="bonus"
             columns={[
               { label: 'ID', render: (r) => r.id },
               { label: 'Requested', render: (r) => fmtDate(r.requested_at) },
@@ -302,6 +352,7 @@ export default function PlayerProfileModal({
           <PanelTable
             title="Deposits"
             rows={d.deposits}
+            noun="deposit"
             columns={[
               { label: 'ID', render: (r) => r.id },
               { label: 'Type', render: (r) => txTypeLabel(r.type) },
@@ -318,6 +369,7 @@ export default function PlayerProfileModal({
           <PanelTable
             title="Withdraws"
             rows={d.withdrawals}
+            noun="withdrawal"
             columns={[
               { label: 'ID', render: (r) => r.id },
               { label: 'Type', render: (r) => txTypeLabel(r.type) },
@@ -336,6 +388,7 @@ export default function PlayerProfileModal({
           <PanelTable
             title="Player Transaction History"
             rows={d.transaction_history}
+            noun="transaction"
             columns={[
               { label: 'ID', render: (r) => r.id },
               {
@@ -375,11 +428,12 @@ export default function PlayerProfileModal({
           <PanelTable
             title="Player Bet History (Sports)"
             rows={d.sport_bets}
+            noun="bet"
             columns={[
               {
                 label: 'ID',
-                // Opens the match/market context behind this stake — see
-                // SportBetDetailModal below.
+                // Opens the selection, result and P/L behind this stake — see
+                // SportBetDetailModal above.
                 render: (r) => (
                   <button
                     type="button"
@@ -392,41 +446,32 @@ export default function PlayerProfileModal({
                   </button>
                 ),
               },
+              { label: 'Sports Type', render: (r) => dash(r.sport) },
+              { label: 'Home Name', render: (r) => dash(r.home) },
+              { label: 'Away Name', render: (r) => dash(r.away) },
+              { label: 'League Name', render: (r) => dash(r.league) },
+              { label: 'Odds', render: (r) => dash(r.odds) },
               {
-                label: 'Selection Name',
-                render: (r) => dash(r.selection_name ?? r.market_name),
-              },
-              {
-                label: 'Type',
-                // Exchange uses back/lay; aggregator sports rounds have no side,
-                // so fall back to settlement status.
+                label: 'Match ID',
                 render: (r) => (
-                  <span className="uppercase">{dash(r.side ?? r.status)}</span>
+                  <span className="font-mono text-xs">{dash(r.event_key)}</span>
                 ),
               },
+              { label: 'Bet Amount', render: (r) => inr(r.stake) },
               {
-                label: 'Won',
-                // The market's winning side — set once it resolves. Left
-                // blank rather than guessed where it can't be said for sure
-                // (still pending, or not a clean two-way market).
-                render: (r) => dash(r.winner),
+                label: 'Status',
+                // The bet's own outcome (pending until the match settles), not
+                // the callback log's "settled", which only means the stake was
+                // taken.
+                render: (r) => <StatusBadge status={r.status} />,
               },
-              { label: 'Odds', render: (r) => dash(r.odds) },
-              { label: 'Bet', render: (r) => inr(r.stake) },
               {
-                label: 'Profit/Loss',
-                render: (r) =>
-                  r.profit_loss == null ? (
-                    '—'
-                  ) : (
-                    <span
-                      className={
-                        r.profit_loss >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                      }
-                    >
-                      {inr(r.profit_loss)}
-                    </span>
-                  ),
+                label: 'Remark',
+                // What each aggregator callback did to the wallet, e.g.
+                // "bet=100.0 win=0 bal=997.20" — stake first, then payout.
+                render: (r) => (
+                  <span className="font-mono text-xs">{dash(r.remark)}</span>
+                ),
               },
             ]}
           />

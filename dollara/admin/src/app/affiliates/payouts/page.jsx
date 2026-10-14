@@ -25,7 +25,7 @@ import { Check, X, Wallet, Clock, CheckCircle2 } from 'lucide-react';
 
 export default function PayoutApprovalsPage() {
   const { data, loading, error, reload } = useAdminData(
-    '/api/v1/admin/affiliates/payouts?limit=200',
+    '/api/v1/admin/affiliates/payouts',
     [],
   );
   const [selectedIds, setSelectedIds] = useState([]);
