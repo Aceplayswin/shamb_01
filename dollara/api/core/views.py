@@ -17,11 +17,13 @@ from django.views.decorators.http import require_http_methods
 from core import (
     admin_services,
     bonus_services,
+    deposit_gateway,
     game_admin_services,
     game_logging,
     game_services,
     services,
 )
+from core.paygate import PaygateError
 from core.ai import chat_respond, fraud_score, welcome_call
 from core.game_services import GameError
 from core.geo import detect_geo_from_ip
@@ -463,6 +465,117 @@ def wallet_deposit_proof(request):
         return JsonResponse({'url': request.build_absolute_uri(url)}, status=201)
     except ValueError as e:
         return _error_response(e)
+
+
+@csrf_exempt
+@require_auth(['user'])
+@require_http_methods(['POST'])
+def wallet_deposit_checkout(request):
+    """Create a Paygate order and return the Razorpay checkout payload."""
+    try:
+        body = _json_body(request)
+        result = deposit_gateway.start_checkout(
+            request.auth.sub,
+            body.get('amount'),
+            payment_method=body.get('paymentMethod') or body.get('payment_method'),
+            affiliate_ref=body.get('affiliateRef'),
+            affiliate_sub=body.get('affiliateSub'),
+            affiliate_click_id=body.get('affiliateClickId'),
+            client_ip=get_client_ip(request),
+        )
+        return JsonResponse(result, status=201)
+    except PaygateError as e:
+        return JsonResponse({'error': str(e)}, status=e.status)
+    except Transaction.DoesNotExist:
+        return _error_response(ValueError('Deposit not found'), 404)
+    except (KeyError, json.JSONDecodeError, User.DoesNotExist) as e:
+        return _error_response(e)
+    except Exception as e:
+        return _error_response(e)
+
+
+@csrf_exempt
+@require_auth(['user'])
+@require_http_methods(['POST'])
+def wallet_deposit_verify(request):
+    """Forward the Razorpay checkout result to Paygate and credit on success."""
+    try:
+        body = _json_body(request)
+        result = deposit_gateway.verify_checkout(
+            request.auth.sub,
+            transaction_id=int(body['transactionId']),
+            byte_transaction_id=body.get('byteTransactionId'),
+            razorpay_order_id=body.get('razorpay_order_id'),
+            razorpay_payment_id=body.get('razorpay_payment_id'),
+            razorpay_signature=body.get('razorpay_signature'),
+        )
+        return JsonResponse(result)
+    except PaygateError as e:
+        return JsonResponse({'error': str(e)}, status=e.status)
+    except Transaction.DoesNotExist:
+        return _error_response(ValueError('Deposit not found'), 404)
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as e:
+        return _error_response(e)
+    except Exception as e:
+        return _error_response(e)
+
+
+@csrf_exempt
+@require_auth(['user'])
+@require_http_methods(['POST'])
+def wallet_deposit_abandon(request):
+    """Player dismissed the checkout widget before paying."""
+    try:
+        body = _json_body(request)
+        return JsonResponse(
+            deposit_gateway.abandon_checkout(
+                request.auth.sub, int(body['transactionId'])
+            )
+        )
+    except Transaction.DoesNotExist:
+        return _error_response(ValueError('Deposit not found'), 404)
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as e:
+        return _error_response(e)
+    except Exception as e:
+        return _error_response(e)
+
+
+@require_auth(['user'])
+@require_http_methods(['GET'])
+def wallet_deposit_order(request, tx_id):
+    """Status lookup used by the deposit result view; polls Paygate if needed."""
+    try:
+        return JsonResponse(deposit_gateway.get_checkout_status(request.auth.sub, tx_id))
+    except PaygateError as e:
+        return JsonResponse({'error': str(e)}, status=e.status)
+    except Transaction.DoesNotExist:
+        return _error_response(ValueError('Deposit not found'), 404)
+    except Exception as e:
+        return _error_response(e)
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'POST'])
+def wallet_deposit_paygate_callback(request):
+    """Server-to-server Paygate callback (urlencoded or JSON). Always 200."""
+    payload = {}
+    if request.method == 'POST':
+        content_type = request.content_type or ''
+        if 'json' in content_type:
+            try:
+                payload = _json_body(request)
+            except json.JSONDecodeError:
+                payload = {}
+        else:
+            payload = request.POST
+    order_id = (
+        (payload.get('order_id') if payload else None)
+        or request.GET.get('order_id')
+        or request.GET.get('orderId')
+    )
+    status = (payload.get('status') if payload else None) or request.GET.get('status')
+    utr = (payload.get('utr') if payload else None) or request.GET.get('utr')
+    return JsonResponse(deposit_gateway.handle_callback(order_id, status, utr))
 
 
 # Admin-only: crediting a deposit is a product-admin action. The public deposit
