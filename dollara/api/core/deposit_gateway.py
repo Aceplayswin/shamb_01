@@ -1,8 +1,9 @@
 """Wallet deposit via Paygate (create order → hosted checkout → verify).
 
 Mirrors the merchant checkout structure: the API signs the order, fetches the
-per-order Razorpay payload, and credits the wallet only after Paygate confirms
-the payment (verify, status poll, or merchant callback).
+per-order Razorpay payload, and on Paygate success queues the deposit for
+admin approval. The wallet is credited only when an admin confirms — same as
+manual deposits (verify, status poll, or merchant callback never credit).
 """
 
 from __future__ import annotations
@@ -103,6 +104,9 @@ def _to_public_status(tx: Transaction) -> str:
         Transaction.Status.CANCELLED,
     ):
         return 'failed'
+    # Paid at the gateway but not yet credited — admin must approve first.
+    if tx.status == Transaction.Status.PENDING and _notes(tx).get('paymentVerified'):
+        return 'awaiting_approval'
     return 'pending'
 
 
@@ -220,14 +224,34 @@ def start_checkout(
     }
 
 
-def _credit_if_needed(tx: Transaction, *, utr: str | None = None) -> Transaction:
+def _queue_for_admin_if_needed(tx: Transaction, *, utr: str | None = None) -> Transaction:
+    """Record gateway payment success and leave the deposit PENDING for admin.
+
+    Does not credit the wallet — that happens only via services.confirm_deposit
+    when an admin approves, matching the manual deposit path.
+    """
+    extra = {'paymentVerified': True}
     if utr:
-        extra = {'utr': utr}
-        _save_notes(tx, extra)
-        tx.refresh_from_db()
+        extra['utr'] = utr
+    if not _notes(tx).get('verifiedAt'):
+        extra['verifiedAt'] = timezone.now().isoformat()
+    _save_notes(tx, extra)
+    tx.refresh_from_db()
+
     if tx.status == Transaction.Status.COMPLETED:
         return tx
-    services.confirm_deposit(tx.id, tx.reference_number or _order_id_for(tx))
+    if tx.status == Transaction.Status.PENDING:
+        return tx
+    if tx.status == Transaction.Status.REJECTED:
+        return tx
+
+    # PROCESSING, or a late success after abandon/fail — put in the admin queue.
+    tx.status = Transaction.Status.PENDING
+    update_fields = ['status', 'updated_at']
+    if tx.error_message:
+        tx.error_message = None
+        update_fields.append('error_message')
+    tx.save(update_fields=update_fields)
     tx.refresh_from_db()
     return tx
 
@@ -239,6 +263,9 @@ def _mark_failed(tx: Transaction, message: str | None = None) -> Transaction:
         Transaction.Status.REJECTED,
         Transaction.Status.CANCELLED,
     ):
+        return tx
+    # Already paid and waiting on admin — do not overwrite with a late failure.
+    if tx.status == Transaction.Status.PENDING and _notes(tx).get('paymentVerified'):
         return tx
     tx.status = Transaction.Status.FAILED
     if message:
@@ -285,7 +312,7 @@ def verify_checkout(
     tx.refresh_from_db()
     status = str((verification or {}).get('status') or '').lower()
     if status == 'success':
-        tx = _credit_if_needed(tx)
+        tx = _queue_for_admin_if_needed(tx)
     return {
         'success': True,
         'status': _to_public_status(tx),
@@ -318,7 +345,7 @@ def _refresh_from_gateway(tx: Transaction) -> Transaction:
     api_status = str((live or {}).get('status') or '').lower()
     utr = (live or {}).get('utr')
     if api_status == 'paid':
-        return _credit_if_needed(tx, utr=str(utr) if utr else None)
+        return _queue_for_admin_if_needed(tx, utr=str(utr) if utr else None)
     if api_status in ('failed', 'refunded'):
         return _mark_failed(tx, api_status)
     return tx
@@ -366,7 +393,7 @@ def handle_callback(order_id: str | None, status: str | None, utr: str | None = 
     if tx is None:
         return {'received': True}
     if str(status or '').upper() == 'SUCCESS':
-        _credit_if_needed(tx, utr=str(utr) if utr else None)
+        _queue_for_admin_if_needed(tx, utr=str(utr) if utr else None)
     elif str(status or '').upper() in ('FAILED', 'FAILURE'):
         _mark_failed(tx, str(status))
     return {'received': True}

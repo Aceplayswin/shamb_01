@@ -3,9 +3,37 @@
 // Deposit checkout surface. The Paygate order + Razorpay widget live in
 // `usePaygateDeposit`; this component is the pay button + status copy that
 // theme pages drop in. The browser never sees merchant API keys.
+// Payment success queues the deposit for admin approval — wallet credit is
+// not immediate.
 
 import { Loader2, Lock } from 'lucide-react';
 import { usePaygateDeposit } from '@/hooks/usePaygateDeposit';
+
+function receiptCopy(receipt) {
+  const amount = `₹${Number(receipt.amount).toLocaleString('en-IN')}`;
+  if (receipt.status === 'success') {
+    return {
+      title: 'Deposit successful',
+      body: `${amount} has been credited to your wallet.`,
+    };
+  }
+  if (receipt.status === 'failed') {
+    return {
+      title: 'Payment failed',
+      body: 'The payment did not go through. You can try again with a new deposit.',
+    };
+  }
+  if (receipt.status === 'awaiting_approval') {
+    return {
+      title: 'Payment received',
+      body: `${amount} is awaiting admin approval. It will be credited to your wallet once approved.`,
+    };
+  }
+  return {
+    title: 'Payment pending',
+    body: 'We have not received confirmation yet. This page will update once the gateway confirms.',
+  };
+}
 
 export function PaymentGateway({
   amount,
@@ -32,20 +60,11 @@ export function PaymentGateway({
   };
 
   if (receipt) {
-    const ok = receipt.status === 'success';
-    const failed = receipt.status === 'failed';
+    const { title, body } = receiptCopy(receipt);
     return (
       <div className={receiptClassName}>
-        <p className={receiptTitleClassName}>
-          {ok ? 'Deposit successful' : failed ? 'Payment failed' : 'Payment pending'}
-        </p>
-        <p className={receiptBodyClassName}>
-          {ok
-            ? `₹${Number(receipt.amount).toLocaleString('en-IN')} has been credited to your wallet.`
-            : failed
-              ? 'The payment did not go through. You can try again with a new deposit.'
-              : 'We have not received confirmation yet. This page will update once the gateway confirms.'}
-        </p>
+        <p className={receiptTitleClassName}>{title}</p>
+        <p className={receiptBodyClassName}>{body}</p>
         <p className={receiptBodyClassName}>Request ID: {receipt.transactionId}</p>
       </div>
     );

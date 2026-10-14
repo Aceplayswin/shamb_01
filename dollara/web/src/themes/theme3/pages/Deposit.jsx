@@ -1,7 +1,7 @@
 'use client';
 
-// Theme3 Deposit — amount, then Paygate checkout. Wallet is credited when
-// the gateway confirms the payment.
+// Theme3 Deposit — amount, then Paygate checkout. Payment success queues for
+// admin approval; the wallet is credited only when an admin approves.
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -98,12 +98,16 @@ export default function Theme3Deposit() {
               ? 'Deposit successful'
               : receipt.status === 'failed'
                 ? 'Payment failed'
-                : 'Payment pending'}
+                : receipt.status === 'awaiting_approval'
+                  ? 'Payment received'
+                  : 'Payment pending'}
           </p>
           <p className="mt-1 text-xs text-[#6b6579]">
             {receipt.status === 'success'
               ? `₹${Number(receipt.amount).toLocaleString('en-IN')} credited · ID ${receipt.transactionId}`
-              : `Request ID: ${receipt.transactionId}`}
+              : receipt.status === 'awaiting_approval'
+                ? `₹${Number(receipt.amount).toLocaleString('en-IN')} awaiting admin approval · ID ${receipt.transactionId}`
+                : `Request ID: ${receipt.transactionId}`}
           </p>
           <button type="button" onClick={() => { reset(); setAmount(''); }} className={`${t3BtnPrimary} mt-4 w-full`}>
             New deposit

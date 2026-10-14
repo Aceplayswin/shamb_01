@@ -499,10 +499,10 @@ def get_wallet(user_id: int) -> dict:
         # Only one withdrawal may await review at a time (create_withdrawal);
         # the withdraw page uses this to lock its form until the admin acts.
         'hasPendingWithdrawal': _has_open_withdrawal(user_id),
-        # Same rule for deposits (create_deposit): the deposit page locks its
-        # form until the open request is approved or rejected.
-        # Manual deposits sit in PENDING until an admin acts. Gateway checkouts
-        # use PROCESSING while Razorpay is open, so they must not lock the form.
+        # Same rule for deposits: the deposit page locks its form until the open
+        # request is approved or rejected. Manual deposits and paid gateway
+        # deposits both sit in PENDING awaiting admin credit. PROCESSING is
+        # only an in-flight Razorpay checkout and must not lock the form.
         'hasPendingDeposit': Transaction.objects.filter(
             user_id=user_id,
             type=Transaction.TxType.DEPOSIT,
@@ -757,8 +757,8 @@ def create_deposit(
 def confirm_deposit(transaction_id: int, reference_number: str) -> dict:
     """Credit a pending/processing deposit to the user's main balance.
 
-    Used by the admin cashier and by the Paygate verify/callback path.
-    Idempotent — a deposit that is already COMPLETED is never credited twice.
+    Admin cashier only — gateway payment success queues the deposit as PENDING
+    and never credits here. Idempotent: already COMPLETED is never credited twice.
     """
     reference_number = _normalize_deposit_reference(reference_number)
     already = False
