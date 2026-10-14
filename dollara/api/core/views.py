@@ -29,7 +29,10 @@ from core.ip_tracking import IpBlocked, enforce_ip, get_client_ip, record_login
 from core.middleware import require_auth
 from core.models import AiCallLog, Transaction, User, UserSetting, Wallet
 from core.schema_errors import (
-    BONUSES_SCHEMA_MESSAGE, is_missing_column_error, schema_error_response,
+    BONUSES_SCHEMA_MESSAGE,
+    describe_database_error,
+    is_missing_column_error,
+    schema_error_response,
 )
 from services.branding import get_branding
 
@@ -280,10 +283,17 @@ def register(request):
         return _error_response(e)
     except ValueError as e:
         return _error_response(e)
+    except (OperationalError, ProgrammingError) as e:
+        # Schema drift (a column the model selects that the table lacks) must
+        # come back as a sentence, not the MySQL text and not a generic 500.
+        logger.exception('register failed')
+        return JsonResponse(
+            {'error': describe_database_error(e) or 'Registration could not be saved.'},
+            status=500,
+        )
     except Exception:
-        # Anything unexpected (schema drift, DB down) must still reach the
-        # sign-up form as JSON — otherwise the browser gets an HTML error page
-        # and the player sees a raw failure. Details stay in the log.
+        # Anything else unexpected must still reach the sign-up form as JSON —
+        # otherwise the browser gets an HTML error page. Details stay in the log.
         logger.exception('register failed')
         return JsonResponse({'error': 'Registration failed, please try again'}, status=500)
 
@@ -295,8 +305,15 @@ def demo_session(request):
         return JsonResponse(services.create_demo_session(), status=201)
     except ValueError as e:
         return _error_response(e)
-    except Exception as e:
-        return _error_response(e, status=500)
+    except (OperationalError, ProgrammingError) as e:
+        logger.exception('demo session failed')
+        return JsonResponse(
+            {'error': describe_database_error(e) or 'Demo session could not be created.'},
+            status=500,
+        )
+    except Exception:
+        logger.exception('demo session failed')
+        return JsonResponse({'error': 'Demo session could not be created.'}, status=500)
 
 
 @csrf_exempt
@@ -314,6 +331,12 @@ def login(request):
         return _error_response(e)
     except ValueError as e:
         return _error_response(e, 401)
+    except (OperationalError, ProgrammingError) as e:
+        logger.exception('login failed')
+        return JsonResponse(
+            {'error': describe_database_error(e) or 'Sign-in could not be completed.'},
+            status=500,
+        )
 
 
 @csrf_exempt
@@ -858,6 +881,12 @@ def admin_login(request):
         return _error_response(e)
     except ValueError as e:
         return _error_response(e, 401)
+    except (OperationalError, ProgrammingError) as e:
+        logger.exception('admin login failed')
+        return JsonResponse(
+            {'error': describe_database_error(e) or 'Sign-in could not be completed.'},
+            status=500,
+        )
 
 
 @require_auth(['admin'])

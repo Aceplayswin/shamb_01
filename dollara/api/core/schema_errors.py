@@ -8,6 +8,8 @@ frontends surface as a bare "Internal Server Error". These helpers let the
 views that read such tables return the command that repairs the schema.
 """
 
+import re
+
 from django.http import JsonResponse
 
 # MySQL 1054 = unknown column, 1146 = table doesn't exist.
@@ -40,3 +42,30 @@ def schema_error_response(
     status: int = 500, message: str = PAYMENT_METHODS_SCHEMA_MESSAGE
 ) -> JsonResponse:
     return JsonResponse({'error': message}, status=status)
+
+
+# MySQL quotes the missing name: Unknown column 'users.email' in 'field list'
+_UNKNOWN_COLUMN = re.compile(r"Unknown column '([^']+)'", re.IGNORECASE)
+# Table 'dollara.users' doesn't exist
+_MISSING_TABLE = re.compile(r"Table '([^']+)' doesn't exist", re.IGNORECASE)
+
+
+def describe_database_error(exc: Exception) -> str | None:
+    """A short sentence naming the missing column or table.
+
+    The MySQL text itself is not returned. Callers that cannot describe the
+    error should keep their own generic message.
+    """
+    text = str(exc)
+    column = _UNKNOWN_COLUMN.search(text)
+    if column:
+        name = column.group(1)
+        if '.' in name:
+            table, col = name.rsplit('.', 1)
+            return f'The {table} table is missing the {col} column.'
+        return f'The database is missing the {name} column.'
+    missing = _MISSING_TABLE.search(text)
+    if missing:
+        short = missing.group(1).rsplit('.', 1)[-1]
+        return f'The {short} table does not exist.'
+    return None
