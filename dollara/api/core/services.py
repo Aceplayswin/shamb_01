@@ -501,7 +501,13 @@ def get_wallet(user_id: int) -> dict:
         'hasPendingWithdrawal': _has_open_withdrawal(user_id),
         # Same rule for deposits (create_deposit): the deposit page locks its
         # form until the open request is approved or rejected.
-        'hasPendingDeposit': _has_open_deposit(user_id),
+        # Manual deposits sit in PENDING until an admin acts. Gateway checkouts
+        # use PROCESSING while Razorpay is open, so they must not lock the form.
+        'hasPendingDeposit': Transaction.objects.filter(
+            user_id=user_id,
+            type=Transaction.TxType.DEPOSIT,
+            status=Transaction.Status.PENDING,
+        ).exists(),
         'currency': wallet.currency,
         # Withdrawable cash. Deliberately excludes `bonus`: bonus money is
         # credited on award but can only be staked, never cashed out, until
@@ -749,27 +755,38 @@ def create_deposit(
 
 
 def confirm_deposit(transaction_id: int, reference_number: str) -> dict:
-    """Admin action: credit a pending deposit to the user's main balance.
+    """Credit a pending/processing deposit to the user's main balance.
 
-    Idempotent — a deposit that is not PENDING is never credited twice.
+    Used by the admin cashier and by the Paygate verify/callback path.
+    Idempotent — a deposit that is already COMPLETED is never credited twice.
     """
     reference_number = _normalize_deposit_reference(reference_number)
+    already = False
     with tenant_atomic():
         tx = Transaction.objects.select_for_update().get(
             id=transaction_id, type=Transaction.TxType.DEPOSIT
         )
-        if tx.status != Transaction.Status.PENDING:
+        if tx.status == Transaction.Status.COMPLETED:
+            already = True
+            amount = tx.amount
+        elif tx.status not in (
+            Transaction.Status.PENDING,
+            Transaction.Status.PROCESSING,
+        ):
             raise ValueError(f'Deposit already {tx.status}')
-        amount = tx.amount
-        tx.status = Transaction.Status.COMPLETED
-        # Keep any reference the user already supplied; only fill it if missing.
-        if reference_number and not tx.reference_number:
-            _assert_unique_deposit_reference(reference_number, exclude_id=tx.id)
-            tx.reference_number = reference_number
-        tx.save(update_fields=['status', 'reference_number', 'updated_at'])
-        Wallet.objects.filter(user_id=tx.user_id).update(
-            main_balance=F('main_balance') + amount
-        )
+        else:
+            amount = tx.amount
+            tx.status = Transaction.Status.COMPLETED
+            # Keep any reference the user already supplied; only fill it if missing.
+            if reference_number and not tx.reference_number:
+                _assert_unique_deposit_reference(reference_number, exclude_id=tx.id)
+                tx.reference_number = reference_number
+            tx.save(update_fields=['status', 'reference_number', 'updated_at'])
+            Wallet.objects.filter(user_id=tx.user_id).update(
+                main_balance=F('main_balance') + amount
+            )
+    if already:
+        return {'credited': float(amount), 'bonusCredited': 0}
     # Money-based bonuses that fire on a confirmed deposit: the deposit-match
     # bonus for this player, and any referral bonus that pays on first deposit.
     # Each is a no-op if the admin hasn't configured one; failures here must not

@@ -276,6 +276,17 @@ GAME_PENDING_STAKE_MAX_HOURS = os.getenv('GAME_PENDING_STAKE_MAX_HOURS', '72')
 # and redirects the resulting click to the player site.
 API_URL = os.getenv('API_URL', '').rstrip('/') or f'http://localhost:{API_PORT}'
 WEB_URL = os.getenv('WEB_URL', '').rstrip('/') or 'http://localhost:3000'
+
+# Paygate (Ultraconic PG) — merchant-key signed orders for player deposits.
+# The secret never leaves this API; the web app only receives the per-order
+# Razorpay checkout payload.
+PAYGATE = {
+    'API_URL': os.getenv('PAYGATE_API_URL', 'http://localhost:3000').rstrip('/'),
+    'KEY_ID': os.getenv('PAYGATE_KEY_ID', ''),
+    'KEY_SECRET': os.getenv('PAYGATE_KEY_SECRET', ''),
+    'PROVIDER': os.getenv('PAYGATE_PROVIDER', 'razorpay'),
+    'HTTP_TIMEOUT': int(os.getenv('PAYGATE_HTTP_TIMEOUT', '30')),
+}
 # The partner portal. Needed server-side because sub-affiliate invite links are
 # built by the API and point at that portal's apply form.
 AFFILIATE_URL = os.getenv('AFFILIATE_URL', '').rstrip('/') or 'http://localhost:3003'
