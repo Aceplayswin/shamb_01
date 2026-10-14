@@ -28,7 +28,7 @@ ROOT_URLCONF = 'config.urls'
 WSGI_APPLICATION = 'config.wsgi.application'
 
 # Master / control-plane database only. Tenant databases are registered at runtime
-# when provisioning or inspecting products.
+# when inspecting products.
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
@@ -48,6 +48,12 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 STATIC_URL = 'static/'
+# Admin-uploaded branding assets (logos, favicons, splash/app icons). Served
+# locally by Django — no object storage in this stack yet; swap to S3/Cloudinary
+# later by pointing the default storage backend at it, the upload view already
+# goes through django.core.files.storage.default_storage.
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MIGRATION_MODULES = {'core': None, 'tenants': None}
@@ -64,8 +70,8 @@ JWT_SECRET = os.getenv('JWT_SECRET', 'dev-secret-change-in-production')
 JWT_EXPIRY_DAYS = 7
 API_PORT = int(os.getenv('PORT', '8000'))
 
-# Path to the shared per-tenant schema applied when provisioning products.
-TENANT_SCHEMA_PATH = os.getenv(
-    'TENANT_SCHEMA_PATH',
-    str(BASE_DIR / 'database' / 'init.sql'),
-)
+# Shared secret a product API sends (X-Product-Token) to pull its own
+# control-plane config from GET /api/v1/products/<slug>/config. Products read
+# their branding/theme/webhook public keys over that endpoint instead of
+# connecting to this master database directly. Empty => endpoint fails closed.
+PRODUCT_CONFIG_TOKEN = os.getenv('PRODUCT_CONFIG_TOKEN', '')

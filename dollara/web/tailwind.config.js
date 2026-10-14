@@ -4,18 +4,22 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        // Brand ramp reads Super Admin-injected --brand-* triplets (see
+        // themes/palettes.js), falling back to the default amber ramp so the app
+        // renders unchanged with no Super Admin. The primary color the operator
+        // picks per theme is expanded into this 50→950 ramp at runtime.
         brand: {
-          50: '#fffcf0',
-          100: '#fff6d6',
-          200: '#fcecae',
-          300: '#f9df80',
-          400: '#f7d35c',
-          500: '#F5C542', // Primary
-          600: '#FFB800', // Primary hover
-          700: '#d99a00',
-          800: '#a67700',
-          900: '#7a5800',
-          950: '#432f00',
+          50: 'rgb(var(--brand-50, 255 252 240) / <alpha-value>)',
+          100: 'rgb(var(--brand-100, 255 246 214) / <alpha-value>)',
+          200: 'rgb(var(--brand-200, 252 236 174) / <alpha-value>)',
+          300: 'rgb(var(--brand-300, 249 223 128) / <alpha-value>)',
+          400: 'rgb(var(--brand-400, 247 211 92) / <alpha-value>)',
+          500: 'rgb(var(--brand-500, 245 197 66) / <alpha-value>)', // Primary
+          600: 'rgb(var(--brand-600, 255 184 0) / <alpha-value>)', // Primary hover
+          700: 'rgb(var(--brand-700, 217 154 0) / <alpha-value>)',
+          800: 'rgb(var(--brand-800, 166 119 0) / <alpha-value>)',
+          900: 'rgb(var(--brand-900, 122 88 0) / <alpha-value>)',
+          950: 'rgb(var(--brand-950, 67 47 0) / <alpha-value>)',
         },
         // Positive / live states — built from the success green
         emerald: {

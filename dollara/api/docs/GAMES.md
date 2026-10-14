@@ -146,7 +146,14 @@ Returns the aggregator-shaped encrypted ack `{ code, msg, payload }` where
 1. **Decrypt** the envelope (`services.game_provider.parse_callback`).
 2. **Validate** the payload (`CallbackPayload.parse`).
 3. **Resolve** the user by stripping the player prefix from `member_account`.
-4. **Heartbeat**: if `bet == win == 0`, return the current balance, no writes.
+4. **Heartbeat**: if `bet == win == 0` and the payload carries no sportsbook
+   bet-slip result, return the current balance, no writes. A bet-slip result
+   (`exchange_payout` operation, `bet_slip_settle` block, or final selection
+   statuses in the provider detail under `data`) is settled instead — a losing
+   slip legitimately arrives with both amounts at 0, because its stakes were
+   debited when the bets were placed. Each selection is tied to its stake by the
+   provider bet id; a selection with no recorded stake rejects the whole slip so
+   the provider retries it.
 5. **Idempotency pre-check**: known `serial_number` → re-ack, no settlement.
 6. **Settle** under `SELECT … FOR UPDATE` on the wallet row, inside
    `tenant_atomic()`:
@@ -184,17 +191,3 @@ our normalized categories:
 | Fish Game, CasinoTable | `ai_games` |
 | Sport | `sports` |
 | SportsGame | `virtual_sports` |
-
----
-
-## 7. Tests
-
-```bash
-python manage.py test core.tests --settings=config.test_settings
-```
-
-`config/test_settings.py` uses in-memory SQLite and ORM-built tables (production
-applies schema via SQL and disables migrations). Coverage: AES round-trip and
-launch envelope (`test_game_provider`), request/callback validation
-(`test_game_schemas`), launch + settlement + idempotency + heartbeat + wagering
-(`test_game_services`), and route/ack behavior (`test_game_views`).

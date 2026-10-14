@@ -1,0 +1,156 @@
+'use client';
+
+// Theme4 top chrome — two stacked strips matching the exchange reference:
+//   1. A near-black announcement ticker (megaphone + marquee text, live clock).
+//   2. The teal gradient header: brand mark left, LOG IN (or wallet + profile)
+//      right. LOG IN opens the shell's auth modal.
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { Megaphone, User, Wallet, Download, Play, Loader2 } from 'lucide-react';
+import { useAuthStore } from '@/store/auth';
+import { useBranding, onLogoError } from '@/hooks/useBranding';
+import { useDemoLogin } from '@/hooks/useDemoLogin';
+import { ProfileMenu } from '@/components/ProfileMenu';
+import { GetAppModal } from '@/components/GetAppModal';
+import { useAuthModal } from './authModalContext';
+
+const TICKER = 'Unmatched Betting Excitement and Access 500+ Casino and Online Games';
+
+// Live "09 Jul 2026 12:48:12" clock. Rendered only after mount so the SSR HTML
+// never disagrees with the client (avoids a hydration mismatch).
+function Clock() {
+  const [now, setNow] = useState(null);
+  useEffect(() => {
+    const tick = () => setNow(new Date());
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+  if (!now) return <span className="inline-block w-36" aria-hidden />;
+  const date = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const time = now.toLocaleTimeString('en-GB', { hour12: false });
+  return (
+    <span className="whitespace-nowrap font-mono text-[0.65rem] tracking-wide text-white/85">
+      {date.replace(/ /g, ' ')} {time}
+    </span>
+  );
+}
+
+export function Theme4BrandMark({ name, dark = false }) {
+  const label = name || 'DOLLARA';
+  const { logo_url: logoUrl } = useBranding();
+  return (
+    <Link href="/" className="flex shrink-0 items-center gap-2">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={logoUrl}
+        alt={label}
+        onError={onLogoError}
+        className={`h-9 w-9 shrink-0 rounded object-contain ${dark ? '' : 'bg-white/95'} p-0.5 shadow-sm`}
+      />
+      <span className={`font-display text-lg font-black uppercase leading-none tracking-wide ${dark ? 'text-[#13272b]' : 'text-white'}`}>
+        {label}
+        <span className={`block text-[0.5rem] font-bold tracking-[0.4em] ${dark ? 'text-[#0e7480]' : 'text-white/70'}`}>
+          EXCHANGE
+        </span>
+      </span>
+    </Link>
+  );
+}
+
+export function Theme4TopBar() {
+  const branding = useBranding();
+  const { open } = useAuthModal();
+
+  const token = useAuthStore((s) => s.token);
+  const wallet = useAuthStore((s) => s.wallet);
+  const isHydrated = useAuthStore((s) => s.isHydrated);
+  // Real balance, not `available` — a pending withdrawal only holds funds, it
+  // does not debit them, so netting the hold off made this read ₹0.00.
+  const balance = wallet?.main ?? wallet?.real ?? 0;
+  const { tryDemo, demoLoading } = useDemoLogin({ redirectTo: '/' });
+  const [getAppOpen, setGetAppOpen] = useState(false);
+
+  return (
+    <header className="sticky top-0 z-40">
+      {/* Announcement ticker */}
+      <div className="flex items-center gap-3 bg-[#101c1e] px-3 py-1.5">
+        <Megaphone className="h-3.5 w-3.5 shrink-0 -scale-x-100 text-white/80" />
+        <div className="relative flex-1 overflow-hidden">
+          <div className="flex w-max animate-marquee gap-16 whitespace-nowrap">
+            {[TICKER, TICKER].map((t, i) => (
+              <span key={i} className="text-[0.65rem] font-semibold tracking-wide text-white/85">
+                {t}
+              </span>
+            ))}
+          </div>
+        </div>
+        <Clock />
+      </div>
+
+      {/* Teal gradient header */}
+      <div className="theme4-header">
+        <div className="mx-auto flex max-w-[1200px] items-center justify-between px-3 py-2.5">
+          <Theme4BrandMark name={branding.product_name} />
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setGetAppOpen(true)}
+              title="Get the app"
+              className="hidden items-center gap-1.5 rounded border border-white/30 bg-[#0a5560] px-3 py-1.5 text-xs font-black uppercase tracking-wide text-white transition hover:bg-[#094b55] sm:inline-flex"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span className="hidden md:inline">Get the app</span>
+            </button>
+
+            {/* Play Demo — reachable at every width; icon-only on narrow screens. */}
+            {isHydrated && !token && (
+              <button
+                type="button"
+                onClick={tryDemo}
+                disabled={demoLoading}
+                title="Play Demo"
+                aria-label="Play Demo"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded border border-white/30 px-2.5 py-1.5 text-xs font-black uppercase tracking-wide text-white transition hover:bg-white/10 disabled:opacity-60 lg:px-4"
+              >
+                {demoLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                <span className="hidden lg:inline">{demoLoading ? 'Starting…' : 'Play Demo'}</span>
+              </button>
+            )}
+
+            {isHydrated && token ? (
+              <>
+                <div className="hidden items-center gap-2 rounded border border-white/25 bg-[#0a5560]/60 py-1 pl-3 pr-1 sm:flex">
+                  <Wallet className="h-4 w-4 text-white/80" />
+                  <span className="text-sm font-black text-white">
+                    ₹{Number(balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  <Link
+                    href="/deposit"
+                    className="rounded bg-white px-3 py-1 text-xs font-black uppercase text-[#0e7480] transition hover:brightness-95"
+                  >
+                    Deposit
+                  </Link>
+                </div>
+                <ProfileMenu variant="theme4" />
+              </>
+            ) : isHydrated ? (
+              <button
+                onClick={() => open('login')}
+                className="flex items-center gap-1.5 rounded border border-white/30 bg-[#0a5560] px-4 py-1.5 text-xs font-black uppercase tracking-wide text-white shadow-sm transition hover:bg-[#094b55]"
+              >
+                <User className="h-3.5 w-3.5" /> Log In
+              </button>
+            ) : (
+              <span className="inline-block h-8 w-24" aria-hidden />
+            )}
+          </div>
+        </div>
+      </div>
+
+      <GetAppModal open={getAppOpen} onClose={() => setGetAppOpen(false)} />
+    </header>
+  );
+}

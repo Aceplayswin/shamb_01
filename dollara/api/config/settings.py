@@ -35,29 +35,36 @@ ROOT_URLCONF = 'config.urls'
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
-# --- Multi-tenant database-per-tenant configuration ---
-# `default` is the master / control-plane database (products, urls, branding,
-# databases, product_themes — see super_admin/api/database/master.sql). Tenant
-# databases are registered dynamically at runtime by the
-# tenant resolver (see services/tenant_resolver.py + tenants/state.py) and routed
-# via middleware.db_router.TenantRouter.
+# --- Database ---
+# `default` is this product's OWN feature database (MYSQL_*). dollara no longer
+# connects to Super Admin's master/control-plane database — that data (product
+# identity, branding, theme, webhook public keys) is fetched over HTTP from Super
+# Admin and cached; see services/control_plane.py. This instance serves a single
+# product, so there is no per-tenant DB switching: all feature models live here.
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.getenv('MASTER_MYSQL_DATABASE', os.getenv('MYSQL_DATABASE', 'dollara_master')),
-        'USER': os.getenv('MASTER_MYSQL_USER', os.getenv('MYSQL_USER', 'root')),
-        'PASSWORD': os.getenv('MASTER_MYSQL_PASSWORD', os.getenv('MYSQL_PASSWORD', '')),
-        'HOST': os.getenv('MASTER_MYSQL_HOST', os.getenv('MYSQL_HOST', 'localhost')),
-        'PORT': os.getenv('MASTER_MYSQL_PORT', os.getenv('MYSQL_PORT', '3306')),
+        'NAME': os.getenv('MYSQL_DATABASE', 'dollara'),
+        'USER': os.getenv('MYSQL_USER', 'root'),
+        'PASSWORD': os.getenv('MYSQL_PASSWORD', ''),
+        'HOST': os.getenv('MYSQL_HOST', 'localhost'),
+        'PORT': os.getenv('MYSQL_PORT', '3306'),
         'OPTIONS': {'charset': 'utf8mb4'},
     }
 }
 
 DATABASE_ROUTERS = ['middleware.db_router.TenantRouter']
 
-# Default tenant slug used for local development hosts (localhost/127.0.0.1)
-# where no domain/subdomain is available.
-DEFAULT_TENANT = os.getenv('DEFAULT_TENANT', 'dollara')
+# --- Control plane (Super Admin) ---
+# Where to fetch this product's control-plane config, and the api_key that both
+# authenticates the pull AND identifies which product this instance is. Super
+# Admin resolves the product from this key alone — no slug is exchanged, so the
+# two sides only communicate when a valid key is configured here.
+SUPER_ADMIN_URL = os.getenv('SUPER_ADMIN_URL', 'http://localhost:8000').rstrip('/')
+PRODUCT_CONFIG_TOKEN = os.getenv('PRODUCT_CONFIG_TOKEN', '')
+# How long (seconds) to cache a fetched config before re-checking Super Admin.
+CONTROL_PLANE_CACHE_TTL = int(os.getenv('CONTROL_PLANE_CACHE_TTL', '60'))
+CONTROL_PLANE_HTTP_TIMEOUT = int(os.getenv('CONTROL_PLANE_HTTP_TIMEOUT', '10'))
 
 # In-process cache and channel layers (no Redis).
 CACHES = {
@@ -72,7 +79,117 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 STATIC_URL = 'static/'
+# Admin-uploaded images (game thumbnails, provider logos). Served locally —
+# swap to S3/Cloudinary storage later by pointing DEFAULT_FILE_STORAGE at it,
+# the upload view already goes through django.core.files.storage.default_storage.
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# --------------------------------------------------------------------------- #
+# Logging — game-play lifecycle to rotating files under logs/.
+#
+# The 'games' logger (see core/game_logging.py) writes a greppable, plain-text
+# record of every launch, settlement (bet/win/loss/balance) and failure to
+# logs/games.log; everything WARNING+ (interruptions, rejected callbacks,
+# decrypt/internal errors) is mirrored to logs/games_error.log so problems are
+# easy to find and diagnose. Its 'games.raw' child writes everything the
+# aggregator sends — callback bodies verbatim plus their decrypted payloads,
+# the ack returned for each callback, and launch responses — to
+# logs/raw_games.log. Files rotate so they never grow unbounded.
+# --------------------------------------------------------------------------- #
+LOG_DIR = BASE_DIR / 'logs'
+LOG_DIR.mkdir(exist_ok=True)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'game': {'format': '%(asctime)s %(levelname)s %(message)s'},
+        # One JSON object per line; the timestamp already lives inside the object.
+        'json_line': {'format': '%(message)s'},
+    },
+    'handlers': {
+        'games_file': {
+            'class': 'core.logging_handlers.WatchedRotatingFileHandler',
+            'filename': str(LOG_DIR / 'games.log'),
+            'maxBytes': 10 * 1024 * 1024,
+            'backupCount': 10,
+            'formatter': 'game',
+            'level': 'INFO',
+            'encoding': 'utf-8',
+        },
+        'games_error_file': {
+            'class': 'core.logging_handlers.WatchedRotatingFileHandler',
+            'filename': str(LOG_DIR / 'games_error.log'),
+            'maxBytes': 5 * 1024 * 1024,
+            'backupCount': 10,
+            'formatter': 'game',
+            'level': 'WARNING',
+            'encoding': 'utf-8',
+        },
+        # Raw aggregator traffic. Every callback lands here twice (body and
+        # decrypted payload), so it gets bigger files than games.log.
+        'games_raw_file': {
+            'class': 'core.logging_handlers.WatchedRotatingFileHandler',
+            'filename': str(LOG_DIR / 'raw_games.log'),
+            'maxBytes': 50 * 1024 * 1024,
+            'backupCount': 10,
+            'formatter': 'game',
+            'level': 'INFO',
+            'encoding': 'utf-8',
+        },
+        # Same traffic as raw_games.log, one JSON object per line, so a callback's
+        # request, decrypted payload, ack and response can be read together.
+        'games_raw_json_file': {
+            'class': 'core.logging_handlers.WatchedRotatingFileHandler',
+            'filename': str(LOG_DIR / 'raw_games.json'),
+            'maxBytes': 50 * 1024 * 1024,
+            'backupCount': 10,
+            'formatter': 'json_line',
+            'level': 'INFO',
+            'encoding': 'utf-8',
+        },
+        # Affiliate program: attribution decisions, commission runs and signed
+        # partner requests. Separate from games.log because these are money
+        # decisions about third parties and get read during payout disputes.
+        'affiliate_file': {
+            'class': 'core.logging_handlers.WatchedRotatingFileHandler',
+            'filename': str(LOG_DIR / 'affiliate.log'),
+            'maxBytes': 10 * 1024 * 1024,
+            'backupCount': 10,
+            'formatter': 'game',
+            'level': 'INFO',
+            'encoding': 'utf-8',
+        },
+    },
+    'loggers': {
+        'games': {
+            'handlers': ['games_file', 'games_error_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # Kept out of games.log: without propagate=False every raw payload
+        # would be copied there too.
+        'games.raw': {
+            'handlers': ['games_raw_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # Not a child that propagates: games.raw.json must not also land in
+        # raw_games.log. propagate stays False for that reason.
+        'games.raw.json': {
+            'handlers': ['games_raw_json_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'affiliate': {
+            'handlers': ['affiliate_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
 
 # Schema is applied via SQL (database/init.sql per tenant, database/master.sql
 # for the control plane), so Django migrations are disabled for both apps.
@@ -85,11 +202,7 @@ MIGRATION_MODULES = {'core': None, 'tenants': None}
 # TODO: lock this down to an explicit allowlist before going to production.
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_HEADERS = (
-    *default_headers,
-    'x-tenant',
-    'x-tenant-id',
-)
+CORS_ALLOW_HEADERS = default_headers
 
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
@@ -101,8 +214,6 @@ JWT_SECRET = os.getenv('JWT_SECRET', 'dev-secret-change-in-production')
 JWT_REFRESH_SECRET = os.getenv('JWT_REFRESH_SECRET', 'dev-refresh-secret')
 JWT_EXPIRY_DAYS = 7
 WELCOME_BONUS = float(os.getenv('WELCOME_BONUS', '100'))
-OTP_EXPIRY_MINUTES = 5
-OTP_MAX_ATTEMPTS = 3
 DEMO_SESSION_MINUTES = 30
 API_PORT = int(os.getenv('PORT', '5000'))
 
@@ -151,3 +262,20 @@ GAME_MIN_LAUNCH_BALANCE = os.getenv('GAME_MIN_LAUNCH_BALANCE', '100')
 GAME_MOCK_LAUNCH = os.getenv('GAME_MOCK_LAUNCH', '').lower() in ('1', 'true', 'yes')
 # Launch endpoint path on the aggregator (default matches legacy /game/v1).
 GAME_LAUNCH_PATH = _normalize_launch_path(os.getenv('GAME_LAUNCH_PATH', '/game/v1'))
+# Minimum win that qualifies for the public "recent big wins" feed. Kept low so
+# the feed reflects real settled play on a young catalog — at 1000 the panel sat
+# empty because no round had yet won that much. Raise it via env once volume
+# justifies a higher bar.
+GAME_BIG_WIN_THRESHOLD = os.getenv('GAME_BIG_WIN_THRESHOLD', '1')
+# How long a stake may sit unresolved before the sweep force-settles it, so a
+# provider that never reports a result cannot pin a bet on "Pending" forever.
+GAME_PENDING_STAKE_MAX_HOURS = os.getenv('GAME_PENDING_STAKE_MAX_HOURS', '72')
+
+# Public base URLs of this deployment's own surfaces. The affiliate program
+# needs both: it builds tracking links against the API (which owns /r/<code>)
+# and redirects the resulting click to the player site.
+API_URL = os.getenv('API_URL', '').rstrip('/') or f'http://localhost:{API_PORT}'
+WEB_URL = os.getenv('WEB_URL', '').rstrip('/') or 'http://localhost:3000'
+# The partner portal. Needed server-side because sub-affiliate invite links are
+# built by the API and point at that portal's apply form.
+AFFILIATE_URL = os.getenv('AFFILIATE_URL', '').rstrip('/') or 'http://localhost:3003'

@@ -13,6 +13,7 @@ out/
 # Env
 .env
 .env.local
+.env.production
 .env.*.local
 CREDENTIALS.txt
 
@@ -20,6 +21,9 @@ CREDENTIALS.txt
 logs/
 *.log
 npm-debug.log*
+# Admin-uploaded media
+dollara/api/media/
+super_admin/api/media/
 
 # OS
 .DS_Store
@@ -51,7 +55,7 @@ coverage/
 # Misc
 *.pem
 *.ppk
-deploy.ps1
-deploy.sh
+*.ps1
+*.sh
 winco/
-
+.env

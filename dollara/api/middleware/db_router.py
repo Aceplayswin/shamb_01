@@ -1,11 +1,14 @@
-"""Database router for database-per-tenant isolation.
+"""Database router.
 
-- The control-plane app (``tenants``) always lives on the ``default`` (master)
-  database.
-- Every other app (the per-tenant feature code in ``core``) is routed to the
-  tenant connection resolved for the current request/thread. When no tenant is
-  active (management commands, control-plane requests) it falls back to
-  ``default`` so nothing breaks.
+This instance serves a single product and keeps all feature data on the
+``default`` connection (``MYSQL_*``) — dollara no longer has a master/control-plane
+database (that data is fetched from Super Admin over HTTP; see
+``services/control_plane.py``). The router resolves ORM access to the current
+tenant connection when one is set, otherwise ``default``; in practice
+``get_current_db()`` returns ``None`` so everything lands on ``default``.
+
+The ``tenants`` app defines no models now; it stays listed here only so any stray
+control-plane lookup can never be routed off ``default``.
 """
 
 from django.db import DEFAULT_DB_ALIAS
@@ -33,10 +36,5 @@ class TenantRouter:
         return None
 
     def allow_migrate(self, db, app_label, model_name=None, **hints):
-        if app_label in CONTROL_PLANE_APPS:
-            return db == DEFAULT_DB_ALIAS
-        # Feature schema is applied via SQL (init.sql); never auto-migrate it
-        # onto the master database.
-        if db == DEFAULT_DB_ALIAS:
-            return False
-        return None
+        # Feature schema is applied via SQL (init.sql), not Django migrations.
+        return False

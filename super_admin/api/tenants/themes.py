@@ -21,6 +21,21 @@ THEME_CATALOG = [
         'name': 'Theme 2 — Aurora',
         'description': 'Alternative hero-led layout.',
     },
+    {
+        'key': 'theme3',
+        'name': 'Theme 3 — Velocity',
+        'description': 'Light cream lobby with a top nav, category pill bar, and modal auth.',
+    },
+    {
+        'key': 'theme4',
+        'name': 'Theme 4 — Exchange',
+        'description': 'Teal sports-exchange lobby with ticker bar, category nav, and back/lay odds boards.',
+    },
+    {
+        'key': 'theme5',
+        'name': 'Theme 5 — Velplay',
+        'description': 'Light three-column portal: news ticker, navy nav, category rail, sports/casino sidebar, and profile + big-wins rail.',
+    },
 ]
 
 THEME_KEYS = [t['key'] for t in THEME_CATALOG]

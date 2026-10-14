@@ -1,15 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-
-const MOCK_TICKERS = [
-  { username: 'A*h', amount: 5000, type: 'deposit', timestamp: '2 mins ago' },
-  { username: 'R*y', amount: 12000, type: 'win', timestamp: '5 mins ago' },
-  { username: 'S*n', amount: 2500, type: 'withdrawal', timestamp: '8 mins ago' },
-];
+import { useBigWins } from '@/components/BigWins';
 
 export function LiveTicker() {
-  const [items, setItems] = useState(MOCK_TICKERS);
+  // Real settled wins from the API (names masked server-side), topped up by any
+  // live events pushed over the websocket.
+  const { wins } = useBigWins(10);
+  const [live, setLive] = useState([]);
 
   useEffect(() => {
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:5000/ws';
@@ -19,23 +17,49 @@ export function LiveTicker() {
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data);
         if (msg.type === 'ticker' && msg.data) {
-          setItems((prev) => [msg.data, ...prev.slice(0, 9)]);
+          setLive((prev) => [msg.data, ...prev.slice(0, 9)]);
         }
       };
     } catch {
-      // use mock data
+      // No live feed available — the fetched wins below still render.
     }
     return () => ws?.close();
   }, []);
 
+  const winItems = [
+    ...live.filter((i) => i.type === 'win'),
+    ...wins.map((w) => ({
+      username: w.username,
+      amount: w.win_amount,
+      timestamp: relativeTime(w.created_at),
+    })),
+  ];
+
   return (
     <aside className="card-glass hidden w-64 shrink-0 flex-col gap-4 p-4 xl:flex">
       <h3 className="text-sm font-semibold text-brand-400">Live Activity</h3>
-      <TickerSection title="Deposits" items={items.filter((i) => i.type === 'deposit')} />
-      <TickerSection title="Wins" items={items.filter((i) => i.type === 'win')} highlight />
-      <TickerSection title="Withdrawals" items={items.filter((i) => i.type === 'withdrawal')} />
+      <TickerSection title="Recent big wins" items={winItems} highlight />
+      <TickerSection
+        title="Deposits"
+        items={live.filter((i) => i.type === 'deposit')}
+      />
+      <TickerSection
+        title="Withdrawals"
+        items={live.filter((i) => i.type === 'withdrawal')}
+      />
     </aside>
   );
+}
+
+function relativeTime(iso) {
+  if (!iso) return '';
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min${minutes === 1 ? '' : 's'} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hr${hours === 1 ? '' : 's'} ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
 
 function TickerSection({ title, items, highlight }) {

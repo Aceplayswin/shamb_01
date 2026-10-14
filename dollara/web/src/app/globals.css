@@ -9,17 +9,21 @@ html {
 
 :root {
   /* ---- Theme tokens (RGB triplets so Tailwind can apply alpha modifiers) ----
-     Dark is the default palette; .light overrides below swap every token. */
-  --color-app-bg: 11 15 20; /* page background, #0B0F14 */
-  --color-app-fg: 255 255 255; /* primary text, #FFFFFF */
-  --color-rail: 11 15 20; /* side rail / top bar / bottom nav, #0B0F14 */
-  --color-panel: 21 26 33; /* cards, glass, #151A21 */
-  --color-panel-strong: 11 15 20; /* stronger glass, #0B0F14 */
-  --color-muted: 156 163 175; /* secondary text, #9CA3AF */
-  --color-hairline: 255 255 255; /* border / overlay base — used with low alpha */
-  --ambient-1: rgba(245, 197, 66, 0.12);
-  --ambient-2: rgba(255, 184, 0, 0.1);
-  --ambient-3: rgba(245, 197, 66, 0.05);
+     Dark is the default palette; .light overrides below swap every token.
+     Each token reads a Super Admin-injected override (--sa-*) if present, else the
+     theme's own default baked in here — so the app renders correctly with no
+     Super Admin at all, and per-color when only some are overridden. Injection
+     happens at runtime in hooks/useBranding.jsx via themes/palettes.js. */
+  --color-app-bg: var(--sa-app-bg, 11 15 20); /* page background, #0B0F14 */
+  --color-app-fg: var(--sa-app-fg, 255 255 255); /* primary text, #FFFFFF */
+  --color-rail: var(--sa-rail, 11 15 20); /* side rail / top bar / bottom nav */
+  --color-panel: var(--sa-panel, 21 26 33); /* cards, glass, #151A21 */
+  --color-panel-strong: var(--sa-panel-strong, 11 15 20); /* stronger glass */
+  --color-muted: var(--sa-muted, 156 163 175); /* secondary text, #9CA3AF */
+  --color-hairline: var(--sa-hairline, 255 255 255); /* border / overlay base */
+  --ambient-1: rgb(var(--brand-500, 245 197 66) / 0.12);
+  --ambient-2: rgb(var(--brand-600, 255 184 0) / 0.1);
+  --ambient-3: rgb(var(--brand-500, 245 197 66) / 0.05);
 
   --background: rgb(var(--color-app-bg));
   --foreground: rgb(var(--color-app-fg));
@@ -35,9 +39,9 @@ html {
   --color-panel-strong: 255 255 255;
   --color-muted: 100 99 125;
   --color-hairline: 20 16 36;
-  --ambient-1: rgba(245, 197, 66, 0.08);
-  --ambient-2: rgba(255, 184, 0, 0.06);
-  --ambient-3: rgba(245, 197, 66, 0.04);
+  --ambient-1: rgb(var(--brand-500, 245 197 66) / 0.08);
+  --ambient-2: rgb(var(--brand-600, 255 184 0) / 0.06);
+  --ambient-3: rgb(var(--brand-500, 245 197 66) / 0.04);
 
   color-scheme: light;
 }
@@ -105,6 +109,11 @@ body {
     color: transparent;
   }
 }
+
+/* Per-theme styles do NOT live here. Each theme owns its own CSS at
+   src/themes/<key>/theme.css, imported by that theme's manifest (index.js), so a
+   build that ships one theme carries only that theme's styles. Everything above
+   is the shared base every theme builds on. */
 
 /* Slim custom scrollbar for the page itself */
 ::-webkit-scrollbar {

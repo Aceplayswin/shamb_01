@@ -1,8 +1,9 @@
 # Dollara Product API (Django)
 
-Multi-tenant, white-label gaming backend for **product deployments** (Dollara,
-Product B, Product C, ...). Each product has its own isolated MySQL database.
-Branding, themes, and URLs are configured in the master DB via Super Admin.
+White-label gaming backend for a **single product deployment**. The product owns
+one MySQL database (its feature data). It does **not** connect to Super Admin's
+master/control-plane database — its identity, branding, live theme and webhook
+public keys are fetched from Super Admin over HTTP and cached.
 
 > **Super Admin** (product onboarding, master DB management, branding, themes)
 > lives in the separate [`super_admin/api`](../../super_admin/api) service.
@@ -12,7 +13,7 @@ Branding, themes, and URLs are configured in the master DB via Super Admin.
 - **Django 5** + **Django REST Framework**
 - **Strawberry GraphQL**
 - **Django Channels** (WebSocket at `/ws`)
-- **MySQL** (master read + database-per-tenant)
+- **MySQL** (this product's own feature database)
 - **PyTorch** fraud detection, welcome-call scripts, support chatbot (`core/ai/`)
 - **JWT** authentication (product admins, users)
 - **bcrypt** password hashing
@@ -20,35 +21,34 @@ Branding, themes, and URLs are configured in the master DB via Super Admin.
 ## Architecture
 
 ```
-                       ┌─────────────────────────────────────┐
-Super Admin API ─────► │  Master MySQL DB (master.sql)        │
-(super_admin/api)      │  products, urls, branding, databases │
-                       │  product_themes                      │
-                       └─────────────────────────────────────┘
-                                 │ TenantRouter (database-per-tenant)
-        ┌────────────────────────┼────────────────────────┐
-        ▼                        ▼                         ▼
-  dollara_db               productb_db               productc_db
-  (users, wallets,         (isolated copy            (isolated copy
-   games, txns, ...)        of init.sql schema)       of init.sql schema)
+  Super Admin API                       Dollara Product API
+  (super_admin/api)                      (this service)
+  ┌──────────────────────┐   HTTPS GET   ┌──────────────────────────┐
+  │ Master MySQL DB       │ ◀──────────  │ services/control_plane.py │
+  │ products, branding,   │  X-Product-  │  (fetch + cache config)   │
+  │ themes, credentials   │  Token       │            │              │
+  └──────────────────────┘  ──────────▶ │            ▼              │
+        (never touched                   │      dollara feature DB   │
+         directly by dollara)            │  (users, wallets, games,  │
+                                         │   txns — the `default`     │
+                                         │   connection, MYSQL_*)     │
+                                         └──────────────────────────┘
 ```
 
-- `tenants/` — read-only control-plane models (mirror of `super_admin/api`).
-- `services/` — `tenant_resolver`, `branding`.
-- `middleware/` — `TenantResolverMiddleware` + `TenantRouter`.
-- `core/` — per-tenant features (auth, wallet, games, transactions, admin, AI).
+- `services/control_plane.py` — fetches this product's config from Super Admin.
+- `services/` — `tenant_resolver`, `branding`, `super_admin_keys` (all HTTP-backed).
+- `tenants/` — runtime tenant context (`state.py`) + public branding view; no models.
+- `middleware/` — `TenantResolverMiddleware` + `TenantRouter` (everything on `default`).
+- `core/` — product features (auth, wallet, games, transactions, admin, AI).
 
 ### Tenant resolution
 
-A request's tenant is resolved (in priority order) from:
-
-1. `X-Tenant` / `X-Tenant-ID` header (mobile app, server-to-server).
-2. Request host / subdomain (`dollara.localhost` → `dollara`).
-3. The `tenant` claim in the JWT.
-4. `DEFAULT_TENANT` (development fallback for `localhost`).
-
-The resolver looks up the tenant's connection in the master `databases` table
-and registers a dynamic Django connection (`tenant_<slug>`).
+This instance serves a single product and identifies it by its own api_key
+(`PRODUCT_CONFIG_TOKEN`): on each request the middleware pulls the product's
+control-plane config from Super Admin (keyed by that api_key, cached) and exposes
+the resolved product as `request.tenant`. There is no slug, host, or JWT tenant
+selection — a request has a tenant iff a valid key is configured. All feature data
+lives on the Django `default` connection (`MYSQL_*`).
 
 ### Branding & themes
 
@@ -80,6 +80,20 @@ cp .env.example .env
 ```bash
 python manage.py runserver 0.0.0.0:5000
 ```
+
+Schema lives in `database/init.sql` (no Django migrations). After pulling a
+build that adds columns, run the idempotent repair before restarting, or the
+affected screens return a schema error:
+
+```bash
+python manage.py ensure_payment_method_columns   # Cashier → Payment Methods columns
+python manage.py ensure_bonus_claim_columns      # Bonus claim conditions (min balance / wagering / deposits)
+python manage.py ensure_affiliate_qualification_columns  # Affiliate min deposit / redeposits / window
+```
+
+Fresh installs get the full schema (including single-session and blocked-IP
+columns) from `database/init.sql` alone; the ensure commands are only for
+databases that already exist and are behind the current build.
 
 ## Endpoints
 

@@ -9,9 +9,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Dices, Sparkles, Tv, LayoutGrid, Rocket, Trophy, Gamepad2,
-  Flame, Circle, Gift, ChevronRight, Send, Info, Zap, ShieldCheck, Award, Play,
+  Flame, Circle, Gift, ChevronRight, ChevronDown, Send, Info, Zap, ShieldCheck, Award, Play, HelpCircle,
 } from 'lucide-react';
 import { useGameCatalog } from '@/hooks/useGameCatalog';
+import { useBanners } from '@/hooks/useBanners';
+import { useFaqs } from '@/hooks/useFaqs';
+import BannerCarousel from '@/components/BannerCarousel';
+import SupportFab from '@/components/SupportFab';
 import {
   filterByCategory,
   filterFeatured,
@@ -143,9 +147,48 @@ function RowHeader({ Icon, title, color = 'text-amber-400', seeAllHref }) {
   );
 }
 
+/* ── FAQ — managed from the product admin (/admin -> FAQs) ── */
+function Theme2Faq() {
+  const { faqs } = useFaqs();
+  const [open, setOpen] = useState(-1);
+
+  if (faqs.length === 0) return null;
+
+  return (
+    <section>
+      <RowHeader Icon={HelpCircle} title="Frequently Asked Questions" color="text-amber-400" />
+      <div className="space-y-2">
+        {faqs.map((f, i) => {
+          const isOpen = open === i;
+          return (
+            <div key={f.id ?? i} className="overflow-hidden rounded-xl border border-white/5 bg-[#0d1420]">
+              <button
+                type="button"
+                onClick={() => setOpen(isOpen ? -1 : i)}
+                aria-expanded={isOpen}
+                className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
+              >
+                <span className="grid h-6 w-6 shrink-0 place-items-center rounded bg-amber-500/10 text-[0.7rem] font-black text-amber-400">
+                  {i + 1}
+                </span>
+                <span className="min-w-0 flex-1 text-sm font-bold text-white">{f.question}</span>
+                <ChevronDown className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {isOpen && (
+                <p className="border-t border-white/5 px-4 py-3.5 text-sm leading-relaxed text-slate-400 sm:pl-14">{f.answer}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export default function Theme2Home() {
   const router = useRouter();
   const { games, loading, error } = useGameCatalog();
+  const { banners } = useBanners();
   const [tab, setTab] = useState('lobby');
   const [betTab, setBetTab] = useState('single');
 
@@ -186,6 +229,9 @@ export default function Theme2Home() {
         </div>
 
         {/* Hero */}
+        {banners.length > 0 ? (
+          <BannerCarousel banners={banners} className="border border-white/5" aspectClassName="aspect-[16/6]" />
+        ) : (
         <section className="relative overflow-hidden rounded-2xl border border-white/5 bg-gradient-to-br from-amber-600/20 via-[#0d1420] to-[#070d16] p-8 sm:p-10">
           <div className="pointer-events-none absolute -right-10 -top-10 h-64 w-64 rounded-full bg-amber-500/20 blur-3xl" />
           <div className="relative max-w-md">
@@ -213,6 +259,7 @@ export default function Theme2Home() {
             </div>
           </div>
         </section>
+        )}
 
         {/* Feature cards */}
         <section className="grid gap-4 sm:grid-cols-2">
@@ -315,6 +362,8 @@ export default function Theme2Home() {
             </div>
           ))}
         </section>
+
+        <Theme2Faq />
       </div>
 
       {/* ===== Right rail (chat / big wins / bet slip) — hidden on smaller screens ===== */}
@@ -397,6 +446,7 @@ export default function Theme2Home() {
           <button className="mt-3 w-full rounded-lg bg-gradient-to-r from-amber-400 to-amber-600 py-2.5 text-sm font-bold text-black">Place Bet</button>
         </div>
       </aside>
+      <SupportFab />
     </div>
   );
 }

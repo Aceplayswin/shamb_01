@@ -2,7 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 import bcrypt
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from core.models import Bonus, Game, GameProvider, PlatformSetting, User
@@ -15,7 +15,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--tenant',
             default=None,
-            help='Product slug to seed. Activates that tenant DB connection before seeding.',
+            help='Product id or name to seed. Activates that tenant DB connection before seeding.',
         )
         parser.add_argument(
             '--brand_name',
@@ -28,9 +28,17 @@ class Command(BaseCommand):
         if tenant:
             # Activate the tenant DB so ORM writes are routed to it.
             from services.tenant_resolver import resolve_tenant
+            from tenants.models import Product
 
-            resolve_tenant(header_slug=tenant)
-            self.stdout.write(f'Seeding tenant: {tenant}')
+            product = None
+            if str(tenant).isdigit():
+                product = Product.objects.filter(id=int(tenant)).first()
+            if not product:
+                product = Product.objects.filter(name__iexact=str(tenant)).first()
+            if not product:
+                raise CommandError(f'No product with id or name "{tenant}"')
+            resolve_tenant(header_key=product.api_key)
+            self.stdout.write(f'Seeding tenant: {product.name} (id={product.id})')
 
         brand_name = options.get('brand_name') or 'DOLLARA'
         password_hash = bcrypt.hashpw(b'Admin@123', bcrypt.gensalt()).decode()
@@ -39,7 +47,7 @@ class Command(BaseCommand):
             defaults={
                 'email': 'admin@dollara.local',
                 'password_hash': password_hash,
-                'role': User.Role.SUPER_ADMIN,
+                'role': User.Role.ADMIN,
                 'account_status': User.AccountStatus.ACTIVE,
             },
         )

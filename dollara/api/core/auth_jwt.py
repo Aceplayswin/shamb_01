@@ -34,8 +34,17 @@ def decode_token(token: str) -> dict[str, Any] | None:
 
 
 class AuthUser:
-    def __init__(self, sub: int | str, role: str, token_type: str | None = None):
+    def __init__(
+        self,
+        sub: int | str,
+        role: str,
+        token_type: str | None = None,
+        sid: str | None = None,
+    ):
         self.sub = sub
         self.role = role
         self.type = token_type
+        # Session id embedded at login; compared against User.active_session_id
+        # so a token from a device that's since been superseded stops working.
+        self.sid = sid
         self.is_authenticated = True

@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { Dices, Twitter, Send, MessageCircle, Instagram } from 'lucide-react';
-import { useBranding } from '@/hooks/useBranding';
+import { useBranding, onLogoError } from '@/hooks/useBranding';
 import { useAuthStore } from '@/store/auth';
+import { SocialIconRow } from '@/components/SocialLinks';
 
 const COLUMNS = [
   { title: 'Casino', links: ['All Games', 'Slots', 'Live Casino', 'Table Games', 'Jackpot Games'] },
@@ -39,21 +39,25 @@ export function Theme2Footer() {
         <div className="grid gap-8 lg:grid-cols-6">
           <div className="lg:col-span-2">
             <Link href="/" className="flex items-center gap-2.5">
-              <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-black">
-                <Dices className="h-5 w-5" strokeWidth={2.5} />
-              </span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={branding.logo_url}
+                alt={name}
+                onError={onLogoError}
+                className="h-9 w-9 shrink-0 rounded-full object-contain"
+              />
               <span className="font-display text-base font-black text-white">
                 {name}
                 <span className="block text-[0.55rem] font-bold tracking-[0.3em] text-amber-400/70">WIN BIG</span>
               </span>
             </Link>
-            <div className="mt-5 flex gap-3">
-              {[Twitter, Send, MessageCircle, Instagram].map((Icon, i) => (
-                <a key={i} href="#" className="grid h-9 w-9 place-items-center rounded-full border border-white/10 text-slate-400 transition hover:border-amber-400/50 hover:text-amber-400">
-                  <Icon className="h-4 w-4" />
-                </a>
-              ))}
-            </div>
+            {/* Social profiles configured in Admin → Content → Social Links.
+                Renders nothing until the admin sets a channel, so this can't
+                show empty placeholder icons. */}
+            <SocialIconRow
+              className="mt-5 flex gap-3"
+              itemClassName="grid h-9 w-9 place-items-center rounded-full border border-white/10 text-slate-400 transition hover:border-amber-400/50 hover:text-amber-400"
+            />
           </div>
 
           {COLUMNS.map((col) => (

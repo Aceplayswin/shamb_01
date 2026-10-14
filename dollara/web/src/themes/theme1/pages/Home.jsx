@@ -1,17 +1,22 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useBranding } from '@/hooks/useBranding';
+import { useBanners } from '@/hooks/useBanners';
+import { useFaqs } from '@/hooks/useFaqs';
 import { useGameCatalog } from '@/hooks/useGameCatalog';
+import { useGameSearch } from '@/hooks/useGameSearch';
+import BannerCarousel from '@/components/BannerCarousel';
+import { BigWins } from '@/components/BigWins';
+import SupportFab from '@/components/SupportFab';
 import {
   filterByCategory,
   filterByProvider,
   filterFeatured,
   NAV_GAME_LINKS,
   playPath,
-  searchGames,
 } from '@/lib/gameRoutes';
 import {
   Play,
@@ -48,7 +53,7 @@ const ACCENT_TEXT = {
   rose: 'text-rose-400',
 };
 
-function SectionHeader({ title, kicker, Icon, seeAllHref, accent = 'brand' }) {
+function SectionHeader({ title, Icon, seeAllHref, accent = 'brand', onPrev, onNext }) {
   return (
     <div className="mb-5 flex items-end justify-between gap-4">
       <div className="flex items-center gap-3">
@@ -56,17 +61,24 @@ function SectionHeader({ title, kicker, Icon, seeAllHref, accent = 'brand' }) {
           <Icon className="h-5 w-5" />
         </span>
         <div>
-          {kicker && (
-            <p className="text-[0.6rem] font-bold uppercase tracking-[0.25em] text-muted/80">{kicker}</p>
-          )}
           <h2 className="font-display text-xl font-bold text-app-fg">{title}</h2>
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <button className="grid h-8 w-8 place-items-center rounded-lg border border-hairline/10 text-muted transition hover:bg-panel hover:text-app-fg">
+        <button
+          type="button"
+          onClick={onPrev}
+          aria-label="Scroll left"
+          className="grid h-8 w-8 place-items-center rounded-lg border border-hairline/10 text-muted transition hover:bg-panel hover:text-app-fg"
+        >
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <button className="grid h-8 w-8 place-items-center rounded-lg border border-hairline/10 text-muted transition hover:bg-panel hover:text-app-fg">
+        <button
+          type="button"
+          onClick={onNext}
+          aria-label="Scroll right"
+          className="grid h-8 w-8 place-items-center rounded-lg border border-hairline/10 text-muted transition hover:bg-panel hover:text-app-fg"
+        >
           <ChevronRight className="h-4 w-4" />
         </button>
         {seeAllHref && (
@@ -137,13 +149,30 @@ function GameCard({ item, onPlay, theme = THEMES.casino, rank }) {
   );
 }
 
-function Carousel({ items, onPlay, theme, ranked }) {
+// A titled row of game cards with working ◀ ▶ controls that scroll the
+// horizontal carousel by roughly one viewport of cards.
+function Section({ title, Icon, accent, seeAllHref, items, onPlay, theme, ranked }) {
+  const scrollRef = useRef(null);
+  const scrollByPage = (dir) => {
+    const el = scrollRef.current;
+    if (el) el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: 'smooth' });
+  };
   return (
-    <div className="edge-fade-x flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
-      {items.map((item, i) => (
-        <GameCard key={item.id ?? item.slug} item={item} onPlay={onPlay} theme={theme} rank={ranked ? i + 1 : undefined} />
-      ))}
-    </div>
+    <section>
+      <SectionHeader
+        title={title}
+        Icon={Icon}
+        accent={accent}
+        seeAllHref={seeAllHref}
+        onPrev={() => scrollByPage(-1)}
+        onNext={() => scrollByPage(1)}
+      />
+      <div ref={scrollRef} className="edge-fade-x flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+        {items.map((item, i) => (
+          <GameCard key={item.id ?? item.slug} item={item} onPlay={onPlay} theme={theme} rank={ranked ? i + 1 : undefined} />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -168,10 +197,14 @@ function Accordion({ question, answer, isOpen, onClick }) {
 
 export default function Theme1Home() {
   const branding = useBranding();
+  const { banners } = useBanners();
+  const { faqs } = useFaqs();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const searchQuery = (searchParams.get('q') ?? '').trim();
   const { games, loading, error } = useGameCatalog();
+  const { results: searchResults, loading: searching } = useGameSearch(searchQuery);
   const [openFaq, setOpenFaq] = useState(0);
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedProvider, setSelectedProvider] = useState(null);
 
   const providers = useMemo(
@@ -197,14 +230,18 @@ export default function Theme1Home() {
     if (game?.slug) router.push(playPath(game));
   };
 
-  const filteredGames = useMemo(() => {
-    let list = searchGames(games, searchQuery);
-    if (selectedProvider) list = filterByProvider(list, selectedProvider);
-    return list;
-  }, [games, searchQuery, selectedProvider]);
+  const isSearching = searchQuery !== '';
+  const isFiltering = isSearching || selectedProvider !== null;
 
-  const uniqueFilteredGames = filteredGames;
-  const isFiltering = searchQuery !== '' || selectedProvider !== null;
+  // When searching, filter the live API results; otherwise the provider chips
+  // filter the cached catalog client-side.
+  const uniqueFilteredGames = useMemo(() => {
+    if (isSearching) {
+      return selectedProvider ? filterByProvider(searchResults, selectedProvider) : searchResults;
+    }
+    if (selectedProvider) return filterByProvider(games, selectedProvider);
+    return [];
+  }, [isSearching, searchResults, selectedProvider, games]);
 
   return (
     <>
@@ -212,7 +249,12 @@ export default function Theme1Home() {
         <div className="mx-auto max-w-[1400px] space-y-12 px-4 py-6 xl:px-6">
           {!isFiltering && (
             <>
-              {/* Bento hero — one feature panel + a stacked side column */}
+              {banners.length > 0 ? (
+                /* Admin-controlled hero banner carousel — replaces the default
+                   bento hero whenever the product admin has active banners. */
+                <BannerCarousel banners={banners} />
+              ) : (
+              /* Bento hero — one feature panel + a stacked side column */
               <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 {/* Primary welcome panel */}
                 <div className="ring-grad relative flex min-h-[320px] flex-col justify-between overflow-hidden rounded-3xl bg-panel-strong bg-mesh-amber p-8 sm:p-10 lg:col-span-2">
@@ -266,6 +308,7 @@ export default function Theme1Home() {
                   </div>
                 </div>
               </section>
+              )}
 
               {/* Ticker */}
               <div className="flex items-center overflow-hidden rounded-2xl border border-hairline/[0.07] bg-panel/60">
@@ -291,14 +334,22 @@ export default function Theme1Home() {
           <div>
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-[0.25em] text-muted">Game Providers</h3>
-              {selectedProvider && (
-                <button
-                  onClick={() => setSelectedProvider(null)}
-                  className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-brand-400 hover:text-brand-300"
+              <div className="flex items-center gap-3">
+                {selectedProvider && (
+                  <button
+                    onClick={() => setSelectedProvider(null)}
+                    className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-brand-400 hover:text-brand-300"
+                  >
+                    <X className="h-3 w-3" /> Clear
+                  </button>
+                )}
+                <Link
+                  href="/providers"
+                  className="hidden items-center gap-1 rounded-lg border border-hairline/10 px-3 py-1.5 text-xs font-bold text-app-fg/70 transition hover:border-brand-400/50 hover:text-app-fg sm:flex"
                 >
-                  <X className="h-3 w-3" /> Clear
-                </button>
-              )}
+                  View all <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
             </div>
             <div className="edge-fade-x flex gap-2.5 overflow-x-auto pb-1 scrollbar-hide">
               {providers.map((p) => (
@@ -320,9 +371,18 @@ export default function Theme1Home() {
           {isFiltering ? (
             <section className="min-h-[400px]">
               <h2 className="mb-6 font-display text-xl font-bold text-app-fg">
-                Results <span className="text-muted/70">({uniqueFilteredGames.length})</span>
+                {isSearching ? (
+                  <>
+                    Results for <span className="text-brand-300">“{searchQuery}”</span>{' '}
+                  </>
+                ) : (
+                  'Results '
+                )}
+                <span className="text-muted/70">({uniqueFilteredGames.length})</span>
               </h2>
-              {uniqueFilteredGames.length > 0 ? (
+              {isSearching && searching && uniqueFilteredGames.length === 0 ? (
+                <p className="py-16 text-center text-muted">Searching…</p>
+              ) : uniqueFilteredGames.length > 0 ? (
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                   {uniqueFilteredGames.map((game) => (
                     <div key={game.id} className="flex justify-center">
@@ -346,25 +406,50 @@ export default function Theme1Home() {
             <p className="py-16 text-center text-muted">No games in catalog. Import database/init.sql on the API.</p>
           ) : (
             <>
-              <section>
-                <SectionHeader title="Live Sports" kicker="In play now" Icon={Trophy} accent="emerald" seeAllHref={NAV_GAME_LINKS.sports} />
-                <Carousel items={liveSports} onPlay={handlePlayGame} theme={THEMES.sports} />
-              </section>
+              <Section
+                title="Live Sports"
+                Icon={Trophy}
+                accent="emerald"
+                seeAllHref={NAV_GAME_LINKS.sports}
+                items={liveSports}
+                onPlay={handlePlayGame}
+                theme={THEMES.sports}
+              />
 
-              <section>
-                <SectionHeader title="Casino Lobby" kicker="Top providers" Icon={Dices} accent="brand" seeAllHref={NAV_GAME_LINKS.casino} />
-                <Carousel items={casinoGames} onPlay={handlePlayGame} theme={THEMES.casino} />
-              </section>
+              <Section
+                title="Casino Lobby"
+                Icon={Dices}
+                accent="brand"
+                seeAllHref={NAV_GAME_LINKS.casino}
+                items={casinoGames}
+                onPlay={handlePlayGame}
+                theme={THEMES.casino}
+              />
 
-              <section>
-                <SectionHeader title="Trending Games" kicker="Player favourites" Icon={Flame} accent="rose" seeAllHref={NAV_GAME_LINKS.crash} />
-                <Carousel items={trendingGames} onPlay={handlePlayGame} theme={THEMES.trending} ranked />
-              </section>
+              <Section
+                title="Trending Games"
+                Icon={Flame}
+                accent="rose"
+                seeAllHref="/games/featured"
+                items={trendingGames}
+                onPlay={handlePlayGame}
+                theme={THEMES.trending}
+                ranked
+              />
 
-              <section>
-                <SectionHeader title="Trending Slots" kicker="Big multipliers" Icon={Sparkles} accent="brand" seeAllHref={NAV_GAME_LINKS.slots} />
-                <Carousel items={trendingSlots} onPlay={handlePlayGame} theme={THEMES.slots} ranked />
-              </section>
+              <Section
+                title="Trending Slots"
+                Icon={Sparkles}
+                accent="brand"
+                seeAllHref={NAV_GAME_LINKS.slots}
+                items={trendingSlots}
+                onPlay={handlePlayGame}
+                theme={THEMES.slots}
+                ranked
+              />
+
+              {/* Recent big wins — real settled wins, names masked server-side */}
+              <BigWins limit={8} />
 
               {/* Why choose — feature row */}
               <section>
@@ -414,38 +499,35 @@ export default function Theme1Home() {
                 </div>
               </section>
 
-              {/* FAQ */}
-              <section className="mx-auto max-w-3xl py-4">
-                <div className="mb-8 text-center">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-hairline/10 bg-panel/60 px-3 py-1 text-[0.65rem] font-bold uppercase tracking-widest text-brand-300">
-                    <Sparkles className="h-3 w-3" /> Knowledge base
-                  </span>
-                  <h2 className="mt-4 font-display text-3xl font-bold text-app-fg">
-                    Frequently asked <span className="text-gradient-gold">questions</span>
-                  </h2>
-                </div>
-                <div className="space-y-3">
-                  {[
-                    { q: `Why is ${branding.product_name} one of the best betting sites in India?`, a: 'A trusted, licensed platform built around fast payouts, fair games and 24/7 human support — without the clutter of typical betting sites.' },
-                    { q: 'Is online betting legal in India?', a: 'There are no federal laws explicitly prohibiting online betting across most of India. We recommend checking your local state regulations.' },
-                    { q: 'How do I withdraw my winnings?', a: 'Withdraw instantly to UPI or your bank account. Most cash-outs complete in under five minutes.' },
-                    { q: 'Can I actually win in an online casino?', a: 'Yes. Every game uses certified RNG and published RTP so outcomes are genuinely random and verifiable.' },
-                    { q: 'Are casino games skill or luck?', a: 'It depends. Slots and crash games are luck-based, while Poker and Blackjack reward skill and strategy.' },
-                  ].map((faq, idx) => (
-                    <Accordion
-                      key={idx}
-                      question={faq.q}
-                      answer={faq.a}
-                      isOpen={openFaq === idx}
-                      onClick={() => setOpenFaq(idx === openFaq ? -1 : idx)}
-                    />
-                  ))}
-                </div>
-              </section>
+              {/* FAQ — content managed from the product admin (/admin -> FAQs) */}
+              {faqs.length > 0 && (
+                <section className="mx-auto max-w-3xl py-4">
+                  <div className="mb-8 text-center">
+                    <span className="inline-flex items-center gap-2 rounded-full border border-hairline/10 bg-panel/60 px-3 py-1 text-[0.65rem] font-bold uppercase tracking-widest text-brand-300">
+                      <Sparkles className="h-3 w-3" /> Knowledge base
+                    </span>
+                    <h2 className="mt-4 font-display text-3xl font-bold text-app-fg">
+                      Frequently asked <span className="text-gradient-gold">questions</span>
+                    </h2>
+                  </div>
+                  <div className="space-y-3">
+                    {faqs.map((faq, idx) => (
+                      <Accordion
+                        key={faq.id ?? idx}
+                        question={faq.question}
+                        answer={faq.answer}
+                        isOpen={openFaq === idx}
+                        onClick={() => setOpenFaq(idx === openFaq ? -1 : idx)}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
             </>
           )}
         </div>
       </main>
+      <SupportFab className="bottom-24 lg:bottom-5" />
     </>
   );
 }

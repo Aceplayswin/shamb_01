@@ -45,5 +45,14 @@ python manage.py runserver 0.0.0.0:8000
 | GET/PUT | `/api/v1/super-admin/products/<slug>/branding` | White-label branding (admin) |
 | GET | `/api/v1/public/products/<slug>/branding` | Public branding for product frontends |
 | GET | `/api/v1/public/products/<slug>/theme` | Public active theme for product frontends |
+| POST | `/api/v1/super-admin/products/<slug>/credential/generate` | Issue the product's RSA webhook key pair |
+| GET | `/api/v1/super-admin/products/<slug>/data-webhook/summary` | Pull product data over the signed webhook |
 
 Default credentials after `seed_master`: `superadmin` / `Admin@123`
+
+## Product webhook data channel
+
+Super Admin no longer connects to a product's database directly. It pulls data
+over an RSA-signed HTTP webhook (each product has its own key pair, issued at
+creation). See [`WEBHOOK_DATA_CHANNEL.md`](WEBHOOK_DATA_CHANNEL.md) for the full
+contract and the Phase 2 product-side plan.

@@ -21,7 +21,7 @@ const NAV_ITEMS = [
 ];
 
 const EMPTY_FORM = {
-  name: '', slug: '',
+  name: '',
   fe_url: '', be_url: '',
   db_host: '', db_user: '', db_password: '', db_name: '',
 };
@@ -145,8 +145,7 @@ function AddProductModal({ open, onClose, onSubmit, loading }) {
   const labelCls = 'mb-1.5 block text-xs font-semibold text-gray-500 dark:text-gray-400';
 
   const fields = [
-    { key: 'name',        label: 'Product Name',  placeholder: 'My Platform',                type: 'text',     span: false, statusKey: null       },
-    { key: 'slug',        label: 'Slug',           placeholder: 'my-platform',                type: 'text',     span: false, statusKey: null       },
+    { key: 'name',        label: 'Product Name',  placeholder: 'My Platform',                type: 'text',     span: true,  statusKey: null       },
     { key: 'fe_url',      label: 'Frontend URL',   placeholder: 'https://myplatform.com',     type: 'text',     span: true,  statusKey: 'fe_url' },
     { key: 'be_url',      label: 'Backend URL',    placeholder: 'https://api.myplatform.com', type: 'text',     span: true,  statusKey: 'be_url' },
     { key: 'db_host',     label: 'DB Host',        placeholder: 'db.example.com',             type: 'text',     span: false, statusKey: null       },
@@ -188,7 +187,7 @@ function AddProductModal({ open, onClose, onSubmit, loading }) {
                     <input
                       id={`f-${key}`}
                       type={isPassword ? (showPass ? 'text' : 'password') : type}
-                      required={['name', 'slug', 'db_host', 'db_user', 'db_password', 'db_name'].includes(key)}
+                      required={['name', 'db_host', 'db_user', 'db_password', 'db_name'].includes(key)}
                       value={form[key]}
                       onChange={set(key)}
                       placeholder={placeholder}
@@ -289,7 +288,6 @@ export default function DashboardLayout({ children }) {
     setCreating(true);
     try {
       await createProduct({
-        slug: form.slug.trim().toLowerCase(),
         name: form.name.trim(),
         urls: {
           fe_url: form.fe_url.trim(),

@@ -7,9 +7,7 @@
 import { usePathname } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-
-// Routes where the marketing CTA block in the footer was previously hidden.
-const NO_CTA = ['/login', '/register', '/onboarding'];
+import { Theme1AuthModals } from './AuthModals';
 
 export default function Theme1Shell({ children }) {
   const pathname = usePathname();
@@ -20,17 +18,18 @@ export default function Theme1Shell({ children }) {
   }
 
   const isPlayRoute = pathname?.startsWith('/play/');
-  const showCta = !isPlayRoute && !NO_CTA.some((p) => pathname === p || pathname?.startsWith(p + '/'));
 
   return (
     <>
       <Header />
       {/* Global app shell offsets: top bar (h-16), desktop side rail (w-[92px]),
-          and mobile bottom tab bar. */}
-      <div className={`min-h-screen pt-16 lg:pl-[92px] ${isPlayRoute ? 'pb-0' : 'pb-20 lg:pb-0'}`}>
-        {children}
-        {!isPlayRoute && <Footer showCta={showCta} />}
+          and mobile bottom tab bar. Flex column + flex-1 content keeps the footer
+          pinned to the bottom of the viewport even when a page is short. */}
+      <div className={`flex min-h-screen flex-col pt-16 lg:pl-[92px] ${isPlayRoute ? 'pb-0' : 'pb-20 lg:pb-0'}`}>
+        <div className="flex-1">{children}</div>
+        {!isPlayRoute && <Footer />}
       </div>
+      <Theme1AuthModals />
     </>
   );
 }

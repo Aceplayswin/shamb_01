@@ -1,29 +1,52 @@
 from django.urls import path
 
-from core import views
+from core import backoffice_views as bo, views
 
 urlpatterns = [
     # Auth
-    path('auth/otp/send', views.otp_send),
-    path('auth/otp/verify', views.otp_verify),
-    path('auth/register/otp', views.register_otp),
+    path('auth/register', views.register),
     path('auth/demo', views.demo_session),
     path('auth/login', views.login),
+    path('auth/change-password', views.change_password),
     # Settings / preferences
     path('settings', views.user_settings),
+    # Mobile app install (APK) — public config + download redirect
+    path('app/download', views.app_download),
+    path('app/apk', views.app_download_redirect),
+    # Social / support links (footer, floating WhatsApp)
+    path('social-links', views.social_links),
     # Wallet
     path('wallet', views.wallet_get),
+    path('wallet/breakdown', views.wallet_breakdown),
     path('wallet/deposit', views.wallet_deposit),
+    path('wallet/deposit/methods', views.deposit_methods),
+    path('wallet/deposit/proof', views.wallet_deposit_proof),
     path('wallet/deposit/<int:tx_id>/confirm', views.wallet_deposit_confirm),
     path('wallet/withdraw', views.wallet_withdraw),
     path('wallet/transactions', views.wallet_transactions),
+    # Bonuses / promotions (player-facing)
+    path('promotions', views.promotions_list),
+    path('bonuses/mine', views.my_bonuses),
+    path('bonuses/claim', views.claim_promo),
+    path('bonuses/claim/preview', views.preview_promo),
+    path('referral', views.my_referral),
     # Games
     path('games', views.games_list),
+    path('games/categories', views.games_categories),
+    path('games/detail/<str:slug>', views.games_detail),
     path('games/trending', views.games_trending),
+    # Public home-page hero banners (managed by this product's own admin).
+    path('banners', views.banners_list),
+    # Offer posters for /promotions (image grid; not bonus claims).
+    path('promotion-posters', views.promotion_posters_list),
+    # Public home-page FAQs (managed by this product's own admin).
+    path('faqs', views.faqs_list),
     path('games/bet', views.games_bet),
     path('games/launch', views.games_launch),
     path('games/history', views.games_history),
+    path('games/history/<str:session_uid>/rounds', views.games_session_rounds),
     path('games/pnl', views.games_pnl),
+    path('games/big-wins', views.games_big_wins),
     # Inbound aggregator bet/win callback (auth via AES payload, not JWT).
     path('games/callback', views.games_callback),
     path('games/mock-launch', views.games_mock_launch),
@@ -33,14 +56,22 @@ urlpatterns = [
     path('admin/auth/login', views.admin_login),
     path('admin/dashboard', views.admin_dashboard),
     path('admin/dashboard/charts', views.admin_dashboard_charts),
+    path('admin/dashboard/tables', views.admin_dashboard_tables),
     path('admin/activity', views.admin_recent_activity),
     path('admin/users', views.admin_users),
+    path('admin/users/create', views.admin_user_create),
     path('admin/users/<int:user_id>', views.admin_user_detail),
     path('admin/users/<int:user_id>/status', views.admin_user_status),
+    path('admin/users/<int:user_id>/reset-password', views.admin_user_reset_password),
+    path('admin/users/<int:user_id>/duplicates', views.admin_user_duplicates),
     path('admin/users/<int:user_id>/wallet/adjust', views.admin_wallet_adjust),
     path('admin/transactions', views.admin_transactions),
+    path('admin/transactions/by-reference/<path:reference>', views.admin_transaction_by_reference),
     path('admin/deposits/pending', views.admin_deposits_pending),
+    path('admin/deposits/counts', views.admin_deposits_counts),
     path('admin/deposits/<int:tx_id>/confirm', views.admin_deposit_confirm),
+    path('admin/deposits/<int:tx_id>/reject', views.admin_deposit_reject),
+    path('admin/upload', views.admin_upload_image),
     path('admin/games', views.admin_games),
     path('admin/games/create', views.admin_games_create),
     path('admin/games/status', views.admin_games_status),
@@ -50,20 +81,106 @@ urlpatterns = [
     path('admin/games/top', views.admin_games_top),
     path('admin/games/rounds', views.admin_games_rounds),
     path('admin/games/<int:game_id>', views.admin_games_update),
+    path('admin/categories', views.admin_categories),
+    path('admin/categories/create', views.admin_categories_create),
+    path('admin/categories/<int:category_id>', views.admin_categories_update),
     path('admin/providers', views.admin_providers),
     path('admin/providers/create', views.admin_providers_create),
     path('admin/providers/<int:provider_id>', views.admin_providers_update),
     path('admin/bets', views.admin_bets),
     path('admin/bonuses', views.admin_bonuses),
+    path('admin/bonuses/stats', views.admin_bonuses_stats),
+    path('admin/bonuses/issued', views.admin_bonuses_issued),
+    path('admin/bonuses/generate-code', views.admin_bonuses_generate_code),
+    path('admin/bonuses/redemptions', views.admin_coupon_redemptions),
     path('admin/bonuses/create', views.admin_bonuses_create),
+    path('admin/bonuses/issued/<int:user_bonus_id>/revoke', views.admin_bonuses_revoke),
     path('admin/bonuses/<int:bonus_id>', views.admin_bonuses_update),
+    path('admin/bonuses/<int:bonus_id>/duplicate', views.admin_bonuses_duplicate),
+    path('admin/bonuses/<int:bonus_id>/grant', views.admin_bonuses_grant),
+    path('admin/bonuses/<int:bonus_id>/providers', views.admin_bonuses_providers),
+    path('admin/banners', views.admin_banners),
+    path('admin/banners/create', views.admin_banners_create),
+    path('admin/banners/<int:banner_id>', views.admin_banners_update),
+    path('admin/promotion-posters', views.admin_promotion_posters),
+    path('admin/promotion-posters/create', views.admin_promotion_posters_create),
+    path('admin/promotion-posters/<int:poster_id>', views.admin_promotion_posters_update),
+    path('admin/faqs', views.admin_faqs),
+    path('admin/faqs/create', views.admin_faqs_create),
+    path('admin/faqs/<int:faq_id>', views.admin_faqs_update),
     path('admin/settings', views.admin_settings),
     path('admin/settings/<str:setting_key>', views.admin_settings_update),
     path('admin/ai-calls', views.admin_ai_calls),
+    # Bet history (all players) + per-session round drill-down
+    path('admin/bet-history', views.admin_bet_history),
+    path('admin/bet-history/<str:session_uid>/rounds', views.admin_bet_history_rounds),
+    path('admin/bet-history/settle-stale', views.admin_settle_stale_rounds),
+    # Manage admin (staff accounts) — super-admin only for writes
     path('admin/staff', views.admin_staff),
+    path('admin/staff/create', views.admin_staff_create),
+    path('admin/staff/<int:staff_id>', views.admin_staff_update),
+    # Report export (CSV)
+    path('admin/reports', views.admin_reports),
+    path('admin/reports/<str:kind>/export', views.admin_report_export),
+    # Whole-database export: table catalogue, per-table / per-combination
+    # downloads (CSV or XLSX) and the full dump (ZIP of CSVs, or one workbook).
+    path('admin/data/catalog', views.admin_data_catalog),
+    path('admin/data/table/<str:key>/export', views.admin_data_table_export),
+    path('admin/data/combo/<str:key>/export', views.admin_data_combo_export),
+    path('admin/data/full-export', views.admin_data_full_export),
+    # Mobile app (APK) distribution
+    path('admin/app-download', views.admin_app_download),
+    path('admin/app-download/update', views.admin_app_download_update),
+    # Social / support links
+    path('admin/social-links', views.admin_social_links),
+    path('admin/social-links/update', views.admin_social_links_update),
     path('admin/withdrawals/pending', views.admin_withdrawals_pending),
+    path('admin/withdrawals/counts', views.admin_withdrawals_counts),
     path('admin/withdrawals/<int:tx_id>/approve', views.admin_withdrawal_approve),
     path('admin/withdrawals/<int:tx_id>/reject', views.admin_withdrawal_reject),
+    # --- Backoffice console (reference-parity screens) ---
+    # Users
+    path('admin/bo/users', bo.users_list),
+    path('admin/bo/plays/search', bo.search_plays),
+    path('admin/bo/players-online', bo.players_online),
+    # Risk
+    path('admin/bo/blocked-ips', bo.blocked_ips),
+    path('admin/bo/blocked-ips/create', bo.blocked_ips_create),
+    path('admin/bo/blocked-ips/<int:rule_id>', bo.blocked_ips_update),
+    # Cashier
+    path('admin/bo/payment-methods', bo.payment_methods),
+    path('admin/bo/payment-methods/create', bo.payment_methods_create),
+    path('admin/bo/payment-methods/<int:method_id>', bo.payment_methods_update),
+    path('admin/bo/payment-providers', bo.payment_providers),
+    path('admin/bo/payment-providers/create', bo.payment_providers_create),
+    path('admin/bo/payment-providers/<int:provider_id>', bo.payment_providers_update),
+    path('admin/bo/bin-rules', bo.bin_rules),
+    path('admin/bo/bin-rules/create', bo.bin_rules_create),
+    path('admin/bo/bin-rules/<int:rule_id>', bo.bin_rules_update),
+    path('admin/bo/frontend-rules', bo.frontend_rules),
+    path('admin/bo/frontend-rules/create', bo.frontend_rules_create),
+    path('admin/bo/frontend-rules/<int:rule_id>', bo.frontend_rules_update),
+    path('admin/bo/queues/<str:queue_type>', bo.queue),
+    path('admin/bo/queues/items/<int:item_id>', bo.queue_resolve),
+    # Mailing
+    path('admin/bo/templates', bo.templates),
+    path('admin/bo/templates/create', bo.templates_create),
+    path('admin/bo/templates/<int:template_id>', bo.templates_detail),
+    path('admin/bo/configuration/<str:scope>', bo.configuration),
+    # Games / Sort by Web
+    path('admin/bo/game-order', bo.game_order),
+    path('admin/bo/game-order/save', bo.game_order_save),
+    # Bonus (reference Create Bonus wizard + Bonus List + Exchange Bonus)
+    path('admin/bo/bonuses', bo.bonuses),
+    path('admin/bo/bonuses/<int:bonus_id>/excluded-affiliates', bo.bonus_excluded_affiliates),
+    path('admin/bo/bonuses/<int:bonus_id>/translations', bo.bonus_translations),
+    path('admin/bo/bonuses/<int:bonus_id>/translations/<str:language>', bo.bonus_translation_delete),
+    path('admin/bo/bonuses/<int:bonus_id>/eligibility', bo.bonus_eligibility),
+    # Staff groups
+    path('admin/bo/staff-groups', bo.staff_groups),
+    path('admin/bo/staff-groups/create', bo.staff_groups_create),
+    path('admin/bo/staff-groups/<int:group_id>', bo.staff_groups_detail),
+
     # AI
     path('ai/fraud-score', views.ai_fraud_score),
     path('ai/trigger-welcome-call', views.ai_welcome_call),

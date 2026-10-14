@@ -1,72 +1,36 @@
 """Tenant provisioning service.
 
-Implements the Super Admin "Create Product" / "Create Tenant Database"
-capability: register a product in the master DB, create its isolated MySQL
-database, apply the per-tenant schema (includes seed data). Designed so new
-products can be onboarded dynamically with no code changes.
+Implements the Super Admin "Create Product" capability: register a product in
+the master DB (branding, URLs, theme rows, webhook credential). The tenant
+database itself is not created by this service — it must already exist and be
+pointed at via the product's ``Database`` connection record.
 """
 
 from __future__ import annotations
 
-import os
-import subprocess
-from pathlib import Path
+import re
+import secrets
 
-from django.conf import settings
-from django.db import connections
-
-from services.branding import default_branding_for_product
-from tenants.models import Branding, Database, Product, Url
-from tenants.state import register_tenant_connection, tenant_db_alias_for
-
-INIT_SQL = Path(getattr(settings, 'TENANT_SCHEMA_PATH', settings.BASE_DIR / 'database' / 'init.sql'))
+from services.branding import IDENTITY_FIELDS, ensure_branding
+from services.product_credentials import issue_credential
+from tenants.models import Database, Product, Url
+from tenants.themes import THEME_KEYS
 
 
-class ProvisioningError(RuntimeError):
-    pass
+def new_api_key() -> str:
+    """Secret issued per product, used to verify which product a connection
+    belongs to. This is the product's identity — it replaces the slug."""
+    return 'pk_' + secrets.token_hex(24)
 
 
-def _mysql_base_args(*, host: str, port: str, user: str) -> list[str]:
-    return ['mysql', '-h', host, '-P', str(port), '-u', user, '--protocol=TCP']
-
-
-def _run_mysql(args: list[str], password: str, stdin_path: Path | None = None) -> None:
-    env = dict(os.environ)
-    if password:
-        env['MYSQL_PWD'] = password
-    else:
-        env.pop('MYSQL_PWD', None)
-    stdin = open(stdin_path, 'rb') if stdin_path else None
-    try:
-        proc = subprocess.run(
-            args, env=env, stdin=stdin, capture_output=True, text=True
-        )
-    finally:
-        if stdin:
-            stdin.close()
-    if proc.returncode != 0:
-        raise ProvisioningError(proc.stderr.strip() or 'mysql command failed')
-
-
-def create_database(*, db_name: str, host: str, port: str, user: str, password: str) -> None:
-    args = _mysql_base_args(host=host, port=port, user=user) + [
-        '-e',
-        f'CREATE DATABASE IF NOT EXISTS `{db_name}` '
-        f'CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;',
-    ]
-    _run_mysql(args, password)
-
-
-def apply_schema(*, db_name: str, host: str, port: str, user: str, password: str) -> None:
-    if not INIT_SQL.exists():
-        raise ProvisioningError(f'Schema file not found: {INIT_SQL}')
-    args = _mysql_base_args(host=host, port=port, user=user) + [db_name]
-    _run_mysql(args, password, stdin_path=INIT_SQL)
+def _db_name_from(name: str) -> str:
+    """A safe default tenant-database name derived from the product name."""
+    token = re.sub(r'[^a-z0-9]+', '_', name.lower()).strip('_') or 'product'
+    return f'{token}_db'
 
 
 def provision_product(
     *,
-    slug: str,
     name: str,
     db_name: str | None = None,
     db_host: str | None = None,
@@ -76,40 +40,57 @@ def provision_product(
     fe_url: str = '',
     be_url: str = '',
     branding: dict | None = None,
-    seed: bool = True,
     stdout=None,
 ) -> Product:
-    """Create a product end-to-end: master records + isolated DB + seed data.
+    """Create a product end-to-end: master records + connection metadata.
 
-    Idempotent: re-running for an existing slug updates records and re-applies
-    the schema (CREATE TABLE IF NOT EXISTS) without destroying data.
+    Products are identified by ``id`` (console) and ``api_key`` (product config
+    pull); there is no slug. The api_key is NOT issued here — operators generate
+    it explicitly from the console after creation. Idempotent by name: re-running
+    for the same name updates records without destroying data. Does not create or
+    modify the tenant database itself.
     """
+    from django.db import connections
+
     default_db = connections.databases['default']
-    db_name = db_name or f'{slug.replace("-", "_")}_db'
+    db_name = db_name or _db_name_from(name)
     db_host = db_host or default_db.get('HOST', 'localhost')
     db_port = str(db_port or default_db.get('PORT', '3306'))
     db_user = db_user or default_db.get('USER', 'root')
     db_password = default_db.get('PASSWORD', '') if db_password is None else db_password
 
-    product, _ = Product.objects.update_or_create(
-        slug=slug, defaults={'name': name, 'status': Product.Status.ACTIVE}
+    product, created = Product.objects.get_or_create(
+        name=name, defaults={'status': Product.Status.ACTIVE}
     )
 
     # Seed one theme row per catalog theme (theme1 active by default). Idempotent.
     from tenants.themes import ensure_product_themes
     ensure_product_themes(product)
 
-    branding_data = default_branding_for_product(product)
-    branding_data.update(branding or {})
-    branding_data['product_name'] = (branding_data.get('product_name') or name).strip()
-    Branding.objects.update_or_create(product=product, defaults=branding_data)
+    # Issue the product's RSA webhook credential (Super Admin signs data pulls,
+    # the product verifies). Idempotent: keeps any existing active key pair.
+    issue_credential(product)
+
+    # Seed per-theme branding: every catalog theme starts from its own defaults.
+    # Any identity overrides passed in (e.g. product_name) apply to all themes.
+    overrides = branding or {}
+    product_name = (overrides.get('product_name') or name).strip()
+    for theme_key in THEME_KEYS:
+        row = ensure_branding(product, theme_key, product_name=product_name)
+        identity_overrides = {
+            f: overrides[f] for f in IDENTITY_FIELDS if f in overrides
+        }
+        if identity_overrides:
+            for field, value in identity_overrides.items():
+                setattr(row, field, value)
+            row.save()
 
     Url.objects.update_or_create(
         product=product,
         defaults={'fe_url': fe_url, 'be_url': be_url},
     )
 
-    tenant_db, _ = Database.objects.update_or_create(
+    Database.objects.update_or_create(
         product=product,
         defaults={
             'db_name': db_name,
@@ -117,22 +98,7 @@ def provision_product(
             'db_port': db_port,
             'db_user': db_user,
             'db_password': db_password,
-            'is_provisioned': False,
         },
     )
 
-    if stdout:
-        stdout(f'  creating database {db_name} on {db_host}:{db_port} ...')
-    create_database(db_name=db_name, host=db_host, port=db_port, user=db_user, password=db_password)
-    if stdout:
-        stdout('  applying tenant schema (init.sql) ...')
-    apply_schema(db_name=db_name, host=db_host, port=db_port, user=db_user, password=db_password)
-
-    alias = tenant_db_alias_for(slug)
-    register_tenant_connection(
-        alias, name=db_name, host=db_host, port=db_port, user=db_user, password=db_password
-    )
-
-    tenant_db.is_provisioned = True
-    tenant_db.save(update_fields=['is_provisioned', 'updated_at'])
     return product

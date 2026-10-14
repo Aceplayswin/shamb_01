@@ -3,7 +3,18 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LogOut, User } from 'lucide-react';
+import {
+  Gift,
+  History,
+  LogOut,
+  ScrollText,
+  Settings,
+  Smartphone,
+  Sparkles,
+  User,
+  Users,
+  Wallet,
+} from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 
 function profileInitials(user) {
@@ -31,6 +42,27 @@ const STYLES = {
     menu: 'absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-xl border border-white/10 bg-[#0d1420] py-1 shadow-lg',
     item: 'flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-slate-200 transition hover:bg-white/5',
     logout: 'flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-400 transition hover:bg-red-500/10',
+  },
+  theme3: {
+    button:
+      'grid h-9 w-9 place-items-center overflow-hidden rounded-full border border-[#c79a3b]/40 bg-gradient-to-br from-[#e9c56b] to-[#b8862f] text-xs font-black text-[#241b0e] shadow-sm transition hover:brightness-105',
+    menu: 'absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-xl border border-black/[0.08] bg-white py-1 shadow-xl',
+    item: 'flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-[#1b1726] transition hover:bg-[#f4f2f9]',
+    logout: 'flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-[#e5484d] transition hover:bg-[#e5484d]/10',
+  },
+  theme4: {
+    button:
+      'grid h-9 w-9 place-items-center overflow-hidden rounded-full border border-white/40 bg-gradient-to-b from-[#17a2b0] to-[#0e7480] text-xs font-black text-white shadow-sm transition hover:brightness-110',
+    menu: 'absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded border border-black/[0.08] bg-white py-1 shadow-xl',
+    item: 'flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-[#13272b] transition hover:bg-[#eef6f7]',
+    logout: 'flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-[#e5342c] transition hover:bg-[#e5342c]/10',
+  },
+  theme5: {
+    button:
+      'grid h-9 w-9 place-items-center overflow-hidden rounded-full border border-black/10 bg-[#101c33] text-xs font-black text-white shadow-sm transition hover:border-[#1d4ed8] hover:bg-[#1b2a48]',
+    menu: 'absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-xl border border-black/[0.08] bg-white py-1 shadow-xl',
+    item: 'flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-[#0f1b33] transition hover:bg-[#f1f4f8]',
+    logout: 'flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-[#f4547a] transition hover:bg-[#f4547a]/10',
   },
 };
 
@@ -89,6 +121,43 @@ export function ProfileMenu({ variant = 'theme1', buttonClassName }) {
           >
             <User className="h-4 w-4" />
             Profile
+          </Link>
+          <Link
+            href="/wallet"
+            role="menuitem"
+            className={styles.item}
+            onClick={() => setOpen(false)}
+          >
+            <Wallet className="h-4 w-4" />
+            Wallet
+          </Link>
+          <Link href="/bet-history" role="menuitem" className={styles.item} onClick={() => setOpen(false)}>
+            <History className="h-4 w-4" />
+            Bet History
+          </Link>
+          <Link href="/promotions" role="menuitem" className={styles.item} onClick={() => setOpen(false)}>
+            <Gift className="h-4 w-4" />
+            Promotions
+          </Link>
+          <Link href="/bonus" role="menuitem" className={styles.item} onClick={() => setOpen(false)}>
+            <Sparkles className="h-4 w-4" />
+            My Bonuses
+          </Link>
+          <Link href="/refer" role="menuitem" className={styles.item} onClick={() => setOpen(false)}>
+            <Users className="h-4 w-4" />
+            Refer &amp; Earn
+          </Link>
+          <Link href="/settings" role="menuitem" className={styles.item} onClick={() => setOpen(false)}>
+            <Settings className="h-4 w-4" />
+            Settings
+          </Link>
+          <Link href="/app" role="menuitem" className={styles.item} onClick={() => setOpen(false)}>
+            <Smartphone className="h-4 w-4" />
+            Get the App
+          </Link>
+          <Link href="/rules" role="menuitem" className={styles.item} onClick={() => setOpen(false)}>
+            <ScrollText className="h-4 w-4" />
+            Rules
           </Link>
           <button type="button" role="menuitem" className={styles.logout} onClick={handleLogout}>
             <LogOut className="h-4 w-4" />
