@@ -10,24 +10,31 @@ controls the admin configured — active window, per-user limit, total budget,
 deposit sequence, player type, scope, wagering multiplier — so "fully
 controllable" holds no matter how the bonus was triggered.
 
-The money model is *pending reward*, not free credit:
+The money model is *credited immediately, but not withdrawable*:
 
   1. The player deposits; the deposit alone lands in their real balance.
-  2. Claiming a bonus writes a UserBonus row with
-     ``wagering_required = amount x multiplier``. Nothing is credited.
-  3. The player bets their own real money. Each settled bet adds its stake to
-     ``wagering_completed`` via :func:`record_wagering` — turnover is counted,
-     not wins or losses.
-  4. Once ``wagering_completed >= target`` the bonus flips to 'completed' and
-     only then is the amount paid into the withdrawable main balance.
+  2. The bonus is credited into ``wallet.bonus_balance`` the moment it is
+     awarded — the player sees it in their wallet straight away, with no
+     pending state to wait through. The UserBonus row is written 'active' with
+     ``wagering_required = amount x multiplier``.
+  3. ``bonus_balance`` is play money. It is never withdrawable: withdrawals and
+     payouts read ``main_balance`` only, so a bonus can be staked but cannot be
+     cashed out. See :func:`core.services.get_wallet` — ``available`` excludes it.
+  4. The player bets. Each settled bet adds its stake to ``wagering_completed``
+     via :func:`record_wagering` — turnover is counted, not wins or losses.
+  5. Once ``wagering_completed >= target`` the bonus is *converted*: the amount
+     moves out of ``bonus_balance`` into the withdrawable ``main_balance`` and
+     the row flips to 'completed'. That conversion is the only way bonus money
+     ever becomes cash.
 
 Targets are provider-weighted: :class:`BonusProvider` overrides the flat
 multiplier per game provider, so a near-coin-flip live-casino table can demand
 far more turnover than a slot before the same bonus clears.
 
 Rows written before this model shipped carry ``award_mode='locked'``: they were
-credited into ``bonus_balance`` up front and burn down ``wallet.wagering_balance``
-as the player bets. They are deliberately left on that path to settle out, and
+also credited into ``bonus_balance`` up front but burn down
+``wallet.wagering_balance`` as the player bets rather than tracking turnover per
+row. They are deliberately left on that path to settle out, and
 :func:`record_wagering` ignores them.
 """
 
@@ -121,11 +128,6 @@ def old_player_cutoff(bonus: Bonus, now=None):
       after launch qualify.
 
     Returns None when the bonus includes old players (no cutoff at all).
-
-    NOTE: dollara's existing ``_new_player_error`` below keeps its original,
-    simpler rolling-window-only check (unmodified for this port) and does not
-    call this helper — added standalone per the port checklist. See the port
-    report.
     """
     if not bonus.is_new_player_only:
         return None
@@ -137,13 +139,13 @@ def old_player_cutoff(bonus: Bonus, now=None):
 
 def _new_player_error(bonus: Bonus, user_id: int) -> str | None:
     """Enforce is_new_player_only against the account's registration date."""
-    if not bonus.is_new_player_only:
+    cutoff = old_player_cutoff(bonus)
+    if cutoff is None:
         return None
     user = User.objects.filter(id=user_id).only('created_at').first()
     if not user:
         return 'Account not found.'
-    window = timedelta(days=bonus.new_player_days or 0)
-    if window and timezone.now() - user.created_at > window:
+    if user.created_at < cutoff:
         return 'This bonus is for newly registered accounts only.'
     return None
 
@@ -164,10 +166,6 @@ def _scope_error(bonus: Bonus, user_id: int) -> str | None:
 # went live must not qualify them the moment it is created, and nothing counts
 # once it has ended. Balance is a point-in-time check, so only the claim itself
 # has to fall inside the window (``_is_live`` already enforces that).
-#
-# ``_requirement_error`` is enforced both by ``preview_coupon`` (so the UI can
-# show unmet conditions before submission) and by ``claim_promo_code`` (so the
-# same rule holds against a direct API call, not just the preview).
 
 def _claim_window(bonus: Bonus, now=None) -> tuple:
     """(since, until): the span of player activity that counts toward a claim."""
@@ -218,8 +216,9 @@ def claim_requirements(bonus: Bonus, user_id: int) -> list[dict]:
     """Every claim condition on ``bonus`` with the player's progress against it.
 
     Each entry is ``{key, label, required, current, remaining, met}``; the
-    list is empty when the bonus has no conditions. Powers the disabled-until-
-    met Claim button via :func:`preview_coupon`.
+    list is empty when the bonus has no conditions. This is the single source
+    for both the server-side gate (:func:`_requirement_error`) and the
+    disabled-until-met Claim button the web renders from ``/promotions``.
     """
     out: list[dict] = []
     if bonus.claim_min_balance is not None:
@@ -271,6 +270,9 @@ def _eligibility_error(
         _scope_error(bonus, user_id)
         or _new_player_error(bonus, user_id)
         or _sequence_error(bonus, ordinal)
+        # Last, so a player is told about a structural block (wrong account,
+        # wrong deposit) before being told to go and wager more.
+        or _requirement_error(bonus, user_id)
     )
 
 
@@ -309,12 +311,14 @@ def _award_bonus(
     credit_target: str | None = None,
     validity_days: int | None = None,
 ) -> UserBonus | None:
-    """Record ``amount`` as a pending reward the player must wager to unlock.
+    """Credit ``amount`` into the player's bonus balance right now.
 
-    No money moves here. The bonus is stored with a wagering target and stays
-    ``pending`` until :func:`record_wagering` sees enough turnover, at which
-    point it is credited to the withdrawable main balance. Budget counters are
-    bumped at award time so a reserved bonus cannot be double-promised.
+    The money lands in ``wallet.bonus_balance`` immediately — there is no
+    pending step, so the player sees the bonus the moment it is awarded. That
+    balance is *not* withdrawable: only ``main_balance`` is paid out, and the
+    bonus moves there only once :func:`record_wagering` has seen the wagering
+    target met (see :func:`_credit_cleared_bonus`). Budget counters are bumped
+    at award time so a reserved bonus cannot be double-promised.
 
     Returns the created ``UserBonus`` (or None if the resolved amount was not
     positive).
@@ -334,8 +338,7 @@ def _award_bonus(
     expires_at = timezone.now() + timedelta(days=days) if days else None
 
     with tenant_atomic():
-        # Materialise the wallet so downstream reads never race a missing row,
-        # but leave every balance untouched — the reward is not money yet.
+        # Materialise the wallet so the credit below never races a missing row.
         Wallet.objects.get_or_create(user_id=user_id, defaults={'currency': 'INR'})
 
         user_bonus = UserBonus.objects.create(
@@ -350,8 +353,24 @@ def _award_bonus(
             transaction_id=transaction_id,
             granted_by=granted_by,
             notes=notes,
-            status=UserBonus.Status.PENDING,
+            status=UserBonus.Status.ACTIVE,
             expires_at=expires_at,
+        )
+
+        # Credit the non-withdrawable bonus balance immediately: the player can
+        # play with it at once, but withdrawals only ever read main_balance.
+        _credit_bonus_balance(user_id, amount)
+
+        # Ledger entry so the award shows in the player's transaction history
+        # the moment it happens, not only when it clears.
+        Transaction.objects.create(
+            user_id=user_id,
+            type=Transaction.TxType.BONUS_CREDIT,
+            amount=amount,
+            status=Transaction.Status.COMPLETED,
+            notes=notes or (
+                (bonus.display_title or bonus.name) if bonus else 'Bonus'
+            ),
         )
 
         if bonus is not None:
@@ -360,8 +379,8 @@ def _award_bonus(
                 total_claims=F('total_claims') + 1,
             )
 
-    # A zero requirement is already satisfied — pay it out immediately rather
-    # than stranding it until the player happens to place a bet.
+    # A zero requirement is already met — convert it to withdrawable cash now
+    # rather than stranding it until the player happens to place a bet.
     if wagering_required <= ZERO:
         _credit_cleared_bonus(user_bonus.id)
         user_bonus.refresh_from_db()
@@ -372,11 +391,11 @@ def _award_bonus(
 def _credit_bonus_balance(user_id: int, amount: Decimal) -> None:
     """Add ``amount`` to the player's non-withdrawable bonus bucket.
 
-    Ported from mahakalworld's immediate-credit bonus model. NOTE: dollara's
-    ``_award_bonus`` above keeps its existing pending-reward model (nothing is
-    credited to any wallet balance until wagering clears — see
-    ``_credit_cleared_bonus``), so this helper is not called from there. Added
-    standalone per the port checklist; see the port report.
+    Always ``bonus_balance``, regardless of the campaign's ``credit_target``. A
+    bonus credited straight to ``main_balance`` would be withdrawable the
+    instant it landed, which is exactly what the wagering requirement exists to
+    prevent — so ``credit_target='main'`` decides where the bonus lands *after*
+    it clears (see :func:`_credit_cleared_bonus`), never where it starts.
     """
     Wallet.objects.filter(user_id=user_id).update(
         bonus_balance=F('bonus_balance') + amount
@@ -417,10 +436,6 @@ def _weighted_turnover(
 
     A bonus with no per-provider override (or no flat rate to compare against)
     weights at 1 and the stake counts in full.
-
-    NOTE: dollara's existing ``record_wagering`` below counts turnover at full
-    face value (unmodified for this port) and does not call this helper —
-    added standalone per the port checklist. See the port report.
     """
     if bonus is None:
         return bet_amount
@@ -432,47 +447,44 @@ def _weighted_turnover(
 
 
 def _credit_cleared_bonus(user_bonus_id: int) -> bool:
-    """Pay out a bonus whose wagering target is met. Idempotent.
+    """Unlock a bonus whose wagering target is met. Idempotent.
 
-    Moves the reward into the withdrawable main balance and writes the
-    BONUS_CREDIT transaction — the only point at which a pending bonus becomes
-    real money. Returns True if this call performed the credit.
+    Converts rather than mints: the amount was already credited to the
+    non-withdrawable ``bonus_balance`` at award time, so clearing moves it out
+    of there and into the withdrawable ``main_balance``. This is the only point
+    at which bonus money becomes cashable. Returns True if this call performed
+    the conversion.
+
+    The bonus balance is drawn down by whatever is actually left in it — a
+    player who has already staked part of the bonus has less than the face
+    amount sitting there, and the wallet must never be pushed negative.
     """
     with tenant_atomic():
         ub = UserBonus.objects.select_for_update().filter(id=user_bonus_id).first()
-        # Re-check under the lock: a concurrent callback may have paid it already.
-        if ub is None or ub.status != UserBonus.Status.PENDING:
+        # Re-check under the lock: a concurrent callback may have cleared it.
+        if ub is None or ub.status != UserBonus.Status.ACTIVE:
             return False
 
-        Wallet.objects.filter(user_id=ub.user_id).update(
-            main_balance=F('main_balance') + ub.amount
-        )
-        tx = Transaction.objects.create(
-            user_id=ub.user_id,
-            type=Transaction.TxType.BONUS_CREDIT,
-            amount=ub.amount,
-            status=Transaction.Status.COMPLETED,
-            notes=ub.notes or (
-                (ub.bonus.display_title or ub.bonus.name) if ub.bonus else 'Bonus'
-            ),
-        )
+        wallet = Wallet.objects.select_for_update().filter(user_id=ub.user_id).first()
+        if wallet is None:
+            return False
+        drawn = min(ub.amount, max(wallet.bonus_balance, ZERO))
+        wallet.bonus_balance -= drawn
+        wallet.main_balance += drawn
+        wallet.save(update_fields=['bonus_balance', 'main_balance', 'updated_at'])
+
         ub.status = UserBonus.Status.COMPLETED
         ub.completed_at = timezone.now()
-        ub.transaction_id = tx.id
-        ub.save(update_fields=['status', 'completed_at', 'transaction_id', 'updated_at'])
+        ub.save(update_fields=['status', 'completed_at', 'updated_at'])
     return True
 
 
 def _expire_bonus(user_bonus_id: int) -> bool:
     """Close out a bonus that lapsed before its wagering target was met.
 
-    Ported from mahakalworld's immediate-credit model, where the amount is
-    already sitting in ``bonus_balance`` and expiry has to claw back whatever
-    the player has not staked. NOTE: dollara's existing ``record_wagering``
-    below (pending-reward model — nothing credited until cleared) closes out
-    an expired reward with a plain status update and does not call this
-    helper, since there is nothing to claw back under that model. Added
-    standalone per the port checklist. See the port report.
+    The amount is already sitting in ``bonus_balance``, so expiry has to take
+    back whatever the player has not staked — capped at the balance actually
+    present, since the wallet must never go negative. Idempotent.
     """
     with tenant_atomic():
         ub = UserBonus.objects.select_for_update().filter(id=user_bonus_id).first()
@@ -494,47 +506,65 @@ def _expire_bonus(user_bonus_id: int) -> bool:
 def record_wagering(
     user_id: int, bet_amount: Decimal, provider_id: int | None = None
 ) -> list[int]:
-    """Credit ``bet_amount`` of turnover against the player's pending bonuses.
+    """Credit ``bet_amount`` of turnover against the player's active bonuses.
 
     Called from bet settlement. Every rupee staked counts toward the target
     regardless of whether the round won or lost. When a bonus's target is
-    reached it is paid straight into the withdrawable balance.
+    reached its amount is converted out of the bonus balance into the
+    withdrawable one.
 
-    The target is provider-weighted: a bonus with per-provider multipliers is
-    judged against the multiplier for the provider this bet was placed on, per
-    the wagering spec. Returns the ids of bonuses cleared by this bet.
+    The target is the ``wagering_required`` stored on the row at award time —
+    the same number the player's progress bar counts up to (see
+    :func:`list_user_bonuses`) and the one every admin report reads. Clearing
+    must test the figure the player was shown, or a bonus reads "100%" while
+    staying locked.
+
+    Provider weighting applies to the *turnover*, not the target: a bet on a
+    low-edge provider contributes proportionally less toward the same fixed
+    requirement. Returns the ids of bonuses cleared by this bet.
     """
     if bet_amount is None or bet_amount <= ZERO:
         return []
 
     now = timezone.now()
-    pending = list(
+    # Both award modes accrue. `locked` is the legacy shape (credited into
+    # bonus_balance at award time) but those rows still carry a wagering target
+    # and still have to clear; filtering them out stranded them permanently.
+    active = list(
         UserBonus.objects.filter(
             user_id=user_id,
-            status=UserBonus.Status.PENDING,
-            award_mode=UserBonus.AwardMode.PENDING,
+            status=UserBonus.Status.ACTIVE,
         ).select_related('bonus')
     )
     cleared: list[int] = []
 
-    for ub in pending:
-        # Lapsed rewards stop accruing and are closed out rather than paid.
+    for ub in active:
+        # Lapsed bonuses stop accruing and are clawed back rather than cleared:
+        # the credit is already in the wallet, so expiry has to remove it.
         if ub.expires_at and ub.expires_at < now:
-            UserBonus.objects.filter(
-                id=ub.id, status=UserBonus.Status.PENDING
-            ).update(status=UserBonus.Status.EXPIRED)
+            _expire_bonus(ub.id)
+            continue
+
+        # Provider weighting scales the contribution, not the target. A bonus at
+        # a flat 35x whose live-casino rule says 50x means a live-casino bet is
+        # worth 35/50 of its face value toward the same requirement — the player
+        # grinds a low-edge game longer instead of the goalposts moving. Absent
+        # an override the ratio is 1 and the stake counts in full.
+        contribution = _weighted_turnover(ub.bonus, provider_id, bet_amount)
+        if contribution <= ZERO:
             continue
 
         # F() so simultaneous callbacks for the same player cannot lose turnover.
         UserBonus.objects.filter(id=ub.id).update(
-            wagering_completed=F('wagering_completed') + bet_amount
+            wagering_completed=F('wagering_completed') + contribution
         )
         completed = UserBonus.objects.values_list(
             'wagering_completed', flat=True
         ).get(id=ub.id)
 
-        mult = _effective_multiplier(ub.bonus, provider_id)
-        target = (ub.amount * mult).quantize(Decimal('0.01'))
+        # The stored target — the same figure the player's progress bar and
+        # every admin report read.
+        target = ub.wagering_required or ZERO
         if completed >= target and _credit_cleared_bonus(ub.id):
             cleared.append(ub.id)
 
@@ -686,12 +716,7 @@ def resolve_referrer(referral_code: str | None) -> int | None:
     return setting.user_id if setting else None
 
 
-# --- coupon / promo-code preview (public) -----------------------------------
-# These four helpers back preview_coupon() (wired to the preview_promo view) so
-# a player can see whether a code would succeed, and why, before submitting
-# it. claim_promo_code() below calls _coupon_error too, so the "one redemption
-# per coupon" guard (_redeem_count, independent of per_user_limit) and the
-# claim_method == CODE check hold at actual redemption, not just in preview.
+# --- coupon / promo-code redemption (public) -------------------------------
 
 def _normalise_code(code: str | None) -> str:
     """Codes are stored and compared upper-case with surrounding space stripped."""
@@ -767,38 +792,50 @@ def preview_coupon(user_id: int, code: str) -> dict:
     }
 
 
-# --- promo-code claim (public) --------------------------------------------
-
 def claim_promo_code(user_id: int, code: str, deposit_amount: Decimal = ZERO) -> dict:
-    """Public: a player redeems a promo code for its bonus."""
-    if not code:
-        raise ValueError('Enter a promo code.')
-    bonus = find_coupon(code)
-    if not bonus:
-        raise ValueError('Invalid promo code.')
-    # `_coupon_error` layers the code-specific rules (claim_method must be CODE,
-    # one redemption per coupon by default) on top of `_eligibility_error`;
-    # `_requirement_error` enforces the bonus wizard's claim_min_balance/
-    # claim_min_wagering/claim_min_deposit_total conditions. Both already back
-    # preview_coupon()'s live validation — this is the same gate applied to the
-    # actual redemption, so a direct API call can't skip what the preview shows.
-    reason = _coupon_error(bonus, user_id) or _requirement_error(bonus, user_id)
-    if reason:
-        raise ValueError(reason)
-    amount = _resolve_amount(bonus, deposit_amount)
-    if amount <= ZERO:
+    """Public: a player redeems a coupon code for its bonus.
+
+    The whole redemption is one transaction that re-checks eligibility under a
+    row lock on the campaign, so two devices submitting the same code at once
+    cannot both pass the "already redeemed" and budget checks.
+    """
+    normalised = _normalise_code(code)
+    if not normalised:
+        raise ValueError('Enter a coupon code.')
+
+    with tenant_atomic():
+        # Lock the campaign: budget counters and the per-user redeem check are
+        # both read-then-write, so they must not interleave with a second claim.
+        bonus = Bonus.objects.select_for_update().filter(promo_code=normalised).first()
+        if not bonus:
+            raise ValueError('Invalid coupon code.')
+        reason = _coupon_error(bonus, user_id)
+        if reason:
+            raise ValueError(reason)
+        amount = _resolve_amount(bonus, deposit_amount)
+        if amount <= ZERO:
+            raise ValueError('This code has no reward available right now.')
+        awarded = _award_bonus(
+            user_id=user_id,
+            bonus=bonus,
+            amount=amount,
+            source=UserBonus.Source.PROMO,
+            notes=f'Coupon code {normalised}',
+        )
+
+    if not awarded:
         raise ValueError('This code has no reward available right now.')
-    awarded = _award_bonus(
-        user_id=user_id,
-        bonus=bonus,
-        amount=amount,
-        source=UserBonus.Source.PROMO,
-        notes=f'Promo code {code.strip().upper()}',
-    )
     return {
         'claimed': True,
-        'amount': float(awarded.amount) if awarded else 0,
+        'amount': float(awarded.amount),
         'title': bonus.display_title or bonus.name,
+        'status': str(awarded.status),
+        'wagering_required': float(awarded.wagering_required),
+        'credit_target': awarded.credit_target,
+        # Always true now: the amount is in the bonus balance immediately.
+        'credited': True,
+        # True once wagering cleared it into the withdrawable balance.
+        'withdrawable': awarded.status == UserBonus.Status.COMPLETED,
     }
 
 
@@ -809,12 +846,8 @@ def _claim_state(bonus: Bonus, user_id: int) -> dict:
     Claim button: enabled, disabled with a progress hint, or "Claimed".
 
     ``claimable`` is exactly the server-side verdict :func:`claim_promo_code`
-    would reach if this campaign were code-based; for a non-code bonus it
-    mirrors :func:`_eligibility_error` instead.
-
-    NOTE: dollara's existing list_public_bonuses below keeps its original,
-    simpler payload for this port and does not call this helper — added
-    standalone per the port checklist. See the port report.
+    would reach, so the button can never be enabled for a claim that would be
+    refused, and the reason shown is the same message the refusal carries.
     """
     requirements = claim_requirements(bonus, user_id)
     if bonus.claim_method == Bonus.ClaimMethod.CODE:
@@ -837,8 +870,15 @@ def _claim_state(bonus: Bonus, user_id: int) -> dict:
     }
 
 
-def list_public_bonuses() -> list[dict]:
-    """Active, promotable bonuses for the public promotions page."""
+def list_public_bonuses(user_id: int | None = None) -> list[dict]:
+    """Active, promotable bonuses for the public promotions page.
+
+    Only bonuses inside their start/end window are listed, so an offer never
+    shows before it opens or after it closes — whatever the player has done.
+    With ``user_id`` each row also carries that player's claim state (see
+    :func:`_claim_state`), which is what lets the web show the Claim button
+    disabled until the offer's conditions are met.
+    """
     now = timezone.now()
     out = []
     for b in Bonus.objects.filter(status=Bonus.Status.ACTIVE).order_by('-created_at'):
@@ -856,6 +896,23 @@ def list_public_bonuses() -> list[dict]:
             'wagering_multiplier': float(b.wagering_multiplier),
             'claim_method': b.claim_method,
             'has_promo_code': bool(b.promo_code),
+            # The code itself, so an offer the player is shown can actually be
+            # claimed. Listing code-claimed promotions without it left the
+            # player with a visible offer and no way to redeem it ("couldn't
+            # claim bonus"). This list is already the public promotions
+            # catalogue — the code is what the operator advertises — and every
+            # eligibility rule is still enforced server-side on redemption.
+            'promo_code': b.promo_code or None,
+            'start_date': b.start_date.isoformat() if b.start_date else None,
+            'end_date': b.end_date.isoformat() if b.end_date else None,
+            # The offer's claim conditions as configured, so an anonymous
+            # visitor still sees what the offer asks for.
+            'claim_min_balance': float(b.claim_min_balance) if b.claim_min_balance is not None else None,
+            'claim_min_wagering': float(b.claim_min_wagering) if b.claim_min_wagering is not None else None,
+            'claim_min_deposit_total': (
+                float(b.claim_min_deposit_total) if b.claim_min_deposit_total is not None else None
+            ),
+            **(_claim_state(b, user_id) if user_id else {}),
         })
     return out
 
@@ -881,8 +938,10 @@ def list_user_bonuses(user_id: int) -> list[dict]:
                 float(min(ub.wagering_completed / required, Decimal('1')) * 100)
                 if required > ZERO else 100.0
             ),
-            # True while the reward is owed but not yet spendable.
-            'is_pending': ub.status == UserBonus.Status.PENDING,
+            # Credited to the bonus balance and playable, but still short of
+            # its wagering target — so not yet withdrawable.
+            'is_pending': ub.status == UserBonus.Status.ACTIVE,
+            'is_withdrawable': ub.status == UserBonus.Status.COMPLETED,
             'credit_target': ub.credit_target,
             'expires_at': ub.expires_at.isoformat() if ub.expires_at else None,
             'completed_at': ub.completed_at.isoformat() if ub.completed_at else None,

@@ -13,7 +13,7 @@ Two rules make that re-export safe and must not be broken:
 * every model declares ``app_label = 'core'`` explicitly, since Django cannot
   infer it from a module that is not the app's ``models`` module.
 
-Tables come from ``database/init.sql`` / ``database/migrations/002_affiliate_program.sql``
+Tables come from ``database/init.sql``
 (migrations are disabled product-wide via ``MIGRATION_MODULES``), so field
 definitions here describe existing columns rather than create them.
 """
@@ -111,6 +111,12 @@ class Affiliate(models.Model):
     total_referrals = models.IntegerField(default=0)
     total_commission = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     payout_threshold = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    # 0 inherits the programme default. A referred player earns commission only
+    # after their deposits reach this amount, across min_redeposits deposits,
+    # inside qualification_period_days of signup.
+    min_deposit = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    min_redeposits = models.IntegerField(default=0)
+    qualification_period_days = models.IntegerField(default=0)
     # Display caches, refreshed by the commission run and payout transitions.
     pending_commission = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     approved_commission = models.DecimalField(max_digits=18, decimal_places=2, default=0)
@@ -147,6 +153,9 @@ class Affiliate(models.Model):
     approved_by = models.BigIntegerField(null=True, blank=True)
 
     last_login_at = models.DateTimeField(null=True, blank=True)
+    # Id of the most recently issued login token; see User.active_session_id
+    # in core/models.py for why — same single-device-login mechanism.
+    active_session_id = models.CharField(max_length=64, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -243,6 +252,9 @@ class AffiliateReferral(models.Model):
         max_digits=18, decimal_places=2, default=0
     )
     cpa_paid = models.BooleanField(default=False)
+    # Stamped once, on the deposit that meets the affiliate's minimum deposit,
+    # redeposit count, and qualification window. Commission waits for this.
+    qualified_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.ACTIVE
     )

@@ -20,7 +20,6 @@ from __future__ import annotations
 import csv
 import json
 import logging
-from datetime import datetime
 
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -42,6 +41,17 @@ def _json_body(request) -> dict:
 
 def _error_response(exc: Exception, status: int = 400):
     return JsonResponse({'error': str(exc)}, status=status)
+
+
+def _optional_limit(request):
+    """``?limit=`` when the caller set one. Missing means the list is not capped."""
+    raw = request.GET.get('limit')
+    if raw is None or str(raw).strip() == '':
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
 
 
 def _int_param(request, name, default):
@@ -76,13 +86,16 @@ class _CsvEcho:
 
 
 def _csv_response(rows, filename_stem: str):
+    from core import data_export
+
     writer = csv.writer(_CsvEcho())
 
     def stream():
+        yield writer.writerow(data_export.generated_row())
         for row in rows:
             yield writer.writerow(row)
 
-    stamp = datetime.now().strftime('%Y%m%d-%H%M')
+    stamp = data_export.export_stamp()
     response = StreamingHttpResponse(stream(), content_type='text/csv')
     response['Content-Disposition'] = (
         f'attachment; filename="{filename_stem}-{stamp}.csv"'
@@ -391,7 +404,7 @@ def report_export(request, kind):
 def admin_applications(request):
     return JsonResponse(admin_svc.list_applications(
         status=request.GET.get('status'),
-        limit=_int_param(request, 'limit', 50),
+        limit=_optional_limit(request),
         offset=_int_param(request, 'offset', 0),
     ))
 
@@ -441,7 +454,7 @@ def admin_agents(request):
         status=request.GET.get('status'),
         level=request.GET.get('level'),
         q=request.GET.get('q'),
-        limit=_int_param(request, 'limit', 100),
+        limit=_optional_limit(request),
         offset=_int_param(request, 'offset', 0),
     ))
 

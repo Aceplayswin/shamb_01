@@ -1,19 +1,20 @@
 """Add any payment_methods columns this build expects but the database lacks.
 
-The feature schema is applied from SQL files, not Django migrations, and
-deploy.sh only pulls, builds and restarts — it never runs SQL. When the
-deposit-destination columns were added to ``payment_methods`` the accompanying
-``migrations_payment_method_accounts.sql`` was documented but not applied, so
-every ORM read of the table failed with "Unknown column" and the admin's
-Cashier → Payment Methods screen showed a bare Internal Server Error.
+The feature schema is applied from ``database/init.sql``, not Django migrations,
+and deploy.sh only pulls, builds and restarts — it never runs SQL. When the
+deposit-destination columns were added to ``payment_methods``, existing
+databases could lag behind the ORM and every read of the table failed with
+"Unknown column", so Cashier → Payment Methods showed a bare Internal Server
+Error.
 
 This command heals that from Python, so it can run on every deploy without the
-mysql CLI (the SQL file uses ``DELIMITER``, which only the CLI understands):
+mysql CLI:
 
     python manage.py ensure_payment_method_columns --dry-run
     python manage.py ensure_payment_method_columns
 
 Idempotent: it reads information_schema and adds only what is missing.
+Fresh installs already have these columns in ``database/init.sql``.
 """
 
 from django.core.management.base import BaseCommand

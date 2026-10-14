@@ -81,6 +81,20 @@ cp .env.example .env
 python manage.py runserver 0.0.0.0:5000
 ```
 
+Schema lives in `database/init.sql` (no Django migrations). After pulling a
+build that adds columns, run the idempotent repair before restarting, or the
+affected screens return a schema error:
+
+```bash
+python manage.py ensure_payment_method_columns   # Cashier → Payment Methods columns
+python manage.py ensure_bonus_claim_columns      # Bonus claim conditions (min balance / wagering / deposits)
+python manage.py ensure_affiliate_qualification_columns  # Affiliate min deposit / redeposits / window
+```
+
+Fresh installs get the full schema (including single-session and blocked-IP
+columns) from `database/init.sql` alone; the ensure commands are only for
+databases that already exist and are behind the current build.
+
 ## Endpoints
 
 | Path | Description |

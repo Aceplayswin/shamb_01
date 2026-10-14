@@ -14,7 +14,6 @@ class User(models.Model):
 
     id = models.BigAutoField(primary_key=True)
     username = models.CharField(max_length=50, unique=True, null=True, blank=True)
-    email = models.EmailField(unique=True, null=True, blank=True)
     country_code = models.CharField(max_length=2, null=True, blank=True)
     phone = models.CharField(max_length=20, unique=True, null=True, blank=True)
     password_hash = models.CharField(max_length=255, null=True, blank=True)
@@ -32,6 +31,12 @@ class User(models.Model):
         max_length=20, choices=AccountStatus.choices, default=AccountStatus.ACTIVE
     )
     last_login_at = models.DateTimeField(null=True, blank=True)
+    # Id of the most recently issued login token. Every login overwrites this,
+    # so a token from an earlier device stops verifying (see
+    # core/middleware.py:require_auth) — only one device stays signed in at a
+    # time per player account. Admin logins don't touch it, so admins can be
+    # signed in on several devices at once.
+    active_session_id = models.CharField(max_length=64, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -52,26 +57,14 @@ class UserSetting(models.Model):
         OTHER = 'other', 'Other'
         PREFER_NOT_TO_SAY = 'prefer_not_to_say', 'Prefer not to say'
 
-    class KycStatus(models.TextChoices):
-        NONE = 'none', 'None'
-        PENDING = 'pending', 'Pending'
-        VERIFIED = 'verified', 'Verified'
-        REJECTED = 'rejected', 'Rejected'
-
     class RegistrationPath(models.TextChoices):
         DIRECT = 'direct', 'Direct'
-        KYC = 'kyc', 'KYC'
 
     id = models.BigAutoField(primary_key=True)
     user = models.OneToOneField(User, on_delete=models.CASCADE, db_column='user_id')
-    date_of_birth = models.DateField(null=True, blank=True)
     gender = models.CharField(
         max_length=20, choices=Gender.choices, null=True, blank=True
     )
-    kyc_status = models.CharField(
-        max_length=20, choices=KycStatus.choices, default=KycStatus.NONE
-    )
-    email_verified = models.BooleanField(default=False)
     phone_verified = models.BooleanField(default=False)
     two_factor_enabled = models.BooleanField(default=False)
     two_factor_secret = models.CharField(max_length=255, null=True, blank=True)
@@ -253,6 +246,7 @@ class GameCategory(models.Model):
 
 class Game(models.Model):
     class Category(models.TextChoices):
+        ALL_GAMES = 'all_games', 'All Games'
         SLOTS = 'slots', 'Slots'
         LIVE_CASINO = 'live_casino', 'Live Casino'
         SPORTS = 'sports', 'Sports'
@@ -267,14 +261,20 @@ class Game(models.Model):
     )
     name = models.CharField(max_length=150)
     slug = models.SlugField(max_length=100, unique=True)
-    # Optional link to the new GameCategory taxonomy (admin-managed). Not yet
-    # wired into game create/update in this port; `category` below remains the
-    # flat slug this platform's existing game-admin flow reads and writes.
+    # Source of truth for the game's vertical.
     category_ref = models.ForeignKey(
-        GameCategory, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='games', db_column='category_id',
+        GameCategory,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='games',
+        db_column='category_id',
     )
-    category = models.CharField(max_length=30, choices=Category.choices)
+    # Denormalized mirror of ``category_ref.slug``, kept in sync on every write
+    # (see admin_services._resolve_category). Preserved because reports, CSV
+    # exports and analytics read this column directly; it also keeps the value
+    # readable when a category row is deleted.
+    category = models.CharField(max_length=50)
     # External aggregator identifier (32-char hex UID). The launch + callback
     # flow keys on this; it maps aggregator events back to this catalog row.
     game_uid = models.CharField(max_length=64, null=True, blank=True, db_index=True)
@@ -520,7 +520,10 @@ class Bonus(models.Model):
     is_first_deposit = models.BooleanField(default=False)
     is_second_deposit = models.BooleanField(default=False)
     is_third_deposit = models.BooleanField(default=False)
-    # Restricts the bonus to accounts registered within new_player_days.
+    # "Exclude old players": when set, accounts registered before the cutoff
+    # cannot take the bonus. new_player_days > 0 is a rolling window (older
+    # than that many days at claim time); 0 pins the cutoff to the bonus's own
+    # start (start_date, else created_at). See bonus_services.old_player_cutoff.
     is_new_player_only = models.BooleanField(default=False)
     new_player_days = models.IntegerField(default=7)
     max_bonus_cap = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)

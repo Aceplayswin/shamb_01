@@ -60,6 +60,14 @@ ACCOUNT_STATUSES = (
 )
 
 
+def _window(qs, offset, limit):
+    """``limit is None`` returns every matching row from ``offset``."""
+    start = max(0, int(offset or 0))
+    if limit is None:
+        return qs[start:]
+    return qs[start:start + int(limit)]
+
+
 def _actor_label(admin_id) -> str:
     if not admin_id:
         return 'system'
@@ -113,7 +121,7 @@ def _serialize_application(agent: Agent) -> dict:
     }
 
 
-def list_applications(*, status=None, limit=50, offset=0) -> dict:
+def list_applications(*, status=None, limit=None, offset=0) -> dict:
     """Every application, whoever it was addressed to.
 
     There is no routing clause because there is nowhere else for an application
@@ -128,7 +136,7 @@ def list_applications(*, status=None, limit=50, offset=0) -> dict:
         qs = qs.filter(status__in=Agent.APPLICATION_STATUSES)
 
     total = qs.count()
-    rows = qs.order_by('-applied_at', '-created_at')[offset:offset + limit]
+    rows = _window(qs.order_by('-applied_at', '-created_at'), offset, limit)
     return {
         'records': [_serialize_application(a) for a in rows],
         'total': total,
@@ -292,7 +300,7 @@ def decide_application(application_id: int, admin_id: int, *, decision,
 # Agent list and detail
 # ---------------------------------------------------------------------------
 
-def list_agents(*, status=None, level=None, q=None, limit=100, offset=0) -> dict:
+def list_agents(*, status=None, level=None, q=None, limit=None, offset=0) -> dict:
     qs = Agent.objects.select_related('parent').exclude(
         status__in=Agent.APPLICATION_STATUSES
     )
@@ -307,7 +315,7 @@ def list_agents(*, status=None, level=None, q=None, limit=100, offset=0) -> dict
         )
 
     total = qs.count()
-    rows = list(qs.order_by('depth', 'username')[offset:offset + limit])
+    rows = list(_window(qs.order_by('depth', 'username'), offset, limit))
     ids = [a.id for a in rows]
 
     # Two aggregates for the whole page rather than two queries per row.

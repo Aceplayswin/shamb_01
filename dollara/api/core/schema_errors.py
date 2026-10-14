@@ -16,13 +16,13 @@ _MISSING_SCHEMA_CODES = {1054, 1146}
 PAYMENT_METHODS_SCHEMA_MESSAGE = (
     'The payment_methods table is missing columns. Run: '
     'python manage.py ensure_payment_method_columns '
-    '(or apply api/database/migrations_payment_method_accounts.sql)'
+    '(fresh installs get these from database/init.sql)'
 )
 
 BONUSES_SCHEMA_MESSAGE = (
     'The bonuses table is missing columns. Run: '
     'python manage.py ensure_bonus_claim_columns '
-    '(or apply api/database/migration_bonus_claim_conditions.sql)'
+    '(fresh installs get these from database/init.sql)'
 )
 
 

@@ -45,6 +45,20 @@ def require_agent(allow_locked: bool = False):
                     {'error': 'Agent account not found. Please log in again.'},
                     status=401,
                 )
+            # A newer login (any device) overwrites active_session_id, so a
+            # token minted before that no longer matches and is rejected.
+            if (
+                request.auth.sid
+                and agent.active_session_id
+                and request.auth.sid != agent.active_session_id
+            ):
+                return JsonResponse(
+                    {
+                        'error': 'You have been logged out because this account was signed in on another device.',
+                        'code': 'SESSION_REVOKED',
+                    },
+                    status=401,
+                )
             # An application has no account behind it yet. Checked before the
             # operational statuses so a pending applicant is told to wait
             # rather than being told their account is closed.

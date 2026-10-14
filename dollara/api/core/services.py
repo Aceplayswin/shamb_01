@@ -4,7 +4,7 @@ import re
 import secrets
 import string
 import uuid
-from datetime import timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 import bcrypt
@@ -13,10 +13,11 @@ from django.core.cache import cache
 from django.core.files.storage import default_storage
 from django.db import IntegrityError
 from django.db.models import BigIntegerField, Count, F, Q, Sum
-from django.db.models.functions import Cast
+from django.db.models.functions import Abs, Cast, Substr
 from django.utils import timezone
 
 from core import bonus_services
+from core.data_export import IST
 from core.auth_jwt import sign_token
 from core.models import (
     Banner,
@@ -67,7 +68,7 @@ def get_user_settings(user: User) -> UserSetting | None:
 
 
 # Player-editable preference fields exposed by the settings page. Anything not in
-# this set (kyc_status, fraud_score, demo flags, …) is read-only / system-owned.
+# this set (fraud_score, demo flags, …) is read-only / system-owned.
 _EDITABLE_PREFERENCES = {
     'website_language',
     'communication_language',
@@ -82,9 +83,15 @@ def _serialize_preferences(user: User, prefs: UserSetting | None) -> dict:
         'full_name': user.full_name,
         'username': user.username,
         'phone': user.phone,
-        'email': user.email,
-        'kyc_status': prefs.kyc_status if prefs else UserSetting.KycStatus.NONE,
         'account_status': user.account_status,
+        # Identity/registration details the profile page displays. Without them
+        # it rendered "Player ID", "Region", "Member since" and "Last login" as
+        # empty dashes even though the values exist on the account.
+        'id': user.id,
+        'state': user.state,
+        'country_code': user.country_code,
+        'created_at': user.created_at.isoformat() if user.created_at else None,
+        'last_login_at': user.last_login_at.isoformat() if user.last_login_at else None,
         'website_language': prefs.website_language if prefs else 'en',
         'communication_language': prefs.communication_language if prefs else 'en',
         'currency': prefs.currency if prefs else 'INR',
@@ -121,20 +128,16 @@ def update_user_preferences(user_id: int, changes: dict) -> dict:
     return _serialize_preferences(user, prefs)
 
 
-# Player usernames are sequential 8-digit numbers starting here (10000000,
-# 10000001, ...). The column stays a CharField — we just store the number as a
-# string so the format is purely an API-layer concern.
-_USERNAME_START = 10000000
-
-
-# --- Slug-based username helpers (ported from mahakalworld) ----------------
-# NOT currently wired into _next_sequential_username / register_user /
-# admin_create_user below: dollara deliberately keeps its existing sequential
-# numeric username scheme (10000000, 10000001, ...) for this port. These are
-# added standalone, as named in the port checklist, so they are available if
-# the username scheme is revisited later; they have no callers today.
+# Player usernames are the first name off the account holder's full name plus a
+# two-digit counter (dev01, dev02, ...), so an id reads as the person rather than
+# as a row number. The counter is per-name: the first "dev" is dev01 regardless of
+# how many other players exist.
 _USERNAME_FALLBACK_SLUG = 'usr'
 _USERNAME_DIGITS = 2
+_USERNAME_START = 1
+# Leaves room under the column's 50-char limit for the counter, including the
+# 3+ digit ones a very common first name eventually reaches.
+_USERNAME_SLUG_MAX = 20
 
 
 def _username_slug(full_name: str) -> str:
@@ -150,7 +153,7 @@ def _username_slug(full_name: str) -> str:
     # A slug that starts with a digit would blur into the counter, so prefix it.
     if slug and slug[0].isdigit():
         slug = f'{_USERNAME_FALLBACK_SLUG}{slug}'
-    return slug[:20] or _USERNAME_FALLBACK_SLUG
+    return slug[:_USERNAME_SLUG_MAX] or _USERNAME_FALLBACK_SLUG
 
 
 def _format_username(slug: str, seq: int) -> str:
@@ -158,21 +161,32 @@ def _format_username(slug: str, seq: int) -> str:
     return f'{slug}{seq:0{_USERNAME_DIGITS}d}'
 
 
-def _next_sequential_username() -> str:
-    """Return the next sequential numeric username as a string.
+def _next_sequential_username(full_name: str = '') -> str:
+    """Return the next free username for this account holder's first name.
 
-    Looks at existing all-digit usernames, takes the highest one and adds 1.
-    Falls back to the starting value when no sequential username exists yet.
+    Takes the highest counter already issued for the slug and adds 1, so the
+    counter rolls past two digits (dev99 -> dev100) rather than failing once a
+    common first name fills its 100 slots. Only exact ``slug + digits`` rows
+    count: an agent-typed lookalike such as "dev.k" or "devtest" shares the
+    prefix but is not a counter and must not be read as one.
+
+    Racy by nature -- two players named Dev registering at once compute the same
+    counter. The unique index rejects the loser and the caller's retry loop
+    recomputes, which is also what covers a collision with an agent-typed name.
     """
+    slug = _username_slug(full_name)
+    counter_re = rf'^{re.escape(slug)}[0-9]+$'
     last = (
-        User.objects.filter(username__regex=r'^\d+$')
-        .annotate(username_num=Cast('username', BigIntegerField()))
+        User.objects.filter(username__regex=counter_re)
+        .annotate(
+            username_num=Cast(Substr('username', len(slug) + 1), BigIntegerField())
+        )
         .order_by('-username_num')
         .values_list('username_num', flat=True)
         .first()
     )
-    nxt = last + 1 if last is not None and last >= _USERNAME_START else _USERNAME_START
-    return str(nxt)
+    nxt = last + 1 if last is not None else _USERNAME_START
+    return _format_username(slug, nxt)
 
 
 def register_user(
@@ -186,7 +200,6 @@ def register_user(
     affiliate_sub: str | None = None,
     affiliate_click_id=None,
     signup_ip: str | None = None,
-    email: str | None = None,
 ) -> dict:
     """Direct sign-up: full name + phone + password, no verification step."""
     full_name = (full_name or '').strip()
@@ -215,12 +228,13 @@ def register_user(
             try:
                 with tenant_atomic():
                     user = User.objects.create(
-                        username=_next_sequential_username(),
+                        username=_next_sequential_username(full_name),
                         phone=phone,
                         full_name=full_name,
                         country_code=country_code,
                         role=User.Role.USER,
                         password_hash=password_hash,
+                        signup_ip=signup_ip,
                     )
                 break
             except IntegrityError:
@@ -256,14 +270,20 @@ def register_user(
 
             affiliate_services.attribute_signup(
                 user.id, affiliate_ref, affiliate_sub, affiliate_click_id,
-                ip=signup_ip, email=email, phone=phone,
+                ip=signup_ip, phone=phone,
             )
         except Exception:
             logging.getLogger('affiliate').exception(
                 'attribute_signup failed for user %s', user.id
             )
 
-    token = sign_token({'sub': user.id, 'role': User.Role.USER}, tenant=get_current_tenant_id())
+    session_id = uuid.uuid4().hex
+    user.active_session_id = session_id
+    user.save(update_fields=['active_session_id'])
+    token = sign_token(
+        {'sub': user.id, 'role': User.Role.USER, 'sid': session_id},
+        tenant=get_current_tenant_id(),
+    )
     return {
         'userId': user.id,
         'username': user.username,
@@ -289,7 +309,7 @@ def create_demo_session() -> dict:
     Wallet.objects.create(
         user=user,
         main_balance=Decimal('1000'),
-        bonus_balance=Decimal('0'),
+        bonus_balance=Decimal('5000'),
     )
     token = sign_token(
         {'sub': user.id, 'role': User.Role.USER, 'type': 'demo'},
@@ -311,9 +331,11 @@ def login_user(phone: str, password: str) -> dict:
         raise ValueError('Account suspended')
     if not _check_password(password, user.password_hash):
         raise ValueError('Invalid credentials')
+    session_id = uuid.uuid4().hex
     user.last_login_at = timezone.now()
-    user.save(update_fields=['last_login_at'])
-    payload = {'sub': user.id, 'role': User.Role.USER}
+    user.active_session_id = session_id
+    user.save(update_fields=['last_login_at', 'active_session_id'])
+    payload = {'sub': user.id, 'role': User.Role.USER, 'sid': session_id}
     prefs = get_user_settings(user)
     if prefs and prefs.is_demo:
         payload['type'] = 'demo'
@@ -328,11 +350,19 @@ def login_admin(username: str, password: str) -> dict:
     ).first()
     if not admin or not admin.password_hash or not _check_password(password, admin.password_hash):
         raise ValueError('Invalid credentials')
+    # Admins may be signed in on several devices/browsers at once, so unlike
+    # login_user this neither rotates active_session_id nor embeds a 'sid' —
+    # earlier admin tokens stay valid until they expire.
     admin.last_login_at = timezone.now()
     admin.save(update_fields=['last_login_at'])
     return {
-        'token': sign_token({'sub': admin.id, 'role': admin.role}, tenant=get_current_tenant_id()),
+        'token': sign_token(
+            {'sub': admin.id, 'role': admin.role},
+            tenant=get_current_tenant_id(),
+        ),
         'role': admin.role,
+        # Returned so the caller can attribute the login-history row.
+        'adminId': admin.id,
     }
 
 
@@ -388,7 +418,7 @@ SOCIAL_LINKS_DEFAULTS = {
     'facebook': '',
     'instagram': '',
     'twitter': '',
-    'whatsapp': '',
+    'whatsapp': 'https://wa.link/mahakalworld',
 }
 
 
@@ -411,6 +441,43 @@ def _require_player(user_id: int) -> User:
     return user
 
 
+# A withdrawal still waiting on an admin decision. `processing` counts too: the
+# console lists it under the Pending tab (admin_services.CASHIER_TABS).
+_OPEN_WITHDRAWAL_STATUSES = (Transaction.Status.PENDING, Transaction.Status.PROCESSING)
+
+PENDING_WITHDRAWAL_MESSAGE = (
+    'You already have a withdrawal request pending. You can place a new one '
+    'once it has been approved or rejected.'
+)
+
+
+def _has_open_withdrawal(user_id: int) -> bool:
+    return Transaction.objects.filter(
+        user_id=user_id,
+        type=Transaction.TxType.WITHDRAWAL,
+        status__in=_OPEN_WITHDRAWAL_STATUSES,
+    ).exists()
+
+
+# A deposit still waiting on an admin decision. `processing` counts too: the
+# console lists it under the Pending tab (admin_services.CASHIER_TABS), same
+# as an open withdrawal.
+_OPEN_DEPOSIT_STATUSES = (Transaction.Status.PENDING, Transaction.Status.PROCESSING)
+
+PENDING_DEPOSIT_MESSAGE = (
+    'You already have a deposit request pending. You can place a new one '
+    'once it has been approved or rejected.'
+)
+
+
+def _has_open_deposit(user_id: int) -> bool:
+    return Transaction.objects.filter(
+        user_id=user_id,
+        type=Transaction.TxType.DEPOSIT,
+        status__in=_OPEN_DEPOSIT_STATUSES,
+    ).exists()
+
+
 def get_wallet(user_id: int) -> dict:
     _require_player(user_id)
     wallet, _ = Wallet.objects.get_or_create(user_id=user_id, defaults={'currency': 'INR'})
@@ -429,8 +496,21 @@ def get_wallet(user_id: int) -> dict:
         # has NOT left the real balance yet — approval is what debits it.
         'locked': locked,
         'pendingWithdrawal': locked,
+        # Only one withdrawal may await review at a time (create_withdrawal);
+        # the withdraw page uses this to lock its form until the admin acts.
+        'hasPendingWithdrawal': _has_open_withdrawal(user_id),
+        # Same rule for deposits (create_deposit): the deposit page locks its
+        # form until the open request is approved or rejected.
+        'hasPendingDeposit': _has_open_deposit(user_id),
         'currency': wallet.currency,
+        # Withdrawable cash. Deliberately excludes `bonus`: bonus money is
+        # credited on award but can only be staked, never cashed out, until
+        # wagering converts it into the real balance (bonus_services).
         'available': main - locked,
+        'withdrawable': main - locked,
+        # What can be staked — real money plus bonus credit. Always >= the
+        # withdrawable figure; the gap is bonus still working off its wagering.
+        'playable': main + bonus - locked,
     }
 
 
@@ -451,8 +531,10 @@ def get_wallet_breakdown(user_id: int) -> dict:
 
     On top of the raw balances (:func:`get_wallet`) this returns:
 
-    * ``bonuses`` — active bonus amounts grouped by source (joining, deposit,
-      referral, game, cashback, promo, manual) off the ``user_bonuses`` ledger.
+    * ``bonuses`` — bonus amounts still working off their wagering requirement,
+      grouped by source (joining, deposit, referral, game, cashback, promo,
+      manual) off the ``user_bonuses`` ledger. Credited and playable, but not
+      withdrawable yet.
     * ``deposits`` / ``withdrawals`` — lifetime completed totals from the
       transaction ledger.
     * ``gamePlay`` — total staked / won / net P&L across all game sessions.
@@ -460,8 +542,9 @@ def get_wallet_breakdown(user_id: int) -> dict:
     _require_player(user_id)
     base = get_wallet(user_id)
 
-    # --- Outstanding bonuses grouped by source (rewards not yet paid out) ---
-    # 'pending' = owed once wagering clears; 'active' = legacy locked credits.
+    # --- Bonuses grouped by source (credited, wagering not yet cleared) ---
+    # These amounts are already in bonus_balance and playable; they are not
+    # withdrawable until wagering converts them into the real balance.
     bonus_rows = (
         UserBonus.objects.filter(
             user_id=user_id,
@@ -587,10 +670,6 @@ def _assert_unique_deposit_reference(
 
     Scoped to deposits only — ``reference_number`` is reused for withdrawals
     and bet settlements, so a table-wide unique constraint is unsafe.
-
-    NOTE: not currently called from create_deposit/confirm_deposit below (those
-    keep dollara's existing, unmodified behaviour for this port) — added
-    standalone per the port checklist so callers can opt in explicitly.
     """
     qs = Transaction.objects.filter(
         type=Transaction.TxType.DEPOSIT,
@@ -608,12 +687,35 @@ def create_deposit(
     payment_method: str,
     currency: str = 'INR',
     reference_number: str | None = None,
+    payment_proof_url: str | None = None,
+    *,
+    affiliate_ref: str | None = None,
+    affiliate_sub: str | None = None,
+    affiliate_click_id=None,
+    client_ip: str | None = None,
 ) -> dict:
+    """Player action: request a deposit.
+
+    A player may have only one deposit awaiting review: a new request is
+    refused until the admin approves or rejects the open one.
+    """
     _require_player(user_id)
     if amount <= 0:
         raise ValueError('Amount must be greater than zero')
+    # Checked before opening a transaction so a repeat click fails fast. The
+    # locked re-check below is what actually serialises two requests at once.
+    if _has_open_deposit(user_id):
+        raise ValueError(PENDING_DEPOSIT_MESSAGE)
+    reference_number = _normalize_deposit_reference(reference_number)
     Wallet.objects.get_or_create(user_id=user_id, defaults={'currency': currency})
     with tenant_atomic():
+        # Re-check under the wallet row lock so two requests fired together
+        # queue here — the second then sees the first's pending row.
+        Wallet.objects.select_for_update().get(user_id=user_id)
+        if _has_open_deposit(user_id):
+            raise ValueError(PENDING_DEPOSIT_MESSAGE)
+        if reference_number:
+            _assert_unique_deposit_reference(reference_number)
         tx = Transaction.objects.create(
             user_id=user_id,
             type=Transaction.TxType.DEPOSIT,
@@ -621,11 +723,29 @@ def create_deposit(
             currency=currency,
             status=Transaction.Status.PENDING,
             payment_method=payment_method,
-            reference_number=(reference_number or None),
+            reference_number=reference_number,
+            # Screenshot evidence for a manual payment, reviewed before crediting.
+            payment_proof_url=(payment_proof_url or None),
         )
     # No balance change here — the deposit stays PENDING until the product admin
     # confirms it (see confirm_deposit). Nothing is credited on the user's action.
-    return {'transactionId': tx.id, 'status': 'pending'}
+    # The tracking params are optional. When the player still has them, this
+    # ties them to the link so the confirmed deposit can count as an FTD.
+    # A failure here must not reject a deposit the player already paid.
+    if affiliate_ref or affiliate_click_id:
+        try:
+            from core import affiliate_services
+
+            phone = User.objects.filter(id=user_id).values_list('phone', flat=True).first()
+            affiliate_services.ensure_deposit_attribution(
+                user_id, affiliate_ref, affiliate_sub, affiliate_click_id,
+                ip=client_ip, phone=phone,
+            )
+        except Exception:
+            logging.getLogger('affiliate').exception(
+                'ensure_deposit_attribution failed for user %s', user_id
+            )
+    return {'transactionId': tx.id, 'status': 'pending', 'paymentProofUrl': tx.payment_proof_url}
 
 
 def confirm_deposit(transaction_id: int, reference_number: str) -> dict:
@@ -633,6 +753,7 @@ def confirm_deposit(transaction_id: int, reference_number: str) -> dict:
 
     Idempotent — a deposit that is not PENDING is never credited twice.
     """
+    reference_number = _normalize_deposit_reference(reference_number)
     with tenant_atomic():
         tx = Transaction.objects.select_for_update().get(
             id=transaction_id, type=Transaction.TxType.DEPOSIT
@@ -643,6 +764,7 @@ def confirm_deposit(transaction_id: int, reference_number: str) -> dict:
         tx.status = Transaction.Status.COMPLETED
         # Keep any reference the user already supplied; only fill it if missing.
         if reference_number and not tx.reference_number:
+            _assert_unique_deposit_reference(reference_number, exclude_id=tx.id)
             tx.reference_number = reference_number
         tx.save(update_fields=['status', 'reference_number', 'updated_at'])
         Wallet.objects.filter(user_id=tx.user_id).update(
@@ -656,15 +778,22 @@ def confirm_deposit(transaction_id: int, reference_number: str) -> dict:
     try:
         bonus = bonus_services.award_deposit_bonus(tx.user_id, amount, tx.id)
         bonus_services.award_referral_bonus(tx.user_id, event='deposit', deposit_amount=amount)
-        # Stamps the first deposit and accumulates lifetime totals on the
-        # affiliate referral, if this player came from one. No commission is
-        # awarded here: that happens in the nightly run so every rupee passes
-        # through the same approval workflow. Deferred import — see register_user.
+    except Exception:
+        logging.getLogger('affiliate').exception(
+            'deposit bonus failed for tx %s', tx.id
+        )
+    # Stamps the first deposit and accumulates lifetime totals on the
+    # affiliate referral, if this player came from one. Kept separate from the
+    # bonus call so a bonus error cannot skip the FTD. No commission is
+    # awarded here: that happens in the nightly run.
+    try:
         from core import affiliate_services
 
         affiliate_services.record_deposit(tx.user_id, amount, tx.id)
     except Exception:
-        pass
+        logging.getLogger('affiliate').exception(
+            'record_deposit failed for tx %s', tx.id
+        )
     return {
         'credited': float(amount),
         'bonusCredited': float(bonus.amount) if bonus else 0,
@@ -685,10 +814,9 @@ def reject_deposit(transaction_id: int, reason: str) -> dict:
     return {'rejected': True}
 
 
-# Payout destination fields required per method (ported from mahakalworld).
-# NOTE: not currently called from create_withdrawal below (dollara keeps its
-# existing, unmodified signature/behaviour for this port) — added standalone
-# per the port checklist.
+# Payout destination fields required per method. The player fills these in on
+# the withdraw form; an admin reads them back off the pending queue to actually
+# send the money, so a request missing them cannot be paid.
 WITHDRAWAL_DESTINATION_FIELDS = {
     'upi': ('upiId',),
     'bank_transfer': ('accountName', 'accountNumber', 'ifsc', 'bankName'),
@@ -752,21 +880,54 @@ def _format_destination(payment_method: str, destination: dict | None) -> str:
     return ' | '.join(parts)[:255]
 
 
-def create_withdrawal(user_id: int, amount: float, payment_method: str) -> dict:
+def create_withdrawal(
+    user_id: int,
+    amount: float,
+    payment_method: str,
+    destination: dict | None = None,
+) -> dict:
+    """Player action: request a payout of real money.
+
+    Only the real balance is withdrawable. `available` is main_balance minus
+    existing holds and never includes bonus_balance, so a player cannot cash
+    out a bonus — bonus money has to be wagered into the real balance first
+    (see core.bonus_services).
+
+    ``destination`` carries the method-specific payout details (UPI id, bank
+    account, crypto wallet); they are validated and stored on the transaction
+    so an admin can actually pay the request out.
+
+    A player may have only one withdrawal awaiting review: a new request is
+    refused until the admin approves or rejects the open one.
+    """
     _require_player(user_id)
+    reference = _format_destination(payment_method, destination)
     wallet_data = get_wallet(user_id)
+    # Checked ahead of the balance: the open request's hold has already shrunk
+    # `available`, and "insufficient balance" would hide the real reason.
+    if wallet_data['hasPendingWithdrawal']:
+        raise ValueError(PENDING_WITHDRAWAL_MESSAGE)
     if amount > wallet_data['available']:
-        raise ValueError('Insufficient balance')
+        raise ValueError(
+            'Insufficient withdrawable balance. Bonus funds must meet their '
+            'wagering requirement before they can be withdrawn.'
+        )
     if amount < 500:
         raise ValueError('Minimum withdrawal is ₹500')
 
     with tenant_atomic():
+        # Re-check under the wallet row lock so two requests fired together
+        # queue here — the second then sees the first's pending row.
+        Wallet.objects.select_for_update().get(user_id=user_id)
+        if _has_open_withdrawal(user_id):
+            raise ValueError(PENDING_WITHDRAWAL_MESSAGE)
         tx = Transaction.objects.create(
             user_id=user_id,
             type=Transaction.TxType.WITHDRAWAL,
             amount=Decimal(str(amount)),
             status=Transaction.Status.PENDING,
             payment_method=payment_method,
+            reference_number=reference,
         )
         # Place a HOLD only — the balance itself is untouched until an admin
         # approves. The hold is what stops the same money being staked or
@@ -863,12 +1024,18 @@ def list_games(
     offset: int = 0,
     search: str | None = None,
 ):
-    qs = Game.objects.filter(is_active_web=True, is_active=True).select_related('provider')
+    qs = Game.objects.filter(is_active_web=True, is_active=True).select_related(
+        'provider', 'category_ref'
+    )
     # Hide games whose provider has been disabled in the admin panel. Games
     # without a provider (provider_id NULL) stay visible.
     qs = qs.filter(Q(provider__isnull=True) | Q(provider__is_active=True))
     if category:
+        # Match on the mirrored slug so a client can pass either the slug it has
+        # always used or a newly added one, and hide games whose category the
+        # admin has deactivated.
         qs = qs.filter(category=category)
+    qs = qs.filter(Q(category_ref__isnull=True) | Q(category_ref__is_active=True))
     if featured:
         qs = qs.filter(is_featured=True)
     if search:
@@ -885,7 +1052,11 @@ def list_games(
             'id': g.id,
             'name': g.name,
             'slug': g.slug,
+            # `category` stays the slug the site has always filtered on;
+            # `category_name` is the admin-set display label, additive so no
+            # existing theme has to change.
             'category': g.category,
+            'category_name': g.category_ref.name if g.category_ref else None,
             'game_uid': g.game_uid,
             'game_type': g.game_type,
             'thumbnail_url': g.thumbnail_url,
@@ -897,6 +1068,10 @@ def list_games(
             'play_count': g.play_count,
             'provider_name': g.provider.name if g.provider else None,
             'provider_slug': g.provider.slug if g.provider else None,
+            # The vendor's logo, set per provider in the admin. Additive: themes
+            # that render a text circle ignore it, and a provider without one
+            # falls back to its name rather than an empty tile.
+            'provider_logo_url': g.provider.logo_url if g.provider else None,
         }
         for g in qs
     ]
@@ -1031,57 +1206,135 @@ def list_active_faqs():
 
 
 def place_bet(user_id: int, game_id: int, amount: float, odds: float | None = None) -> dict:
+    """Stake on a game, spending bonus credit before real money.
+
+    Bonus money is stakeable — that is how a player works off the wagering
+    requirement — so it counts toward the available balance here. Drawing it
+    down first keeps the withdrawable real balance intact for as long as
+    possible.
+    """
+    stake = Decimal(str(amount))
     with tenant_atomic():
         wallet = Wallet.objects.select_for_update().get(user_id=user_id)
-        available = wallet.main_balance - wallet.locked_balance
-        if available < Decimal(str(amount)):
+        available = wallet.main_balance + wallet.bonus_balance - wallet.locked_balance
+        if available < stake:
             raise ValueError('Insufficient balance')
         bet = Bet.objects.create(
             user_id=user_id,
             game_id=game_id,
-            bet_amount=Decimal(str(amount)),
+            bet_amount=stake,
             odds=Decimal(str(odds)) if odds else None,
         )
-        wallet.main_balance -= Decimal(str(amount))
-        wallet.save(update_fields=['main_balance', 'updated_at'])
+        from_bonus = min(stake, max(wallet.bonus_balance, Decimal('0')))
+        wallet.bonus_balance -= from_bonus
+        wallet.main_balance -= (stake - from_bonus)
+        wallet.save(update_fields=['main_balance', 'bonus_balance', 'updated_at'])
         Game.objects.filter(id=game_id).update(play_count=F('play_count') + 1)
+
+    # Turnover counts toward any active bonus's wagering target.
+    try:
+        bonus_services.record_wagering(user_id, stake)
+    except Exception:
+        pass
     return {'betId': bet.id, 'status': 'open'}
 
 
 def get_dashboard_stats() -> dict:
-    today = timezone.now().date()
+    now = timezone.now()
+    today = now.date()
+    yesterday = today - timedelta(days=1)
     users_qs = _player_users()
-    deposits_today = Transaction.objects.filter(
-        type=Transaction.TxType.DEPOSIT,
-        status=Transaction.Status.COMPLETED,
-        created_at__date=today,
-    ).aggregate(total=Sum('amount'), count=Count('id'))
-    withdrawals_today = Transaction.objects.filter(
-        type=Transaction.TxType.WITHDRAWAL,
-        created_at__date=today,
-    ).aggregate(
-        completed=Sum('amount', filter=Q(status=Transaction.Status.COMPLETED)),
-        count=Count('id'),
-        pending=Count('id', filter=Q(status=Transaction.Status.PENDING)),
+    # Same day the Deposits/Withdrawals pages use: an IST calendar day on
+    # created_at (see _apply_cashier_date_range). A plain __date lookup runs
+    # in settings.TIME_ZONE (UTC), which drops anything raised between 00:00
+    # and 05:30 IST onto the previous day, and updated_at is auto_now so a
+    # later save would move the row onto a different day. Counting completed
+    # rows in this window makes "Today: Sum of Deposits" equal the Approved
+    # sum when that page's Created filter is today.
+    #
+    # A manual wallet adjustment (see wallet_adjustment()) is stored as
+    # type=adjustment rather than deposit/withdrawal, but it credits or debits
+    # real balance just the same, and the Deposits/Withdrawals console pages
+    # already fold it in by the sign of the amount (see _cashier_type_filter
+    # in admin_services.py). Adjustment rows are signed (debit negative), so
+    # amounts are summed by magnitude.
+    ist_today = now.astimezone(IST).date()
+    ist_start = datetime.combine(ist_today, time.min, tzinfo=IST)
+    ist_end = datetime.combine(ist_today + timedelta(days=1), time.min, tzinfo=IST)
+    deposit_type_filter = Q(type=Transaction.TxType.DEPOSIT) | Q(
+        type=Transaction.TxType.ADJUSTMENT, amount__gte=0
     )
-    liability = Wallet.objects.aggregate(
+    withdrawal_type_filter = Q(type=Transaction.TxType.WITHDRAWAL) | Q(
+        type=Transaction.TxType.ADJUSTMENT, amount__lt=0
+    )
+    deposits_today = Transaction.objects.filter(
+        deposit_type_filter,
+        status=Transaction.Status.COMPLETED,
+        created_at__gte=ist_start,
+        created_at__lt=ist_end,
+    ).aggregate(
+        total=Sum(Abs('amount')),
+        count=Count('id'),
+        players=Count('user_id', distinct=True),
+    )
+    withdrawals_today = Transaction.objects.filter(
+        withdrawal_type_filter,
+        status=Transaction.Status.COMPLETED,
+        created_at__gte=ist_start,
+        created_at__lt=ist_end,
+    ).aggregate(
+        completed=Sum(Abs('amount')),
+        count=Count('id'),
+        players=Count('user_id', distinct=True),
+    )
+    # Separate from the above: withdrawals still awaiting review that were
+    # *requested* today — there's no completion date to bucket them by yet.
+    withdrawals_pending_today = Transaction.objects.filter(
+        type=Transaction.TxType.WITHDRAWAL,
+        status=Transaction.Status.PENDING,
+        created_at__gte=ist_start,
+        created_at__lt=ist_end,
+    ).count()
+    # Sum of every player's wallet balance — real + bonus, matching
+    # get_wallet()'s `total` (main_balance + bonus_balance). The queryset is
+    # restricted to real player accounts so agent/affiliate/admin and demo
+    # wallets never leak in.
+    liability = Wallet.objects.filter(user__in=users_qs).aggregate(
         total=Sum(F('main_balance') + F('bonus_balance'))
     )
     active = users_qs.filter(
-        last_login_at__gte=timezone.now() - timedelta(minutes=15)
+        last_login_at__gte=now - timedelta(minutes=15)
     ).count()
+    active_last_hour = users_qs.filter(
+        last_login_at__gte=now - timedelta(hours=1)
+    ).count()
+    # Players who have ever made at least one completed deposit.
+    depositing_players = (
+        Transaction.objects.filter(
+            type=Transaction.TxType.DEPOSIT,
+            status=Transaction.Status.COMPLETED,
+        )
+        .values('user_id')
+        .distinct()
+        .count()
+    )
     return {
         'totalUsers': users_qs.count(),
         'signupsToday': users_qs.filter(created_at__date=today).count(),
+        'signupsYesterday': users_qs.filter(created_at__date=yesterday).count(),
         'activePlayers': active,
+        'activePlayersLastHour': active_last_hour,
+        'depositingPlayers': depositing_players,
         'depositsToday': {
             'amount': float(deposits_today['total'] or 0),
             'count': deposits_today['count'] or 0,
+            'players': deposits_today['players'] or 0,
         },
         'withdrawalsToday': {
             'amount': float(withdrawals_today['completed'] or 0),
             'count': withdrawals_today['count'] or 0,
-            'pending': withdrawals_today['pending'] or 0,
+            'pending': withdrawals_pending_today,
+            'players': withdrawals_today['players'] or 0,
         },
         'totalLiability': float(liability['total'] or 0),
     }
@@ -1091,13 +1344,14 @@ def admin_create_user(
     full_name: str,
     phone: str,
     password: str,
-    email: str | None = None,
     country_code: str = 'IN',
     initial_balance: float = 0,
+    state: str | None = None,
+    signup_ip: str | None = None,
+    created_by: int | None = None,
 ) -> dict:
     full_name = (full_name or '').strip()
     phone = (phone or '').strip()
-    email = (email or '').strip() or None
     if not full_name:
         raise ValueError('Full name is required')
     if not phone:
@@ -1116,10 +1370,12 @@ def admin_create_user(
             try:
                 with tenant_atomic():
                     user = User.objects.create(
-                        username=_next_sequential_username(),
+                        username=_next_sequential_username(full_name),
                         phone=phone,
-                        email=email,
                         full_name=full_name,
+                        state=state,
+                        signup_ip=signup_ip,
+                        created_by=created_by,
                         country_code=country_code,
                         role=User.Role.USER,
                         password_hash=password_hash,
@@ -1146,24 +1402,128 @@ def admin_create_user(
         'username': user.username,
         'full_name': user.full_name,
         'phone': user.phone,
-        'email': user.email,
         'account_status': user.account_status,
         'main_balance': float(balance),
     }
 
 
+def _optional_int(value):
+    """Parse a query value as int. None when blank, False when it is not a number."""
+    if value is None or str(value).strip() == '':
+        return None
+    try:
+        return int(str(value).strip())
+    except ValueError:
+        return False
+
+
+def _optional_date(value):
+    if not value or not str(value).strip():
+        return None
+    try:
+        return date.fromisoformat(str(value).strip()[:10])
+    except ValueError:
+        return None
+
+
 def list_users(
     status: str | None = None,
-    kyc_status: str | None = None,
-    limit: int = 50,
+    limit: int | None = 50,
     offset: int = 0,
+    *,
+    search: str | None = None,
+    user_id=None,
+    affiliate_id=None,
+    username: str | None = None,
+    full_name: str | None = None,
+    phone: str | None = None,
+    ip: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
 ):
+    """Player accounts for the admin Users page.
+
+    ``limit=None`` returns every match. Search and the filter-panel fields are
+    applied in the query, so an older account is found even when it would have
+    fallen outside a page of the newest rows.
+    """
     qs = _player_users().select_related('wallet', 'usersetting')
     if status:
         qs = qs.filter(account_status=status)
-    if kyc_status:
-        qs = qs.filter(usersetting__kyc_status=kyc_status)
-    qs = qs.order_by('-created_at')[offset : offset + limit]
+
+    term = (search or '').strip()
+    if term:
+        match = (
+            Q(username__icontains=term)
+            | Q(full_name__icontains=term)
+            | Q(phone__icontains=term)
+            | Q(signup_ip__icontains=term)
+        )
+        member_id = _optional_int(term)
+        if isinstance(member_id, int):
+            match |= Q(id=member_id)
+        qs = qs.filter(match)
+
+    member_id = _optional_int(user_id)
+    if member_id is False:
+        qs = qs.none()
+    elif member_id is not None:
+        qs = qs.filter(id=member_id)
+
+    referred_by = _optional_int(affiliate_id)
+    if referred_by is False:
+        qs = qs.none()
+    elif referred_by is not None:
+        qs = qs.filter(usersetting__affiliate_id=referred_by)
+
+    if username and username.strip():
+        qs = qs.filter(username__icontains=username.strip())
+    if full_name and full_name.strip():
+        qs = qs.filter(full_name__icontains=full_name.strip())
+    if phone and phone.strip():
+        qs = qs.filter(phone__icontains=phone.strip())
+    if ip and ip.strip():
+        qs = qs.filter(signup_ip__icontains=ip.strip())
+
+    start = _optional_date(date_from)
+    end = _optional_date(date_to)
+    if start:
+        qs = qs.filter(created_at__date__gte=start)
+    if end:
+        qs = qs.filter(created_at__date__lte=end)
+
+    ordered = qs.order_by('-created_at')
+    offset = max(0, offset)
+    if limit is None:
+        qs = list(ordered[offset:])
+    else:
+        qs = list(ordered[offset : offset + max(0, limit)])
+
+    # Resolve agent / affiliate display names in bulk so the listing stays at a
+    # fixed number of queries regardless of page size.
+    agent_ids = set()
+    affiliate_ids = set()
+    for u in qs:
+        prefs = get_user_settings(u)
+        if prefs and prefs.agent_id:
+            agent_ids.add(prefs.agent_id)
+        if prefs and prefs.affiliate_id:
+            affiliate_ids.add(prefs.affiliate_id)
+    agent_names: dict = {}
+    affiliate_names: dict = {}
+    if agent_ids:
+        from core.agent_models import Agent
+
+        agent_names = dict(
+            Agent.objects.filter(id__in=agent_ids).values_list('id', 'name')
+        )
+    if affiliate_ids:
+        from core.affiliate_models import Affiliate
+
+        affiliate_names = dict(
+            Affiliate.objects.filter(id__in=affiliate_ids).values_list('id', 'name')
+        )
+
     result = []
     for u in qs:
         try:
@@ -1176,8 +1536,19 @@ def list_users(
             'username': u.username,
             'full_name': u.full_name,
             'phone': u.phone,
-            'email': u.email,
-            'kyc_status': prefs.kyc_status if prefs else UserSetting.KycStatus.NONE,
+            'country_code': u.country_code,
+            'state': u.state,
+            'ip': u.signup_ip,
+            'created_by': u.created_by,
+            # NULL created_by means the player signed up themselves; any id
+            # means a staff/agent account created the account for them.
+            'created_by_type': (
+                'self_registered' if u.created_by is None else 'admin_registered'
+            ),
+            'affiliate_id': prefs.affiliate_id if prefs else None,
+            'agent_id': prefs.agent_id if prefs else None,
+            'agent_name': agent_names.get(prefs.agent_id) if prefs else None,
+            'affiliate_name': affiliate_names.get(prefs.affiliate_id) if prefs else None,
             'account_status': u.account_status,
             'created_at': u.created_at.isoformat(),
             'last_login_at': u.last_login_at.isoformat() if u.last_login_at else None,

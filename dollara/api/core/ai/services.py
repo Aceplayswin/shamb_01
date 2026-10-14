@@ -90,7 +90,7 @@ def chat_respond(*, message: str, language: str = 'en', brand: str = 'our platfo
     if 'deposit' in lower:
         reply = 'To deposit, go to Wallet > Deposit. UPI is instant. Min ₹100.'
     elif 'withdraw' in lower:
-        reply = 'Withdrawals process in 2-24 hours after KYC verification.'
+        reply = 'Withdrawals process in 2-24 hours.'
     elif 'bonus' in lower:
         reply = 'Your welcome bonus of ₹100 is in your bonus wallet. Wagering is 35x.'
     else:

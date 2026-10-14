@@ -10,6 +10,8 @@ only places the player flow touches this feature:
 
 * :func:`attribute_signup` — from ``services.register_user``, links a new player
   to the affiliate who referred them;
+* :func:`ensure_deposit_attribution` — from ``services.create_deposit``, links a
+  depositor whose signup never carried the tracking click;
 * :func:`record_deposit` — from ``services.confirm_deposit``, stamps the first
   deposit and accumulates lifetime totals.
 
@@ -23,6 +25,7 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+import uuid
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -60,6 +63,12 @@ DEFAULT_PROGRAM_SETTINGS = {
     'default_override_rate': 5,
     'default_hybrid_cpa_days': 30,
     'cpa_min_deposit': 500,
+    # A referred player earns commission only after depositing at least this
+    # much, across at least this many deposits, within this many days of signup.
+    # Per-affiliate 0 inherits these.
+    'default_min_deposit': 4000,
+    'default_min_redeposits': 5,
+    'default_qualification_period_days': 15,
     'cookie_window_days': 30,
     'attribution_model': 'last_click',
     'min_payout_threshold': 5000,
@@ -180,6 +189,114 @@ def payout_threshold_for(affiliate: Affiliate, settings: dict | None = None) -> 
                             settings['min_payout_threshold'])
 
 
+def _count_or_default(affiliate_value, default_value) -> int:
+    """Same inherit-on-zero rule as rates, for whole-number terms."""
+    try:
+        value = int(affiliate_value or 0)
+    except (TypeError, ValueError):
+        value = 0
+    if value > 0:
+        return value
+    try:
+        return max(int(default_value or 0), 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def min_deposit_for(affiliate: Affiliate, settings: dict | None = None) -> Decimal:
+    settings = settings or get_program_settings()
+    return _rate_or_default(affiliate.min_deposit, settings['default_min_deposit'])
+
+
+def min_redeposits_for(affiliate: Affiliate, settings: dict | None = None) -> int:
+    settings = settings or get_program_settings()
+    return _count_or_default(affiliate.min_redeposits, settings['default_min_redeposits'])
+
+
+def qualification_period_for(affiliate: Affiliate, settings: dict | None = None) -> int:
+    settings = settings or get_program_settings()
+    return _count_or_default(
+        affiliate.qualification_period_days,
+        settings['default_qualification_period_days'],
+    )
+
+
+def qualification_required(affiliate: Affiliate, settings: dict | None = None) -> bool:
+    """True when this affiliate withholds commission until a player qualifies."""
+    return (min_deposit_for(affiliate, settings) > ZERO
+            or min_redeposits_for(affiliate, settings) > 0)
+
+
+def player_meets_qualification(referral, affiliate: Affiliate,
+                               settings: dict | None = None, *, as_of) -> bool:
+    """Whether `as_of` is a moment the player's deposits satisfy the rules.
+
+    Both bars apply together: the running deposit total has reached the minimum
+    amount, and the deposit count has reached the minimum number of deposits.
+    When a qualification period is set, `as_of` must also fall inside that many
+    days of signup. Deposits after the window never qualify the player.
+    """
+    minimum = min_deposit_for(affiliate, settings)
+    redeposits = min_redeposits_for(affiliate, settings)
+    if minimum <= ZERO and redeposits <= 0:
+        return True
+    if money(referral.lifetime_deposits) < minimum:
+        return False
+    if int(referral.deposit_count or 0) < redeposits:
+        return False
+    period = qualification_period_for(affiliate, settings)
+    if period <= 0:
+        return True
+    start = referral.attributed_at or referral.created_at
+    if not start or not as_of:
+        return False
+    return as_of <= start + timedelta(days=period)
+
+
+def stamp_qualification(referral, affiliate: Affiliate, settings: dict | None = None,
+                        *, as_of, dry_run: bool = False) -> bool:
+    """Stamp ``qualified_at`` the first time the deposit rules are met.
+
+    Returns True only when this call is the one that qualifies the player.
+    A later deposit, inside or outside the window, does not move the stamp.
+    """
+    if not qualification_required(affiliate, settings):
+        return False
+    if referral.qualified_at:
+        return False
+    if not player_meets_qualification(referral, affiliate, settings, as_of=as_of):
+        return False
+    if dry_run:
+        referral.qualified_at = as_of
+        return True
+    updated = AffiliateReferral.objects.filter(
+        id=referral.id, qualified_at__isnull=True,
+    ).update(qualified_at=as_of)
+    if updated:
+        referral.qualified_at = as_of
+        return True
+    referral.refresh_from_db(fields=['qualified_at'])
+    return False
+
+
+def ensure_referral_qualified(referral, affiliate: Affiliate,
+                              settings: dict | None = None, *,
+                              dry_run: bool = False) -> None:
+    """Backfill ``qualified_at`` from deposits already on the referral.
+
+    ``last_active_at`` is written only when a deposit is confirmed. If that
+    latest deposit is still inside the window, every deposit so far is too,
+    so the running totals are a fair qualification check.
+    """
+    if referral.qualified_at or not qualification_required(affiliate, settings):
+        return
+    if not referral.last_active_at:
+        return
+    stamp_qualification(
+        referral, affiliate, settings, as_of=referral.last_active_at, dry_run=dry_run,
+    )
+
+
 def _iso(value):
     return value.isoformat() if value else None
 
@@ -291,6 +408,9 @@ def serialize_affiliate(affiliate: Affiliate, settings: dict | None = None) -> d
         'timezone': affiliate.timezone,
         'notification_prefs': affiliate.notification_prefs or {},
         'payout_threshold': f(payout_threshold_for(affiliate, settings)),
+        'min_deposit': f(min_deposit_for(affiliate, settings)),
+        'min_redeposits': min_redeposits_for(affiliate, settings),
+        'qualification_period_days': qualification_period_for(affiliate, settings),
         'webhook_url': affiliate.webhook_url,
         # Everything the client needs to build a link itself, so no frontend
         # ever hardcodes a host again.
@@ -319,25 +439,44 @@ def serialize_link(link: AffiliateLink, stats: dict | None = None) -> dict:
     }
 
 
+def _attach_player_identity(rows) -> None:
+    """Username, display name, and country for a page of referrals."""
+    if not rows:
+        return
+    users = {
+        user.id: user
+        for user in User.objects.filter(id__in=[r.user_id for r in rows]).only(
+            'id', 'username', 'full_name', 'country_code'
+        )
+    }
+    for row in rows:
+        user = users.get(row.user_id)
+        row._username = user.username if user else ''
+        row._full_name = user.full_name if user else ''
+        row._country_code = user.country_code if user else None
+
+
 def serialize_referral(referral: AffiliateReferral, *, link_names=None) -> dict:
     """A referred player, aggregated.
 
-    Note what is absent: no phone, no email, no full name. An affiliate is paid
-    on a player's activity, which does not require handing them that player's
-    contact details.
+    Phone and email stay off this payload. Username and the name they signed
+    up with are what both portals show instead of a numeric id.
     """
     link_names = link_names or {}
-    prefs = getattr(referral, '_prefs', None)
+    username = getattr(referral, '_username', None) or ''
+    full_name = getattr(referral, '_full_name', None) or ''
     return {
         'id': referral.id,
         'user_id': referral.user_id,
-        'player_ref': f'P-{referral.user_id:05d}',
+        'username': username,
+        'full_name': full_name,
+        'player_ref': full_name or username or f'P-{referral.user_id:05d}',
         'signed_up_at': _iso(referral.attributed_at or referral.created_at),
-        'kyc_status': prefs.kyc_status if prefs else 'none',
         'ftd_at': _iso(referral.first_deposit_at),
         'ftd_amount': f(referral.first_deposit_amount),
         'deposit_count': referral.deposit_count,
         'lifetime_deposits': f(referral.lifetime_deposits),
+        'qualified_at': _iso(referral.qualified_at),
         'lifetime_ngr': f(referral.lifetime_ngr),
         'lifetime_commission': f(referral.lifetime_commission),
         'status': referral.status,
@@ -620,10 +759,12 @@ def _consume_challenge(token: str, purpose: str) -> AffiliateLoginChallenge:
 def _login_payload(affiliate: Affiliate) -> dict:
     """Mint the session. Role 'affiliate' means `sub` is an affiliates.id, never
     a users.id — the two never collide because no endpoint accepts both."""
+    session_id = uuid.uuid4().hex
     affiliate.last_login_at = timezone.now()
-    affiliate.save(update_fields=['last_login_at', 'updated_at'])
+    affiliate.active_session_id = session_id
+    affiliate.save(update_fields=['last_login_at', 'active_session_id', 'updated_at'])
     return {
-        'token': sign_token({'sub': affiliate.id, 'role': 'affiliate'},
+        'token': sign_token({'sub': affiliate.id, 'role': 'affiliate', 'sid': session_id},
                             tenant=get_current_tenant_id()),
         'affiliateId': affiliate.id,
         'code': affiliate.code,
@@ -937,16 +1078,69 @@ def attribute_signup(user_id: int, ref: str | None, sub: str | None = None,
     return True
 
 
+def _click_in_window(click, affiliate_id, window_days: int):
+    """A click counts only for its own affiliate and inside the cookie window."""
+    if not click or click.affiliate_id != affiliate_id:
+        return False
+    if click.created_at < timezone.now() - timedelta(days=window_days):
+        return False
+    return True
+
+
+def _bind_unlinked_click(user_id: int, click_id, sub: str | None) -> None:
+    """Point an existing referral at this click when it has no link yet.
+
+    Signup can land without a click id (a hand-shared code, or a visit stored
+    before clicks were kept). The first deposit then has nothing to attach to
+    on the link report. Filling the empty link here is what makes that FTD
+    show on the tracking link. A referral that already has a link is left
+    alone — the first click wins.
+    """
+    if not click_id:
+        return
+    referral = AffiliateReferral.objects.filter(
+        user_id=user_id, link_id__isnull=True
+    ).first()
+    if not referral:
+        return
+    click = AffiliateClick.objects.filter(id=click_id).first()
+    window_days = int(get_program_settings().get('cookie_window_days') or 30)
+    if not _click_in_window(click, referral.affiliate_id, window_days) or not click.link_id:
+        return
+    AffiliateReferral.objects.filter(id=referral.id, link_id__isnull=True).update(
+        link_id=click.link_id,
+        click_id=click.id,
+        sub_id=referral.sub_id or sub or click.sub_id,
+    )
+
+
+def ensure_deposit_attribution(user_id: int, ref: str | None, sub: str | None = None,
+                               click_id=None, *, ip=None, phone=None) -> None:
+    """Make sure a depositor is tied to the tracking link before confirm.
+
+    Called from ``services.create_deposit`` after the pending row is saved.
+    The FTD itself is stamped later, by :func:`record_deposit`, when an admin
+    confirms the deposit. This only creates the referral if signup missed it,
+    and attaches the click when the referral has no link yet.
+    """
+    if ref and not AffiliateReferral.objects.filter(user_id=user_id).exists():
+        attribute_signup(user_id, ref, sub, click_id, ip=ip, phone=phone)
+    _bind_unlinked_click(user_id, click_id, sub)
+
+
 def record_deposit(user_id: int, amount, transaction_id=None) -> bool:
     """Update a referral's deposit totals when a deposit is confirmed.
 
     Called from ``services.confirm_deposit`` inside its existing side-effect
     try/except, so this can never roll back a credited deposit.
 
-    Deliberately does **not** award CPA. The nightly run does that, so every
-    rupee of commission passes through the same pending -> approved -> paid
-    lifecycle. Paying a bounty inline would create money the approval workflow
-    never sees.
+    CPA / hybrid bounty is written as a *pending* ledger row here, using the
+    same rules as the nightly run. The run then skips this referral. Money
+    still waits for approval — paying inline would skip that review.
+
+    When the affiliate requires a minimum deposit, redeposit count, and
+    qualification window, the bounty is written on the deposit that meets
+    those rules rather than on the first deposit.
     """
     referral = AffiliateReferral.objects.filter(user_id=user_id).first()
     if not referral:
@@ -954,6 +1148,7 @@ def record_deposit(user_id: int, amount, transaction_id=None) -> bool:
 
     amount = money(amount)
     now = timezone.now()
+    is_ftd = referral.first_deposit_at is None
     with tenant_atomic():
         updates = {
             'lifetime_deposits': F('lifetime_deposits') + amount,
@@ -962,7 +1157,7 @@ def record_deposit(user_id: int, amount, transaction_id=None) -> bool:
         }
         # The null check is the idempotency: a second deposit never overwrites
         # the first, so FTD-based commission cannot be earned twice.
-        if referral.first_deposit_at is None:
+        if is_ftd:
             updates.update(
                 first_deposit_at=now,
                 first_deposit_amount=amount,
@@ -970,10 +1165,34 @@ def record_deposit(user_id: int, amount, transaction_id=None) -> bool:
             )
         AffiliateReferral.objects.filter(id=referral.id).update(**updates)
 
-    if referral.first_deposit_at is None:
+    referral.refresh_from_db()
+    affiliate = Affiliate.objects.filter(id=referral.affiliate_id).first()
+    settings = get_program_settings()
+    just_qualified = False
+    if affiliate:
+        just_qualified = stamp_qualification(
+            referral, affiliate, settings, as_of=now,
+        )
+
+    if is_ftd:
         notify(referral.affiliate_id, 'ftd', 'First deposit',
                f'A referred player made their first deposit of {inr(amount)}.',
                {'referral_id': referral.id})
+
+    # With qualification terms set, the bounty waits until this deposit is the
+    # one that meets them. Without those terms, it still fires on the first
+    # deposit exactly as before.
+    gated = bool(affiliate and qualification_required(affiliate, settings))
+    should_award = just_qualified if gated else is_ftd
+    if should_award:
+        try:
+            from core import affiliate_commission
+
+            affiliate_commission.award_cpa_for_deposit(referral.id)
+        except Exception:
+            logger.exception(
+                'award_cpa_for_deposit failed for referral %s', referral.id
+            )
     return True
 
 
@@ -1347,10 +1566,14 @@ def list_referrals(affiliate: Affiliate, *, status=None, q=None, date_from=None,
         begin, finish = _dt_range(start, end)
         qs = qs.filter(attributed_at__gte=begin, attributed_at__lt=finish)
     if q:
-        # Players are identified by reference, not by name — an affiliate has no
-        # business searching the player base by personal details.
-        digits = ''.join(ch for ch in str(q) if ch.isdigit())
-        qs = qs.filter(user_id=int(digits)) if digits else qs.none()
+        term = str(q).strip()
+        matched = User.objects.filter(
+            Q(username__icontains=term) | Q(full_name__icontains=term)
+        )
+        digits = ''.join(ch for ch in term if ch.isdigit())
+        if digits:
+            matched = matched | User.objects.filter(id=int(digits))
+        qs = qs.filter(user_id__in=matched.values('id'))
 
     total = qs.count()
     all_qs = AffiliateReferral.objects.filter(affiliate_id=affiliate.id)
@@ -1366,21 +1589,11 @@ def list_referrals(affiliate: Affiliate, *, status=None, q=None, date_from=None,
     )
 
     rows = list(qs.order_by('-attributed_at')[offset:offset + limit])
-    prefs = {
-        p.user_id: p
-        for p in UserSetting.objects.filter(user_id__in=[r.user_id for r in rows])
-    }
-    countries = dict(
-        User.objects.filter(id__in=[r.user_id for r in rows])
-        .values_list('id', 'country_code')
-    )
+    _attach_player_identity(rows)
     link_names = dict(
         AffiliateLink.objects.filter(affiliate_id=affiliate.id)
         .values_list('id', 'name')
     )
-    for row in rows:
-        row._prefs = prefs.get(row.user_id)
-        row._country_code = countries.get(row.user_id)
 
     return {
         'records': [serialize_referral(r, link_names=link_names) for r in rows],
@@ -1405,10 +1618,7 @@ def get_referral_detail(affiliate: Affiliate, referral_id: int) -> dict:
     if not referral:
         raise ValueError('Referral not found')
 
-    referral._prefs = UserSetting.objects.filter(user_id=referral.user_id).first()
-    referral._country_code = User.objects.filter(
-        id=referral.user_id
-    ).values_list('country_code', flat=True).first()
+    _attach_player_identity([referral])
     link_names = dict(
         AffiliateLink.objects.filter(affiliate_id=affiliate.id).values_list('id', 'name')
     )

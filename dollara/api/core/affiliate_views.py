@@ -17,7 +17,6 @@ from __future__ import annotations
 import csv
 import json
 import logging
-from datetime import datetime
 
 from django.http import (HttpResponseRedirect, JsonResponse,
                          StreamingHttpResponse)
@@ -50,6 +49,17 @@ def _int_param(request, name, default):
         return default
 
 
+def _optional_limit(request):
+    """``?limit=`` when the caller set one. Missing means the list is not capped."""
+    raw = request.GET.get('limit')
+    if raw is None or str(raw).strip() == '':
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 class _CsvEcho:
     """File-like sink so csv.writer can stream rows straight to the response."""
 
@@ -58,13 +68,16 @@ class _CsvEcho:
 
 
 def _csv_response(rows, filename_stem: str):
+    from core import data_export
+
     writer = csv.writer(_CsvEcho())
 
     def stream():
+        yield writer.writerow(data_export.generated_row())
         for row in rows:
             yield writer.writerow(row)
 
-    stamp = datetime.now().strftime('%Y%m%d-%H%M')
+    stamp = data_export.export_stamp()
     response = StreamingHttpResponse(stream(), content_type='text/csv')
     response['Content-Disposition'] = (
         f'attachment; filename="{filename_stem}-{stamp}.csv"'
@@ -756,7 +769,7 @@ def onboarding_complete(request):
 def admin_applications(request):
     return JsonResponse(admin_svc.list_applications(
         status=request.GET.get('status'),
-        limit=_int_param(request, 'limit', 50),
+        limit=_optional_limit(request),
         offset=_int_param(request, 'offset', 0),
     ))
 
@@ -805,7 +818,7 @@ def admin_affiliates(request):
         tier=request.GET.get('tier'),
         commission_type=request.GET.get('commissionType'),
         q=request.GET.get('q'),
-        limit=_int_param(request, 'limit', 100),
+        limit=_optional_limit(request),
         offset=_int_param(request, 'offset', 0),
     ))
 
@@ -871,7 +884,7 @@ def admin_affiliate_key_revoke(request, affiliate_id, key_id):
 def admin_payouts(request):
     return JsonResponse(admin_svc.list_payout_requests(
         status=request.GET.get('status'),
-        limit=_int_param(request, 'limit', 50),
+        limit=_optional_limit(request),
         offset=_int_param(request, 'offset', 0),
     ))
 
@@ -964,7 +977,7 @@ def admin_fraud_flags(request):
     return JsonResponse(admin_svc.list_fraud_flags(
         status=request.GET.get('status'),
         risk_level=request.GET.get('riskLevel'),
-        limit=_int_param(request, 'limit', 100),
+        limit=_optional_limit(request),
         offset=_int_param(request, 'offset', 0),
     ))
 
@@ -990,7 +1003,7 @@ def admin_audit(request):
         affiliate_id=request.GET.get('affiliateId'),
         date_from=request.GET.get('from'),
         date_to=request.GET.get('to'),
-        limit=_int_param(request, 'limit', 100),
+        limit=_optional_limit(request),
         offset=_int_param(request, 'offset', 0),
     ))
 

@@ -14,7 +14,7 @@ Two rules make that re-export safe and must not be broken:
 * every model declares ``app_label = 'core'`` explicitly, since Django cannot
   infer it from a module that is not the app's ``models`` module.
 
-Tables come from ``database/init.sql`` / ``database/migrations/003_agent_panel.sql``
+Tables come from ``database/init.sql``
 (migrations are disabled product-wide via ``MIGRATION_MODULES``), so field
 definitions here describe existing columns rather than create them.
 """
@@ -138,6 +138,9 @@ class Agent(models.Model):
 
     last_login_at = models.DateTimeField(null=True, blank=True)
     last_login_ip = models.CharField(max_length=45, null=True, blank=True)
+    # Id of the most recently issued login token; see User.active_session_id
+    # in core/models.py for why — same single-device-login mechanism.
+    active_session_id = models.CharField(max_length=64, null=True, blank=True)
     created_by = models.BigIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -352,6 +355,8 @@ class SportMarket(models.Model):
     )
     winning_selection = models.CharField(max_length=150, null=True, blank=True)
     settled_at = models.DateTimeField(null=True, blank=True)
+    # My Market: pinned by an operator to watch (added in migration 009).
+    is_favourite = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

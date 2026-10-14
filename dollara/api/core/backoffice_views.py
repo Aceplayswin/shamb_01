@@ -4,11 +4,10 @@ Every view is admin-only and thin: parse, delegate to a service, serialise.
 Validation lives in the services so it holds regardless of caller.
 """
 
-import csv
 import json
 
 from django.db.utils import OperationalError, ProgrammingError
-from django.http import HttpResponse, JsonResponse
+from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
@@ -120,112 +119,6 @@ def blocked_ips_update(request, rule_id):
         return _json(result)
     except (ValueError, json.JSONDecodeError) as e:
         return _fail(e)
-
-
-# --------------------------------------------------------------------------
-# Reports
-#
-# One dispatch view keeps 30-odd read-only report routes from becoming 30
-# near-identical functions. `REPORTS` maps the URL slug to its aggregator.
-# --------------------------------------------------------------------------
-
-REPORTS = {
-    # Finance
-    'deposits': reports.deposits_report,
-    'withdrawals': reports.withdrawals_report,
-    'bonuses': reports.bonuses_report,
-    'refunds': lambda p: reports.adjustments_report(p, 'refund'),
-    'chargebacks': lambda p: reports.adjustments_report(p, 'chargeback'),
-    'withdrawal-adjustments': lambda p: reports.adjustments_report(p, 'withdrawal'),
-    'other-adjustments': lambda p: reports.adjustments_report(p, 'other'),
-    'gross-profit': reports.gross_profit_report,
-    'net-profit': reports.net_profit_report,
-    'providers-expense': reports.providers_expense_report,
-    'payment-methods': reports.payment_methods_report,
-    # Management
-    'active-players': reports.active_players_report,
-    'attrition': reports.attrition_report,
-    'aging': reports.aging_report,
-    'monthly-da': lambda p: reports.da_report(p, 'month'),
-    'daily-da': lambda p: reports.da_report(p, 'day'),
-    'bonus-analysis': reports.bonus_analysis_report,
-    'player-wise': reports.player_wise_report,
-    # Players / countries / games
-    'signups': reports.signups_report,
-    'gender': reports.gender_report,
-    'countries-signups': lambda p: reports.countries_report(p, 'signups'),
-    'countries-profit': lambda p: reports.countries_report(p, 'profit'),
-    'profitability': reports.profitability_report,
-    'bets-done': reports.bets_done_report,
-    'log-history': reports.log_history_report,
-    'real-revenue': reports.real_revenue_report,
-    'free-money-analysis': reports.free_money_analysis_report,
-    'jackpot-contribution': reports.jackpot_contribution_report,
-    'players-campaign': reports.players_campaign_report,
-    'sports': reports.sports_report,
-    # Downloadable
-    'players-data': reports.players_data,
-    'banned-players': reports.banned_players_data,
-    'deposits-data': reports.deposits_data,
-    'bonus-data': reports.bonus_data,
-    'transaction-history': reports.transaction_history,
-    'one-page': reports.one_page_report,
-}
-
-
-@require_auth(['admin'])
-@require_http_methods(['GET'])
-def report(request, slug):
-    fn = REPORTS.get(slug)
-    if not fn:
-        return _fail(ValueError(f'Unknown report "{slug}"'), 404)
-    try:
-        return _json(fn(request.GET))
-    except ValueError as e:
-        return _fail(e)
-
-
-@require_auth(['admin'])
-@require_http_methods(['GET'])
-def report_export(request, slug):
-    """Download any row-shaped report: XLSX (bold header) unless ``format=csv``."""
-    fn = REPORTS.get(slug)
-    if not fn:
-        return _fail(ValueError(f'Unknown report "{slug}"'), 404)
-    try:
-        # Export the full result set, not just the page the screen is showing.
-        params = request.GET.copy()
-        params['limit'] = str(bo.MAX_LIMIT)
-        data = fn(params)
-    except ValueError as e:
-        return _fail(e)
-
-    rows = data.get('rows') if isinstance(data, dict) else None
-    if rows is None:
-        return _fail(ValueError('This report has no exportable rows'), 400)
-
-    from core import data_export
-
-    header = list(rows[0].keys()) if rows else []
-    cells = ([data_export.cell(v) for v in row.values()] for row in rows)
-    name = f'{slug}-{data_export.export_stamp()}'
-
-    if (request.GET.get('format') or 'xlsx').lower() == 'csv':
-        response = HttpResponse(content_type='text/csv')
-        response['Content-Disposition'] = f'attachment; filename="{name}.csv"'
-        writer = csv.writer(response)
-        writer.writerow(header)
-        writer.writerows(cells)
-        return response
-
-    response = HttpResponse(
-        data_export.build_xlsx([(slug, header, cells)]),
-        content_type=(
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        ),
-    )
-    response['Content-Disposition'] = f'attachment; filename="{name}.xlsx"'
-    return response
 
 
 # --------------------------------------------------------------------------

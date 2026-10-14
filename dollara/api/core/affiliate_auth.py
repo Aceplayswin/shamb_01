@@ -78,6 +78,20 @@ def require_affiliate(allow_pending: bool = False):
                     {'error': 'Affiliate account not found. Please log in again.'},
                     status=401,
                 )
+            # A newer login (any device) overwrites active_session_id, so a
+            # token minted before that no longer matches and is rejected.
+            if (
+                request.auth.sid
+                and affiliate.active_session_id
+                and request.auth.sid != affiliate.active_session_id
+            ):
+                return JsonResponse(
+                    {
+                        'error': 'You have been logged out because this account was signed in on another device.',
+                        'code': 'SESSION_REVOKED',
+                    },
+                    status=401,
+                )
             if affiliate.status == Affiliate.Status.SUSPENDED or not affiliate.is_active:
                 return JsonResponse(
                     {'error': 'Your affiliate account has been suspended.'}, status=403

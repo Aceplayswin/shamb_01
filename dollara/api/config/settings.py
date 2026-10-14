@@ -93,7 +93,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # record of every launch, settlement (bet/win/loss/balance) and failure to
 # logs/games.log; everything WARNING+ (interruptions, rejected callbacks,
 # decrypt/internal errors) is mirrored to logs/games_error.log so problems are
-# easy to find and diagnose. Files rotate so they never grow unbounded.
+# easy to find and diagnose. Its 'games.raw' child writes everything the
+# aggregator sends — callback bodies verbatim plus their decrypted payloads,
+# the ack returned for each callback, and launch responses — to
+# logs/raw_games.log. Files rotate so they never grow unbounded.
 # --------------------------------------------------------------------------- #
 LOG_DIR = BASE_DIR / 'logs'
 LOG_DIR.mkdir(exist_ok=True)
@@ -103,10 +106,12 @@ LOGGING = {
     'disable_existing_loggers': False,
     'formatters': {
         'game': {'format': '%(asctime)s %(levelname)s %(message)s'},
+        # One JSON object per line; the timestamp already lives inside the object.
+        'json_line': {'format': '%(message)s'},
     },
     'handlers': {
         'games_file': {
-            'class': 'logging.handlers.RotatingFileHandler',
+            'class': 'core.logging_handlers.WatchedRotatingFileHandler',
             'filename': str(LOG_DIR / 'games.log'),
             'maxBytes': 10 * 1024 * 1024,
             'backupCount': 10,
@@ -115,7 +120,7 @@ LOGGING = {
             'encoding': 'utf-8',
         },
         'games_error_file': {
-            'class': 'logging.handlers.RotatingFileHandler',
+            'class': 'core.logging_handlers.WatchedRotatingFileHandler',
             'filename': str(LOG_DIR / 'games_error.log'),
             'maxBytes': 5 * 1024 * 1024,
             'backupCount': 10,
@@ -123,11 +128,33 @@ LOGGING = {
             'level': 'WARNING',
             'encoding': 'utf-8',
         },
+        # Raw aggregator traffic. Every callback lands here twice (body and
+        # decrypted payload), so it gets bigger files than games.log.
+        'games_raw_file': {
+            'class': 'core.logging_handlers.WatchedRotatingFileHandler',
+            'filename': str(LOG_DIR / 'raw_games.log'),
+            'maxBytes': 50 * 1024 * 1024,
+            'backupCount': 10,
+            'formatter': 'game',
+            'level': 'INFO',
+            'encoding': 'utf-8',
+        },
+        # Same traffic as raw_games.log, one JSON object per line, so a callback's
+        # request, decrypted payload, ack and response can be read together.
+        'games_raw_json_file': {
+            'class': 'core.logging_handlers.WatchedRotatingFileHandler',
+            'filename': str(LOG_DIR / 'raw_games.json'),
+            'maxBytes': 50 * 1024 * 1024,
+            'backupCount': 10,
+            'formatter': 'json_line',
+            'level': 'INFO',
+            'encoding': 'utf-8',
+        },
         # Affiliate program: attribution decisions, commission runs and signed
         # partner requests. Separate from games.log because these are money
         # decisions about third parties and get read during payout disputes.
         'affiliate_file': {
-            'class': 'logging.handlers.RotatingFileHandler',
+            'class': 'core.logging_handlers.WatchedRotatingFileHandler',
             'filename': str(LOG_DIR / 'affiliate.log'),
             'maxBytes': 10 * 1024 * 1024,
             'backupCount': 10,
@@ -139,6 +166,20 @@ LOGGING = {
     'loggers': {
         'games': {
             'handlers': ['games_file', 'games_error_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # Kept out of games.log: without propagate=False every raw payload
+        # would be copied there too.
+        'games.raw': {
+            'handlers': ['games_raw_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # Not a child that propagates: games.raw.json must not also land in
+        # raw_games.log. propagate stays False for that reason.
+        'games.raw.json': {
+            'handlers': ['games_raw_json_file'],
             'level': 'INFO',
             'propagate': False,
         },
@@ -221,8 +262,11 @@ GAME_MIN_LAUNCH_BALANCE = os.getenv('GAME_MIN_LAUNCH_BALANCE', '100')
 GAME_MOCK_LAUNCH = os.getenv('GAME_MOCK_LAUNCH', '').lower() in ('1', 'true', 'yes')
 # Launch endpoint path on the aggregator (default matches legacy /game/v1).
 GAME_LAUNCH_PATH = _normalize_launch_path(os.getenv('GAME_LAUNCH_PATH', '/game/v1'))
-# Minimum win that qualifies for the public "recent big wins" feed.
-GAME_BIG_WIN_THRESHOLD = os.getenv('GAME_BIG_WIN_THRESHOLD', '1000')
+# Minimum win that qualifies for the public "recent big wins" feed. Kept low so
+# the feed reflects real settled play on a young catalog — at 1000 the panel sat
+# empty because no round had yet won that much. Raise it via env once volume
+# justifies a higher bar.
+GAME_BIG_WIN_THRESHOLD = os.getenv('GAME_BIG_WIN_THRESHOLD', '1')
 # How long a stake may sit unresolved before the sweep force-settles it, so a
 # provider that never reports a result cannot pin a bet on "Pending" forever.
 GAME_PENDING_STAKE_MAX_HOURS = os.getenv('GAME_PENDING_STAKE_MAX_HOURS', '72')

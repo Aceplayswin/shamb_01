@@ -27,6 +27,7 @@ class JWTAuthenticationMiddleware:
                     sub=payload['sub'],
                     role=payload.get('role', 'user'),
                     token_type=payload.get('type'),
+                    sid=payload.get('sid'),
                 )
         return self.get_response(request)
 
@@ -38,11 +39,31 @@ def require_auth(roles: list[str] | None = None):
                 return JsonResponse({'error': 'Unauthorized'}, status=401)
             if roles and not role_is_allowed(request.auth.role, roles):
                 return JsonResponse({'error': 'Forbidden'}, status=403)
-            if request.auth.role == 'user' and not User.objects.filter(id=request.auth.sub).exists():
-                return JsonResponse(
-                    {'error': 'User account not found. Please log in again.'},
-                    status=401,
-                )
+            # Single-session enforcement applies to players only; admins may
+            # stay signed in on multiple devices at once (see login_admin).
+            if request.auth.role == 'user':
+                account = User.objects.filter(id=request.auth.sub).only(
+                    'id', 'active_session_id'
+                ).first()
+                if not account:
+                    return JsonResponse(
+                        {'error': 'User account not found. Please log in again.'},
+                        status=401,
+                    )
+                # A newer login (any device) overwrites active_session_id, so a
+                # token minted before that no longer matches and is rejected.
+                if (
+                    request.auth.sid
+                    and account.active_session_id
+                    and request.auth.sid != account.active_session_id
+                ):
+                    return JsonResponse(
+                        {
+                            'error': 'You have been logged out because this account was signed in on another device.',
+                            'code': 'SESSION_REVOKED',
+                        },
+                        status=401,
+                    )
             return view_func(request, *args, **kwargs)
         return wrapped
     return decorator

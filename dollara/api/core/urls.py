@@ -147,9 +147,6 @@ urlpatterns = [
     path('admin/bo/blocked-ips', bo.blocked_ips),
     path('admin/bo/blocked-ips/create', bo.blocked_ips_create),
     path('admin/bo/blocked-ips/<int:rule_id>', bo.blocked_ips_update),
-    # Reports (slug-dispatched) + CSV export
-    path('admin/bo/reports/<str:slug>', bo.report),
-    path('admin/bo/reports/<str:slug>/export', bo.report_export),
     # Cashier
     path('admin/bo/payment-methods', bo.payment_methods),
     path('admin/bo/payment-methods/create', bo.payment_methods_create),

@@ -1,19 +1,20 @@
 """Add any bonuses claim-condition columns this build expects but the database lacks.
 
-The feature schema is applied from SQL files, not Django migrations, and
-deploy.sh only pulls, builds and restarts — it never runs SQL. The claim
+The feature schema is applied from ``database/init.sql``, not Django migrations,
+and deploy.sh only pulls, builds and restarts — it never runs SQL. The claim
 conditions (minimum balance / wagering / deposits before an offer can be
 claimed) added three columns to ``bonuses``; without them every ORM read of
 the table fails with "Unknown column", taking the promotions list, the
 player's Bonus page and the admin Bonuses screen down together.
 
 This command heals that from Python, so it can run on every deploy without the
-mysql CLI (the SQL file uses ``DELIMITER``, which only the CLI understands):
+mysql CLI:
 
     python manage.py ensure_bonus_claim_columns --dry-run
     python manage.py ensure_bonus_claim_columns
 
 Idempotent: it reads information_schema and adds only what is missing.
+Fresh installs already have these columns in ``database/init.sql``.
 """
 
 from django.core.management.base import BaseCommand

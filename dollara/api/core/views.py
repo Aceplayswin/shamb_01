@@ -2,7 +2,6 @@ import json
 import logging
 
 from django.conf import settings
-import csv
 from datetime import datetime
 
 from django.http import (
@@ -26,6 +25,7 @@ from core import (
 from core.ai import chat_respond, fraud_score, welcome_call
 from core.game_services import GameError
 from core.geo import detect_geo_from_ip
+from core.ip_tracking import IpBlocked, enforce_ip, get_client_ip, record_login
 from core.middleware import require_auth
 from core.models import AiCallLog, Transaction, User, UserSetting, Wallet
 from core.schema_errors import (
@@ -257,6 +257,7 @@ def _error_response(exc: Exception, status: int = 400):
 def register(request):
     """Direct sign-up: full name + phone + password. No verification step."""
     try:
+        enforce_ip(request)
         body = _json_body(request)
         result = services.register_user(
             body['fullName'],
@@ -270,11 +271,11 @@ def register(request):
             affiliate_ref=body.get('affiliateRef'),
             affiliate_sub=body.get('affiliateSub'),
             affiliate_click_id=body.get('affiliateClickId'),
-            signup_ip=(request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip()
-                       or request.META.get('REMOTE_ADDR')),
-            email=body.get('email'),
+            signup_ip=get_client_ip(request),
         )
         return JsonResponse(result, status=201)
+    except IpBlocked as e:
+        return _error_response(e, 403)
     except (KeyError, json.JSONDecodeError) as e:
         return _error_response(e)
     except ValueError as e:
@@ -302,8 +303,13 @@ def demo_session(request):
 @require_http_methods(['POST'])
 def login(request):
     try:
+        enforce_ip(request)
         body = _json_body(request)
-        return JsonResponse(services.login_user(body['phone'], body['password']))
+        result = services.login_user(body['phone'], body['password'])
+        record_login(request, user_id=result.get('userId'))
+        return JsonResponse(result)
+    except IpBlocked as e:
+        return _error_response(e, 403)
     except (KeyError, json.JSONDecodeError) as e:
         return _error_response(e)
     except ValueError as e:
@@ -403,6 +409,15 @@ def wallet_deposit(request):
             body.get('currency', 'INR'),
             # Optional UTR / reference the user pastes from their payment app.
             reference_number=(body.get('referenceNumber') or body.get('reference_number')),
+            # Screenshot the player uploaded first (see wallet_deposit_proof).
+            payment_proof_url=(body.get('paymentProofUrl') or body.get('payment_proof_url')),
+            # Same ?ref/&sub/&clk the tracking link left in the browser. Used
+            # when signup did not already tie this player to the link, so the
+            # confirmed deposit can count as that link's first deposit.
+            affiliate_ref=body.get('affiliateRef'),
+            affiliate_sub=body.get('affiliateSub'),
+            affiliate_click_id=body.get('affiliateClickId'),
+            client_ip=get_client_ip(request),
         )
         return JsonResponse(result, status=201)
     except (KeyError, json.JSONDecodeError) as e:
@@ -417,13 +432,8 @@ def wallet_deposit(request):
 def wallet_deposit_proof(request):
     """Player uploads a payment screenshot (multipart) and gets back its URL.
 
-    Uploading alone credits nothing: the URL is meant to be passed along with
-    the deposit request for an admin to review before confirming it.
-
-    NOTE: this view is not in the task's enumerated "missing views" list, but
-    the requested urls.py wiring (wallet/deposit/proof) requires it and
-    services.save_payment_proof (ported above) already exists to back it —
-    added so that URL pattern actually resolves. See the port report.
+    Uploading alone credits nothing: the URL is passed to the deposit request,
+    which stays PENDING until an admin reviews the proof and confirms it.
     """
     try:
         url = services.save_payment_proof(request.auth.sub, request.FILES.get('file'))
@@ -455,7 +465,10 @@ def wallet_withdraw(request):
     try:
         body = _json_body(request)
         result = services.create_withdrawal(
-            request.auth.sub, float(body['amount']), body['paymentMethod']
+            request.auth.sub,
+            float(body['amount']),
+            body['paymentMethod'],
+            body.get('destination'),
         )
         return JsonResponse(result, status=201)
     except (KeyError, json.JSONDecodeError) as e:
@@ -487,22 +500,41 @@ def wallet_transactions(request):
 # --- Bonuses / Promotions (player-facing) ---
 @require_http_methods(['GET'])
 def promotions_list(request):
-    """Active, promotable bonuses for the public promotions page. Keyless."""
-    return JsonResponse(bonus_services.list_public_bonuses(), safe=False)
+    """Active, promotable bonuses for the public promotions page. Keyless.
+
+    Anyone can browse the catalogue; a signed-in player additionally gets
+    their own claim state on each offer (conditions met or not, already
+    claimed), which is what the Bonus page's Claim button is driven by.
+    """
+    auth = getattr(request, 'auth', None)
+    user_id = auth.sub if auth and auth.role == 'user' else None
+    try:
+        return JsonResponse(bonus_services.list_public_bonuses(user_id), safe=False)
+    except (OperationalError, ProgrammingError) as e:
+        # A database that missed the bonuses claim-condition columns: tell the
+        # operator what to run instead of a bare HTML 500.
+        if is_missing_column_error(e):
+            return schema_error_response(503, BONUSES_SCHEMA_MESSAGE)
+        raise
 
 
 @require_auth(['user'])
 @require_http_methods(['GET'])
 def my_bonuses(request):
     """The signed-in player's awarded bonuses + wagering progress."""
-    return JsonResponse(bonus_services.list_user_bonuses(request.auth.sub), safe=False)
+    try:
+        return JsonResponse(bonus_services.list_user_bonuses(request.auth.sub), safe=False)
+    except (OperationalError, ProgrammingError) as e:
+        if is_missing_column_error(e):
+            return schema_error_response(503, BONUSES_SCHEMA_MESSAGE)
+        raise
 
 
 @csrf_exempt
 @require_auth(['user'])
 @require_http_methods(['POST'])
 def claim_promo(request):
-    """Player redeems a promo code for its bonus."""
+    """Player redeems a coupon code for its bonus."""
     try:
         body = _json_body(request)
         return JsonResponse(bonus_services.claim_promo_code(request.auth.sub, body.get('code', '')))
@@ -529,10 +561,40 @@ def preview_promo(request):
 @require_auth(['user'])
 @require_http_methods(['GET'])
 def my_referral(request):
-    """The player's shareable referral code + how many people they've referred."""
+    """The player's shareable referral code, their referrals, and who referred them.
+
+    The list is what makes the code meaningful to the player: a bare count gave
+    them no way to see whether a person they invited actually signed up.
+    Usernames are masked — a referrer is entitled to see that a signup happened,
+    not to read another player's account name in full.
+    """
     code = bonus_services.ensure_referral_code(request.auth.sub)
-    count = UserSetting.objects.filter(referred_by=request.auth.sub).count()
-    return JsonResponse({'referral_code': code, 'referred_count': count})
+    referred = (
+        UserSetting.objects.filter(referred_by=request.auth.sub)
+        .select_related('user')
+        .order_by('-user__created_at')[:100]
+    )
+    referrals = [
+        {
+            'username': game_services._mask_username(r.user.username),
+            'joined_at': r.user.created_at.isoformat() if r.user.created_at else None,
+        }
+        for r in referred
+        if r.user_id
+    ]
+    mine = UserSetting.objects.filter(user_id=request.auth.sub).first()
+    referrer = (
+        User.objects.filter(id=mine.referred_by).first()
+        if mine and mine.referred_by
+        else None
+    )
+    return JsonResponse({
+        'referral_code': code,
+        'referred_count': len(referrals),
+        'referrals': referrals,
+        # Who invited this player, when they signed up with a code.
+        'referred_by': game_services._mask_username(referrer.username) if referrer else None,
+    })
 
 
 # --- Games ---
@@ -641,6 +703,24 @@ def games_launch(request):
             {'status_code': e.code, 'error': str(e)},
             status=_GAME_ERROR_STATUS.get(e.code, 400),
         )
+    except ValueError as e:
+        # Request-body validation (LaunchRequest.parse) — a bad game identifier
+        # is the caller's error, not a platform fault.
+        return JsonResponse({'status_code': 'invalid_params', 'error': str(e)}, status=400)
+    except Exception:
+        # Anything the launch path did not anticipate (a vendor returning a
+        # shape we don't parse, a transport library raising its own error type)
+        # used to escape as a bare HTTP 500 "internal server error" on the
+        # player's screen. Log the detail for operators and hand the client the
+        # same structured error every other launch failure returns.
+        logger.exception('Game launch failed for user %s', getattr(request.auth, 'sub', None))
+        return JsonResponse(
+            {
+                'status_code': 'server_error',
+                'error': 'This game is temporarily unavailable. Please try again.',
+            },
+            status=502,
+        )
 
 
 @require_auth(['user'])
@@ -685,11 +765,26 @@ def games_big_wins(request):
     )
 
 
+def _callback_reply(payload: dict, status: int = 200):
+    """Return a callback ack and record the exact JSON that goes out."""
+    response = JsonResponse(payload, status=status)
+    game_logging.raw_callback_response(
+        response.content.decode('utf-8'), code=payload.get('code'),
+    )
+    return response
+
+
 @csrf_exempt
 @require_http_methods(['POST'])
 def games_callback(request):
     """Inbound aggregator bet/win callback. Public (auth is via AES payload)."""
     raw = request.body.decode('utf-8', errors='replace') if request.body else ''
+    # First, before anything can reject it: a callback that fails to parse or
+    # decrypt is exactly the one worth having verbatim in raw_games.log.
+    game_logging.raw_callback(
+        raw, ip=get_client_ip(request), path=request.get_full_path(),
+        content_type=request.content_type,
+    )
     try:
         envelope = json.loads(raw) if raw else {}
     except json.JSONDecodeError:
@@ -697,14 +792,14 @@ def games_callback(request):
         envelope = {'payload': request.POST.get('payload', raw)}
     try:
         ack = game_services.process_callback(envelope, raw_body=raw)
-        return JsonResponse(ack)
+        return _callback_reply(ack)
     except GameError as e:
         # Provider-shaped error envelope (non-zero code) so the aggregator can
         # retry/alert without us leaking internals.
-        return JsonResponse({'code': 1, 'msg': str(e), 'payload': ''}, status=200)
+        return _callback_reply({'code': 1, 'msg': str(e), 'payload': ''})
     except Exception as e:
         game_logging.callback_error(f'{type(e).__name__}: {e}')
-        return JsonResponse({'code': 1, 'msg': 'internal_error', 'payload': ''}, status=200)
+        return _callback_reply({'code': 1, 'msg': 'internal_error', 'payload': ''})
 
 
 @require_http_methods(['GET'])
@@ -746,9 +841,7 @@ def games_mock_launch(request):
 # --- Geo ---
 @require_http_methods(['GET'])
 def geo_detect(request):
-    ip = request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip()
-    if not ip:
-        ip = request.META.get('REMOTE_ADDR', '127.0.0.1')
+    ip = get_client_ip(request) or '127.0.0.1'
     return JsonResponse(detect_geo_from_ip(ip))
 
 
@@ -758,7 +851,9 @@ def geo_detect(request):
 def admin_login(request):
     try:
         body = _json_body(request)
-        return JsonResponse(services.login_admin(body['username'], body['password']))
+        result = services.login_admin(body['username'], body['password'])
+        record_login(request, admin_id=result.get('adminId'))
+        return JsonResponse(result)
     except (KeyError, json.JSONDecodeError) as e:
         return _error_response(e)
     except ValueError as e:
@@ -792,12 +887,32 @@ def admin_recent_activity(request):
 @require_auth(['admin'])
 @require_http_methods(['GET'])
 def admin_users(request):
+    """Every player, or the subset matching the search box and filter panel.
+
+    ``limit`` is optional. Omitting it returns the whole match set — the admin
+    list used to hard-cap the response at 200, which hid older accounts from
+    both the table and the on-page search.
+    """
+    raw_limit = (request.GET.get('limit') or '').strip()
+    try:
+        limit = int(raw_limit) if raw_limit else None
+        offset = int(request.GET.get('offset', 0) or 0)
+    except ValueError:
+        return _error_response(ValueError('limit and offset must be integers'))
     return JsonResponse(
         services.list_users(
             request.GET.get('status'),
-            request.GET.get('kycStatus'),
-            int(request.GET.get('limit', 50)),
-            int(request.GET.get('offset', 0)),
+            limit,
+            offset,
+            search=request.GET.get('search'),
+            user_id=request.GET.get('userId'),
+            affiliate_id=request.GET.get('affiliateId'),
+            username=request.GET.get('username'),
+            full_name=request.GET.get('fullName'),
+            phone=request.GET.get('phone'),
+            ip=request.GET.get('ip'),
+            date_from=request.GET.get('dateFrom'),
+            date_to=request.GET.get('dateTo'),
         ),
         safe=False,
     )
@@ -814,9 +929,11 @@ def admin_user_create(request):
                 full_name=body.get('full_name', ''),
                 phone=body.get('phone', ''),
                 password=body.get('password', ''),
-                email=body.get('email'),
                 country_code=body.get('country_code', 'IN'),
                 initial_balance=body.get('initial_balance', 0),
+                state=body.get('state'),
+                signup_ip=get_client_ip(request),
+                created_by=getattr(request.auth, 'sub', None),
             ),
             status=201,
         )
@@ -874,8 +991,10 @@ def admin_user_status(request, user_id):
             admin_services.update_user_admin(
                 user_id,
                 account_status=body.get('account_status'),
-                kyc_status=body.get('kyc_status'),
                 fraud_score=body.get('fraud_score'),
+                username=body.get('username'),
+                phone=body.get('phone'),
+                full_name=body.get('full_name'),
             )
         )
     except (KeyError, json.JSONDecodeError) as e:
@@ -913,17 +1032,27 @@ def admin_transaction_by_reference(request, reference):
 @require_auth(['admin'])
 @require_http_methods(['GET'])
 def admin_deposits_pending(request):
-    return JsonResponse(admin_services.list_pending_deposits(), safe=False)
+    """Deposit requests for one review tab (all/pending/approved/rejected).
+
+    Defaults to pending so the original callers of this endpoint, which sent no
+    tab, keep getting exactly what they got before.
+    """
+    tab = request.GET.get('tab') or 'pending'
+    try:
+        rows = admin_services.list_cashier_requests(
+            Transaction.TxType.DEPOSIT, tab,
+            limit=_query_limit(request),
+            date_from=_parse_date(request.GET.get('dateFrom') or request.GET.get('from')),
+            date_to=_parse_date(request.GET.get('dateTo') or request.GET.get('to')),
+        )
+    except ValueError as e:
+        return _error_response(e)
+    return JsonResponse(rows, safe=False)
 
 
 @require_auth(['admin'])
 @require_http_methods(['GET'])
 def admin_deposits_counts(request):
-    """New Cashier-section badge counts (pending/approved/rejected + sums).
-
-    Parallel to admin_deposits_pending above, which is unchanged and keeps
-    serving the existing deposits admin flow off list_pending_deposits.
-    """
     return JsonResponse(
         admin_services.count_cashier_requests(
             Transaction.TxType.DEPOSIT,
@@ -979,7 +1108,7 @@ def admin_upload_image(request):
 def admin_games(request):
     return JsonResponse(
         admin_services.list_admin_games(
-            int(request.GET.get('limit', 200)),
+            _query_limit(request),
             int(request.GET.get('offset', 0)),
         ),
         safe=False,
@@ -1008,7 +1137,6 @@ def admin_games_update(request, game_id):
         return _error_response(e)
 
 
-# --- Admin: game categories ---
 @require_auth(['admin'])
 @require_http_methods(['GET'])
 def admin_categories(request):
@@ -1141,7 +1269,12 @@ def admin_bets(request):
 @require_auth(['admin'])
 @require_http_methods(['GET'])
 def admin_bonuses(request):
-    return JsonResponse(admin_services.list_admin_bonuses(), safe=False)
+    try:
+        return JsonResponse(admin_services.list_admin_bonuses(), safe=False)
+    except (OperationalError, ProgrammingError) as e:
+        if is_missing_column_error(e):
+            return schema_error_response(503, BONUSES_SCHEMA_MESSAGE)
+        raise
 
 
 @require_auth(['admin'])
@@ -1381,7 +1514,7 @@ def admin_settings_update(request, setting_key):
 def admin_ai_calls(request):
     return JsonResponse(
         admin_services.list_ai_call_logs(
-            int(request.GET.get('limit', 50)),
+            _query_limit(request),
             int(request.GET.get('offset', 0)),
         ),
         safe=False,
@@ -1428,6 +1561,7 @@ def admin_bet_history(request):
         game_uid=request.GET.get('gameUid'),
         date_from=_parse_date(request.GET.get('from')),
         date_to=_parse_date(request.GET.get('to')),
+        search=request.GET.get('search'),
     ))
 
 
@@ -1495,13 +1629,6 @@ def admin_staff_update(request, staff_id):
 
 
 # --- Admin: report export ---
-class _CsvEcho:
-    """File-like sink so csv.writer can stream rows straight to the response."""
-
-    def write(self, value):
-        return value
-
-
 @require_auth(['admin'])
 @require_http_methods(['GET'])
 def admin_reports(request):
@@ -1512,7 +1639,8 @@ def admin_reports(request):
 @require_auth(['admin'])
 @require_http_methods(['GET'])
 def admin_report_export(request, kind):
-    """Stream one report as a CSV download."""
+    """One report as a download: XLSX (bold header row) unless ``format=csv``."""
+    fmt = (request.GET.get('format') or 'xlsx').lower()
     date_from = _parse_date(request.GET.get('from'))
     date_to = _parse_date(request.GET.get('to'))
     member_id = (request.GET.get('memberId') or '').strip() or None
@@ -1523,17 +1651,11 @@ def admin_report_export(request, kind):
     except ValueError as e:
         return _error_response(e, 404)
 
-    writer = csv.writer(_CsvEcho())
-
-    def stream():
-        yield writer.writerow(header)
-        for row in rows:
-            yield writer.writerow(row)
-
-    stamp = datetime.now().strftime('%Y%m%d-%H%M')
-    response = StreamingHttpResponse(stream(), content_type='text/csv')
-    response['Content-Disposition'] = f'attachment; filename="{kind}-{stamp}.csv"'
-    return response
+    from core import data_export
+    name = f'{kind}-{data_export.export_stamp()}'
+    if fmt == 'csv':
+        return _csv_response(name, header, rows)
+    return _xlsx_response(name, [(kind, header, rows)])
 
 
 # --- Admin: mobile app (APK) distribution ---
@@ -1587,39 +1709,28 @@ def admin_social_links_update(request):
 @require_auth(['admin'])
 @require_http_methods(['GET'])
 def admin_withdrawals_pending(request):
-    txs = (
-        Transaction.objects.filter(
-            type=Transaction.TxType.WITHDRAWAL,
-            status__in=[Transaction.Status.PENDING, Transaction.Status.PROCESSING],
+    """Withdrawal requests for one review tab (all/pending/approved/rejected).
+
+    Defaults to pending, so callers that send no tab are unaffected.
+    """
+    tab = request.GET.get('tab') or 'pending'
+    try:
+        rows = admin_services.list_cashier_requests(
+            Transaction.TxType.WITHDRAWAL, tab,
+            limit=_query_limit(request),
+            date_from=_parse_date(request.GET.get('dateFrom') or request.GET.get('from')),
+            date_to=_parse_date(request.GET.get('dateTo') or request.GET.get('to')),
+            # Admins read withdrawals latest-first, pending tab included.
+            pending_oldest_first=False,
         )
-        .select_related('user')
-        .order_by('created_at')[:100]
-    )
-    data = [
-        {
-            'id': t.id,
-            'user_id': t.user_id,
-            'amount': float(t.amount),
-            'status': t.status,
-            'payment_method': t.payment_method,
-            'reference_number': t.reference_number,
-            'created_at': t.created_at.isoformat(),
-            'username': t.user.username,
-            'full_name': t.user.full_name,
-        }
-        for t in txs
-    ]
-    return JsonResponse(data, safe=False)
+    except ValueError as e:
+        return _error_response(e)
+    return JsonResponse(rows, safe=False)
 
 
 @require_auth(['admin'])
 @require_http_methods(['GET'])
 def admin_withdrawals_counts(request):
-    """New Cashier-section badge counts (pending/approved/rejected + sums).
-
-    Parallel to admin_withdrawals_pending above, which is unchanged and keeps
-    serving the existing withdrawals admin flow off a direct Transaction query.
-    """
     return JsonResponse(
         admin_services.count_cashier_requests(
             Transaction.TxType.WITHDRAWAL,
@@ -1730,6 +1841,14 @@ def admin_data_catalog(request):
         'tables': data_export.list_tables(),
         'combos': data_export.list_combos(),
     })
+
+
+def _query_limit(request):
+    """Optional ``?limit=``. A missing value means the list is not capped."""
+    raw = (request.GET.get('limit') or '').strip()
+    if not raw:
+        return None
+    return int(raw)
 
 
 def _export_limit(request):

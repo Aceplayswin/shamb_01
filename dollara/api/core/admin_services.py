@@ -1,9 +1,10 @@
 """Admin-only business logic for the management panel."""
 
 import json
+import re
 import secrets
 import uuid
-from datetime import timedelta
+from datetime import datetime, time, timedelta, timezone as dt_timezone
 from decimal import Decimal
 
 from django.core.files.storage import default_storage
@@ -39,10 +40,13 @@ from core.backoffice_models import (
 from core.repositories import (
     GameRoundRepository,
     GameSessionRepository,
+    WalletRepository,
+    invalidate_category_cache,
     invalidate_provider_cache,
+    sports_category_slugs,
 )
 from core import bonus_services, game_services
-from core.data_export import fmt_when_ist
+from core.data_export import IST, fmt_when, fmt_when_ist
 from core.services import get_user_settings, hash_password
 from tenants.state import get_current_tenant_id, tenant_atomic
 
@@ -83,20 +87,39 @@ def _serialize_user(u: User, wallet: Wallet | None = None, user_settings: UserSe
         'username': u.username,
         'full_name': u.full_name,
         'phone': u.phone,
-        'email': u.email,
         'country_code': u.country_code,
+        'state': u.state,
+        'signup_ip': u.signup_ip,
+        'created_by': u.created_by,
         'currency': prefs.currency if prefs else 'INR',
-        'kyc_status': prefs.kyc_status if prefs else UserSetting.KycStatus.NONE,
         'account_status': u.account_status,
-        'email_verified': prefs.email_verified if prefs else False,
         'phone_verified': prefs.phone_verified if prefs else False,
         'fraud_score': prefs.fraud_score if prefs else 0,
+        'risk_level': prefs.risk_level if prefs else None,
+        'vip_level': prefs.vip_level if prefs else None,
+        'gender': prefs.gender if prefs else None,
+        'affiliate_id': prefs.affiliate_id if prefs else None,
+        'agent_id': prefs.agent_id if prefs else None,
+        # Referral trail. Registering with someone's code recorded referred_by
+        # but nothing ever displayed it, so an operator could not tell who
+        # brought a player in or how many a player has brought.
+        'referral_code': prefs.referral_code if prefs else None,
+        'referred_by': prefs.referred_by if prefs else None,
+        'referred_by_username': _referrer_username(prefs.referred_by if prefs else None),
+        'referred_count': (
+            UserSetting.objects.filter(referred_by=u.id).count() if u.id else 0
+        ),
+        'marketing_opt_in': prefs.marketing_opt_in if prefs else False,
+        'notifications_enabled': prefs.notifications_enabled if prefs else True,
         'is_demo': prefs.is_demo if prefs else False,
         'created_at': u.created_at.isoformat(),
         'last_login_at': u.last_login_at.isoformat() if u.last_login_at else None,
         'main_balance': float(wallet.main_balance) if wallet else 0,
         'bonus_balance': float(wallet.bonus_balance) if wallet else 0,
+        'sports_bonus_balance': float(wallet.sports_bonus_balance) if wallet else 0,
+        'exposure_balance': float(wallet.exposure_balance) if wallet else 0,
         'locked_balance': float(wallet.locked_balance) if wallet else 0,
+        'wagering_balance': float(wallet.wagering_balance) if wallet else 0,
     }
 
 
@@ -113,17 +136,43 @@ def update_user_admin(
     user_id: int,
     *,
     account_status: str | None = None,
-    kyc_status: str | None = None,
     fraud_score: int | None = None,
+    username: str | None = None,
+    phone: str | None = None,
+    full_name: str | None = None,
 ) -> dict:
     user_updates = {}
     settings_updates = {}
     if account_status is not None:
         user_updates['account_status'] = account_status
-    if kyc_status is not None:
-        settings_updates['kyc_status'] = kyc_status
     if fraud_score is not None:
         settings_updates['fraud_score'] = fraud_score
+    # Identity fields are editable from the admin "Edit user" form. Username and
+    # phone are unique columns, so check for a clash (excluding this user) up
+    # front and return a readable error instead of a bare IntegrityError.
+    if username is not None:
+        username = username.strip()
+        if not username:
+            raise ValueError('Username cannot be empty')
+        if len(username) > 50:
+            raise ValueError('Username must be 50 characters or fewer')
+        if User.objects.filter(username=username).exclude(id=user_id).exists():
+            raise ValueError('Username already taken')
+        user_updates['username'] = username
+    if phone is not None:
+        phone = phone.strip()
+        if not phone:
+            raise ValueError('Phone number cannot be empty')
+        if len(phone) > 20:
+            raise ValueError('Phone number must be 20 characters or fewer')
+        if User.objects.filter(phone=phone).exclude(id=user_id).exists():
+            raise ValueError('Phone number already registered')
+        user_updates['phone'] = phone
+    if full_name is not None:
+        full_name = full_name.strip()
+        if not full_name:
+            raise ValueError('Full name cannot be empty')
+        user_updates['full_name'] = full_name
     if not user_updates and not settings_updates:
         raise ValueError('No fields to update')
     if user_updates:
@@ -147,7 +196,10 @@ def list_admin_transactions(
         qs = qs.filter(status=status)
     if user_id:
         qs = qs.filter(user_id=user_id)
-    return [_serialize_transaction(t) for t in qs[offset : offset + limit]]
+    rows = list(qs[offset : offset + limit])
+    return [
+        _serialize_transaction(t, games=_transaction_games(rows)) for t in rows
+    ]
 
 
 def _transaction_games(transactions: list[Transaction]) -> dict:
@@ -159,12 +211,6 @@ def _transaction_games(transactions: list[Transaction]) -> dict:
     round's balance-before / stake / balance-after / result so the transaction
     modal can show the wager path, not only the net settlement amount.
     Resolved in one query for the whole page instead of per row.
-
-    NOTE: not currently threaded through dollara's existing `_serialize_transaction`
-    / `list_admin_transactions` below (those keep their original, unmodified
-    signatures for this port) — added standalone per the port checklist so a
-    caller can opt in explicitly (pass its result to a `games=` lookup) without
-    changing their existing behaviour.
     """
     refs = [
         t.reference_number
@@ -173,18 +219,21 @@ def _transaction_games(transactions: list[Transaction]) -> dict:
     ]
     if not refs:
         return {}
-    # mahakalworld also matches on `stake_serial` (the placement serial once a
-    # result callback has superseded it on `serial_number`) — dollara's
-    # GameRound has no such column yet, so this matches on `serial_number` only.
-    # See the port report for this gap.
-    rounds = GameRound.objects.select_related('game').filter(serial_number__in=refs)
+    rounds = (
+        GameRound.objects.select_related(
+            'game__provider', 'session', 'session__game', 'session__game__provider',
+        )
+        .filter(Q(serial_number__in=refs) | Q(stake_serial__in=refs))
+    )
     mapping = {}
     for r in rounds:
         net = r.win_amount - r.bet_amount
         is_pending = r.settle_status == GameRound.SettleStatus.PENDING
+        game_name, category, provider = game_services.displayed_game(r)
         entry = {
-            'game_name': r.game_name or (r.game.name if r.game else None),
-            'game_category': r.game.category if r.game else None,
+            'game_name': game_name,
+            'game_category': category,
+            'game_provider': provider,
             'bet_amount': float(r.bet_amount),
             'win_amount': float(r.win_amount),
             'profit_loss': float(net),
@@ -200,10 +249,13 @@ def _transaction_games(transactions: list[Transaction]) -> dict:
         }
         if r.serial_number:
             mapping[r.serial_number] = entry
+        if r.stake_serial:
+            mapping[r.stake_serial] = entry
     return mapping
 
 
-def _serialize_transaction(t: Transaction) -> dict:
+def _serialize_transaction(t: Transaction, games: dict | None = None) -> dict:
+    game = (games or {}).get(t.reference_number or '', {})
     return {
         'id': t.id,
         'user_id': t.user_id,
@@ -215,8 +267,26 @@ def _serialize_transaction(t: Transaction) -> dict:
         'status': t.status,
         'payment_method': t.payment_method,
         'reference_number': t.reference_number,
+        # Player-uploaded screenshot backing a manual deposit, for admin review.
+        'payment_proof_url': t.payment_proof_url,
         'notes': t.notes,
+        # What was played, for a bet settlement — reports name the game and its
+        # category instead of only an opaque reference number.
+        'game_name': game.get('game_name'),
+        'game_category': game.get('game_category'),
+        # Game studio (not the PSP — that is payment_method).
+        'game_provider': game.get('game_provider'),
+        # Round wallet path for bet settlements (absent on deposits/withdrawals).
+        'bet_amount': game.get('bet_amount'),
+        'win_amount': game.get('win_amount'),
+        'profit_loss': game.get('profit_loss'),
+        'balance_before': game.get('balance_before'),
+        'balance_after': game.get('balance_after'),
+        'result': game.get('result'),
         'created_at': t.created_at.isoformat(),
+        # When the row last changed: the moment a deposit/withdrawal was
+        # approved or a bet settled, which reports show beside the created time.
+        'settled_at': t.updated_at.isoformat() if t.updated_at else None,
     }
 
 
@@ -231,27 +301,14 @@ def get_transaction_by_reference(reference: str) -> dict | None:
         .order_by('-created_at')
         .first()
     )
-    return _serialize_transaction(t) if t else None
+    if not t:
+        return None
+    return _serialize_transaction(t, games=_transaction_games([t]))
 
 
 def list_pending_deposits(limit: int = 100) -> list[dict]:
-    return list_admin_transactions(
-        tx_type=Transaction.TxType.DEPOSIT,
-        status=Transaction.Status.PENDING,
-        limit=limit,
-    )
+    return list_cashier_requests(Transaction.TxType.DEPOSIT, 'pending', limit=limit)
 
-
-# --------------------------------------------------------------------------- #
-# Cashier queue (new, parallel to the above) — deposit/withdrawal review tabs
-# for the Backoffice Cashier section (payment methods/providers/BIN rules/
-# queues). This is ADDITIVE: `list_pending_deposits` above and dollara's
-# existing admin_deposits_pending / admin_withdrawals_pending endpoints and
-# approve/reject flows in views.py are completely untouched. These functions
-# power the *new* `admin/deposits/counts` and `admin/withdrawals/counts`
-# badge endpoints and a generalised pending/approved/rejected tab view; they
-# do not replace or alter any existing deposit/withdrawal logic.
-# --------------------------------------------------------------------------- #
 
 # The console groups deposits and withdrawals into three review tabs. A tab is
 # not one status: a payout can sit in `processing` while it is being paid out,
@@ -270,11 +327,20 @@ CASHIER_TABS = {
 
 
 def _apply_cashier_date_range(qs, date_from=None, date_to=None):
-    """Restrict cashier rows to an inclusive created_at calendar range."""
+    """Restrict cashier rows to an inclusive created_at range of IST days.
+
+    The console shows every stamp in IST, so the dates it sends are IST calendar
+    days and each bound is an IST midnight. A plain ``created_at__date`` compares
+    in settings.TIME_ZONE (UTC) instead, which moved anything raised between
+    00:00 and 05:30 IST onto the previous day — a deposit requested just after
+    midnight was missing from "today" on the Deposits page.
+    """
     if date_from:
-        qs = qs.filter(created_at__date__gte=date_from)
+        qs = qs.filter(created_at__gte=datetime.combine(date_from, time.min, IST))
     if date_to:
-        qs = qs.filter(created_at__date__lte=date_to)
+        qs = qs.filter(
+            created_at__lt=datetime.combine(date_to + timedelta(days=1), time.min, IST)
+        )
     return qs
 
 
@@ -283,8 +349,9 @@ def _cashier_type_filter(tx_type: str) -> Q:
 
     A manual wallet adjustment (see wallet_adjustment()) is stored as
     type=adjustment rather than deposit/withdrawal, but it credits or debits
-    real balance just the same. Folded in here, split by the sign of the
-    amount, the same way get_dashboard_stats already treats it in services.py.
+    real balance just the same. The console's Deposits/Withdrawals pages fold
+    it in, split by the sign of the amount, the same way the player-profile
+    cashier tables already do (see _cashier_rows/_tx_playable_delta).
     """
     if tx_type == Transaction.TxType.DEPOSIT:
         return Q(type=Transaction.TxType.DEPOSIT) | Q(
@@ -297,18 +364,28 @@ def _cashier_type_filter(tx_type: str) -> Q:
     return Q(type=tx_type)
 
 
+def _apply_limit(qs, offset: int = 0, limit: int | None = None):
+    """Window a queryset. ``limit is None`` returns every row from ``offset``."""
+    start = max(0, int(offset or 0))
+    if limit is None:
+        return qs[start:]
+    return qs[start : start + int(limit)]
+
+
 def list_cashier_requests(
     tx_type: str,
     tab: str = 'pending',
-    limit: int = 100,
+    limit: int | None = None,
     offset: int = 0,
     date_from=None,
     date_to=None,
+    pending_oldest_first: bool = True,
 ) -> list[dict]:
     """Deposits/withdrawals for one review tab, newest first.
 
-    Pending is ordered oldest-first instead: that tab is a work queue, and the
-    request that has waited longest is the one to action next.
+    Pending is ordered oldest-first by default: that tab is a work queue, and
+    the request that has waited longest is the one to action next. Pass
+    ``pending_oldest_first=False`` to list it newest-first like the other tabs.
     """
     # "all" is the Status filter's no-filter choice: every request across the
     # three review tabs in one list.
@@ -323,8 +400,9 @@ def list_cashier_requests(
         _cashier_type_filter(tx_type), status__in=statuses
     )
     qs = _apply_cashier_date_range(qs, date_from, date_to)
-    qs = qs.order_by('created_at' if tab == 'pending' else '-created_at')
-    rows = list(qs[offset : offset + limit])
+    oldest_first = tab == 'pending' and pending_oldest_first
+    qs = qs.order_by('created_at' if oldest_first else '-created_at')
+    rows = list(_apply_limit(qs, offset, limit))
     # Adjustments are stored signed (debit negative); every other row here is
     # already a plain magnitude, so abs() is a no-op for them.
     out = []
@@ -414,6 +492,7 @@ def create_category(data: dict) -> dict:
         raise ValueError(f'A category with slug "{slug}" already exists')
     payload.setdefault('is_active', True)
     category = GameCategory.objects.create(**payload)
+    invalidate_category_cache()
     return {'id': category.id}
 
 
@@ -434,6 +513,7 @@ def update_category(category_id: int, data: dict) -> dict:
         # directly, so a rename has to carry through in the same transaction.
         if new_slug and new_slug != category.slug:
             Game.objects.filter(category_ref_id=category_id).update(category=new_slug)
+    invalidate_category_cache()
     return {'updated': True}
 
 
@@ -449,6 +529,7 @@ def delete_category(category_id: int) -> dict:
             f'{in_use} game(s) still use this category — reassign them first'
         )
     category.delete()
+    invalidate_category_cache()
     return {'deleted': True}
 
 
@@ -457,11 +538,6 @@ def _resolve_category(data: dict) -> dict:
 
     The panel may send either; whichever arrives, both the FK and the mirrored
     slug are written together so they can never drift apart.
-
-    NOTE: not currently called from create_game/update_game below (dollara's
-    versions keep their existing flat-`category`-only signature for this
-    port) — added standalone per the port checklist. Wiring it in would let
-    the game-admin form set a game's category_ref alongside the legacy slug.
     """
     raw_id = data.get('category_id')
     slug = data.get('category')
@@ -479,16 +555,22 @@ def _resolve_category(data: dict) -> dict:
     return {'category_ref_id': category.id, 'category': category.slug}
 
 
-def list_admin_games(limit: int = 200, offset: int = 0) -> list[dict]:
-    qs = Game.objects.select_related('provider').order_by('sort_order', 'name')[
-        offset : offset + limit
-    ]
+def list_admin_games(limit: int | None = None, offset: int = 0) -> list[dict]:
+    qs = _apply_limit(
+        Game.objects.select_related('provider', 'category_ref').order_by(
+            'sort_order', 'name'
+        ),
+        offset,
+        limit,
+    )
     return [
         {
             'id': g.id,
             'name': g.name,
             'slug': g.slug,
             'category': g.category,
+            'category_id': g.category_ref_id,
+            'category_name': g.category_ref.name if g.category_ref else None,
             'game_uid': g.game_uid,
             'game_type': g.game_type,
             'provider_id': g.provider_id,
@@ -509,11 +591,14 @@ def list_admin_games(limit: int = 200, offset: int = 0) -> list[dict]:
 
 
 def create_game(data: dict) -> dict:
+    category = _resolve_category(data)
+    if not category:
+        raise ValueError('A category is required')
     game = Game.objects.create(
         provider_id=data.get('provider_id') or None,
         name=data['name'],
         slug=data['slug'],
-        category=data['category'],
+        **category,
         game_uid=data.get('game_uid') or None,
         game_type=data.get('game_type') or None,
         thumbnail_url=data.get('thumbnail_url'),
@@ -531,11 +616,15 @@ def create_game(data: dict) -> dict:
 
 def update_game(game_id: int, data: dict) -> dict:
     allowed = {
-        'name', 'slug', 'category', 'provider_id', 'thumbnail_url',
+        'name', 'slug', 'provider_id', 'thumbnail_url',
         'rtp', 'min_bet', 'max_bet', 'is_featured', 'is_active_web',
         'is_active', 'is_provably_fair', 'sort_order', 'game_uid', 'game_type',
     }
     updates = {k: v for k, v in data.items() if k in allowed}
+    # `category`/`category_id` are handled together so the FK and the mirrored
+    # slug always move as a pair.
+    if 'category' in data or 'category_id' in data:
+        updates.update(_resolve_category(data))
     if 'provider_id' in updates and updates['provider_id'] == '':
         updates['provider_id'] = None
     for key in ('rtp', 'min_bet', 'max_bet'):
@@ -629,7 +718,7 @@ def list_admin_bets(limit: int = 50, offset: int = 0, user_id: int | None = None
     bet-history drill-down shows), not the legacy ``Bet`` table, which the live
     aggregator flow never populates."""
     qs = GameRound.objects.select_related(
-        'user', 'game', 'session', 'session__game'
+        'user', 'game', 'game__provider', 'session', 'session__game', 'session__game__provider',
     ).order_by('-created_at')
     if user_id:
         qs = qs.filter(user_id=user_id)
@@ -638,19 +727,9 @@ def list_admin_bets(limit: int = 50, offset: int = 0, user_id: int | None = None
         net = r.win_amount - r.bet_amount
         is_pending = r.settle_status == GameRound.SettleStatus.PENDING
         # For lobby games the settlement callback reports the inner game's uid,
-        # which isn't a catalog entry, so the round's own game FK is empty. Fall
-        # back to the game the player actually launched (the session's catalog
-        # game) so name and category still resolve.
-        session_game = r.session.game if r.session_id else None
-        game_name = (
-            r.game_name
-            or (r.game.name if r.game else None)
-            or (session_game.name if session_game else None)
-        )
-        game_category = (
-            (r.game.category if r.game else None)
-            or (session_game.category if session_game else None)
-        )
+        # which isn't a catalog entry, so the round's own game FK is empty.
+        # displayed_game falls back to the launch session.
+        game_name, game_category, _provider = game_services.displayed_game(r)
         rows.append({
             'id': r.id,
             'user_id': r.user_id,
@@ -680,18 +759,29 @@ def list_admin_bets(limit: int = 50, offset: int = 0, user_id: int | None = None
 _BONUS_DECIMAL_FIELDS = (
     'value_amount', 'min_deposit', 'max_bonus_cap', 'referrer_reward',
     'wagering_multiplier', 'total_budget',
+    # Reference Redemption tab.
+    'redemption_amount', 'max_redeemable_value',
+    # Claim conditions (blank = none); see bonus_services.claim_requirements.
+    'claim_min_balance', 'claim_min_wagering', 'claim_min_deposit_total',
 )
 _BONUS_INT_FIELDS = (
     'per_user_limit', 'total_claims', 'bonus_validity_days', 'new_player_days',
     'target_user_id',
+    # Reference General tab (priority, generated coupon length) and the
+    # Abuse tab's three thresholds.
+    'priority', 'coupon_length', 'affiliate_id', 'parent_bonus_id',
+    'abuse_similarity_percent', 'abuse_deposited_days', 'abuse_played_days',
 )
 _BONUS_DATE_FIELDS = ('start_date', 'end_date')
 _BONUS_TEXT_FIELDS = (
     'name', 'display_title', 'description', 'bonus_type', 'value_type',
     'credit_target', 'status', 'claim_method', 'scope',
+    'redemption_type', 'payment_methods', 'comment',
 )
 _BONUS_BOOL_FIELDS = (
     'is_first_deposit', 'is_second_deposit', 'is_third_deposit', 'is_new_player_only',
+    # Visibility toggles, separate from the `status` lifecycle.
+    'is_published', 'is_public',
 )
 
 
@@ -742,11 +832,42 @@ def _serialize_bonus(b: Bonus) -> dict:
             for r in b.provider_rules.select_related('provider').all()
         ],
         'promo_code': b.promo_code,
+        # Coupon redemption counters — how many players have used the code.
+        'redeemed_count': (
+            UserBonus.objects.filter(
+                bonus_id=b.id, source=UserBonus.Source.PROMO
+            ).exclude(status=UserBonus.Status.FORFEITED).count()
+            if b.promo_code else 0
+        ),
         'per_user_limit': b.per_user_limit,
         'total_budget': float(b.total_budget) if b.total_budget is not None else None,
         'total_awarded': float(b.total_awarded),
         'total_claims': b.total_claims,
         'bonus_validity_days': b.bonus_validity_days,
+        'claim_min_balance': float(b.claim_min_balance) if b.claim_min_balance is not None else None,
+        'claim_min_wagering': float(b.claim_min_wagering) if b.claim_min_wagering is not None else None,
+        'claim_min_deposit_total': (
+            float(b.claim_min_deposit_total) if b.claim_min_deposit_total is not None else None
+        ),
+        # Reference Create Bonus wizard fields.
+        'priority': b.priority,
+        'coupon_length': b.coupon_length,
+        'is_published': b.is_published,
+        'is_public': b.is_public,
+        'affiliate_id': b.affiliate_id,
+        'parent_bonus_id': b.parent_bonus_id,
+        'comment': b.comment,
+        'redemption_type': b.redemption_type,
+        'redemption_amount': (
+            float(b.redemption_amount) if b.redemption_amount is not None else None
+        ),
+        'max_redeemable_value': (
+            float(b.max_redeemable_value) if b.max_redeemable_value is not None else None
+        ),
+        'payment_methods': b.payment_methods,
+        'abuse_similarity_percent': b.abuse_similarity_percent,
+        'abuse_deposited_days': b.abuse_deposited_days,
+        'abuse_played_days': b.abuse_played_days,
         'budget_remaining': (
             float(b.total_budget - b.total_awarded) if b.total_budget is not None else None
         ),
@@ -785,6 +906,14 @@ def _clean_bonus_payload(data: dict) -> dict:
     for key in _BONUS_INT_FIELDS:
         if key in data:
             updates[key] = int(data[key]) if data[key] not in (None, '') else None
+    # new_player_days is the "who counts as old" rule (0 = registered before
+    # the bonus started, N = more than N days ago). It is non-nullable, so a
+    # blank keeps the model default / current value rather than writing NULL.
+    if 'new_player_days' in data:
+        if updates['new_player_days'] is None:
+            updates.pop('new_player_days')
+        elif updates['new_player_days'] < 0:
+            raise ValueError('Days since registration cannot be negative')
     for key in _BONUS_DATE_FIELDS:
         if key in data:
             updates[key] = _parse_dt(data[key])
@@ -936,7 +1065,7 @@ def generate_coupon_code(length: int = 8, prefix: str = '') -> dict:
     raise ValueError('Could not generate a free coupon code, try again')
 
 
-def list_coupon_redemptions(bonus_id: int | None = None, limit: int = 200) -> list[dict]:
+def list_coupon_redemptions(bonus_id: int | None = None, limit: int | None = None) -> list[dict]:
     """Who redeemed a coupon code, when, and for how much.
 
     Drives the Bonuses page "Coupon redemptions" tab. Scoped to promo-sourced
@@ -962,11 +1091,11 @@ def list_coupon_redemptions(bonus_id: int | None = None, limit: int = 200) -> li
             'wagering_completed': float(ub.wagering_completed),
             'redeemed_at': ub.created_at.isoformat(),
         }
-        for ub in qs[:limit]
+        for ub in (qs if limit is None else qs[:limit])
     ]
 
 
-def list_issued_bonuses(bonus_id: int | None = None, limit: int = 200) -> list[dict]:
+def list_issued_bonuses(bonus_id: int | None = None, limit: int | None = None) -> list[dict]:
     """Awarded-bonus ledger for the panel — optionally filtered to one campaign."""
     qs = UserBonus.objects.select_related('user', 'bonus').order_by('-created_at')
     if bonus_id:
@@ -985,29 +1114,38 @@ def list_issued_bonuses(bonus_id: int | None = None, limit: int = 200) -> list[d
             'wagering_completed': float(ub.wagering_completed),
             'created_at': ub.created_at.isoformat(),
         }
-        for ub in qs[:limit]
+        for ub in (qs if limit is None else qs[:limit])
     ]
 
 
 def revoke_user_bonus(user_bonus_id: int) -> dict:
-    """Forfeit an awarded bonus that has not paid out yet.
+    """Forfeit an awarded bonus that has not cleared its wagering yet.
 
-    A pending reward is not in any balance, so revoking it is a pure status
-    change. Legacy 'locked' grants were credited into the bonus balance up
-    front and still need the clawback. Completed grants are withdrawable money
-    and are never touched."""
+    Bonuses are credited into ``bonus_balance`` the moment they are awarded, so
+    revoking one has to claw that credit back — capped at whatever is actually
+    left in the bucket, since a player who already staked part of it holds less
+    than the face amount and the wallet must never go negative. Legacy 'locked'
+    grants additionally carried a wallet-level wagering requirement, which is
+    released with them. Completed grants have been converted into withdrawable
+    money and are never touched."""
     with tenant_atomic():
         ub = UserBonus.objects.select_for_update().get(id=user_bonus_id)
         if ub.status not in (UserBonus.Status.PENDING, UserBonus.Status.ACTIVE):
             raise ValueError('Only bonuses that have not paid out can be revoked')
-        if (
-            ub.award_mode == UserBonus.AwardMode.LOCKED
-            and ub.credit_target == Bonus.CreditTarget.BONUS
-        ):
-            Wallet.objects.filter(user_id=ub.user_id).update(
-                bonus_balance=F('bonus_balance') - ub.amount,
-                wagering_balance=F('wagering_balance') - ub.wagering_required,
-            )
+        if ub.credit_target == Bonus.CreditTarget.BONUS:
+            wallet = Wallet.objects.select_for_update().filter(
+                user_id=ub.user_id
+            ).first()
+            if wallet is not None:
+                clawback = min(ub.amount, max(wallet.bonus_balance, Decimal('0')))
+                wallet.bonus_balance -= clawback
+                if ub.award_mode == UserBonus.AwardMode.LOCKED:
+                    wallet.wagering_balance = max(
+                        Decimal('0'), wallet.wagering_balance - ub.wagering_required
+                    )
+                wallet.save(update_fields=[
+                    'bonus_balance', 'wagering_balance', 'updated_at',
+                ])
         ub.status = UserBonus.Status.FORFEITED
         ub.save(update_fields=['status', 'updated_at'])
     return {'revoked': True}
@@ -1184,10 +1322,12 @@ def update_platform_setting(key: str, value) -> dict:
     return {'updated': True}
 
 
-def list_ai_call_logs(limit: int = 50, offset: int = 0) -> list[dict]:
-    qs = AiCallLog.objects.select_related('user').order_by('-created_at')[
-        offset : offset + limit
-    ]
+def list_ai_call_logs(limit: int | None = None, offset: int = 0) -> list[dict]:
+    qs = _apply_limit(
+        AiCallLog.objects.select_related('user').order_by('-created_at'),
+        offset,
+        limit,
+    )
     return [
         {
             'id': c.id,
@@ -1211,10 +1351,13 @@ def wallet_adjustment(user_id: int, amount: float, notes: str) -> dict:
         delta = Decimal(str(amount))
         wallet.main_balance += delta
         wallet.save(update_fields=['main_balance', 'updated_at'])
+        # Signed on purpose: the profile's cashier tables show a credit under
+        # Deposits and a debit under Withdraws, and the direction is only
+        # recoverable from the amount now that it is no longer abs()'d.
         Transaction.objects.create(
             user_id=user_id,
             type=Transaction.TxType.ADJUSTMENT,
-            amount=abs(delta),
+            amount=delta,
             status=Transaction.Status.COMPLETED,
             notes=notes or f'Admin adjustment: {amount:+}',
         )
@@ -1231,7 +1374,6 @@ def _serialize_staff(a: User) -> dict:
         'id': a.id,
         'username': a.username,
         'full_name': a.full_name,
-        'email': a.email,
         'phone': a.phone,
         'role': a.role,
         'account_status': a.account_status,
@@ -1272,13 +1414,8 @@ def create_staff(data: dict) -> dict:
     _check_role(data.get('role'))
     if User.objects.filter(username=username).exists():
         raise ValueError('That username is already taken')
-    email = (data.get('email') or '').strip() or None
-    if email and User.objects.filter(email=email).exists():
-        raise ValueError('That email is already in use')
-
     staff = User.objects.create(
         username=username,
-        email=email,
         full_name=(data.get('full_name') or '').strip() or None,
         role=User.Role.ADMIN,
         account_status=User.AccountStatus.ACTIVE,
@@ -1296,7 +1433,7 @@ def update_staff(staff_id: int, data: dict, actor_id: int) -> dict:
         if staff.id == actor_id and data['account_status'] != User.AccountStatus.ACTIVE:
             raise ValueError('You cannot deactivate your own account')
         staff.account_status = data['account_status']
-    for field in ('full_name', 'email'):
+    for field in ('full_name',):
         if field in data:
             setattr(staff, field, (data[field] or '').strip() or None)
     if data.get('password'):
@@ -1353,12 +1490,19 @@ def get_dashboard_charts(days: int = 7) -> dict:
             usersetting__is_demo=False,
             created_at__date=day,
         ).count()
+        # Players seen that day, keyed off their last login timestamp.
+        active_players = User.objects.filter(
+            role=User.Role.USER,
+            usersetting__is_demo=False,
+            last_login_at__date=day,
+        ).count()
         series.append({
             'date': day.isoformat(),
             'label': day.strftime('%a'),
             'deposits': float(deposits),
             'withdrawals': float(withdrawals),
             'signups': signups,
+            'activePlayers': active_players,
         })
 
     # Bet volume by category comes from the real wager rounds (GameRound), not
@@ -1397,11 +1541,6 @@ def get_dashboard_charts(days: int = 7) -> dict:
             type=Transaction.TxType.DEPOSIT,
             status=Transaction.Status.PENDING,
         ).count(),
-        'kycPending': UserSetting.objects.filter(
-            is_demo=False,
-            kyc_status=UserSetting.KycStatus.PENDING,
-            user__role=User.Role.USER,
-        ).count(),
     }
 
 
@@ -1436,16 +1575,28 @@ def list_bet_history(
     game_uid: str | None = None,
     date_from=None,
     date_to=None,
+    search: str | None = None,
 ) -> dict:
     """Every player's play sessions, with the same pending-aware result the
     player sees. Launch-only sessions are excluded — they are not bets."""
     qs = GameSessionRepository.admin_queryset(
-        user_id, status, game_uid, date_from, date_to
+        user_id, status, game_uid, date_from, date_to, search
     )
     total = qs.count()
+    sessions = GameSessionRepository.page(qs, limit, offset)
+    # Opening balances for the whole page in one query — the session row only
+    # stores the balance after its latest round.
+    session_ids = [s.id for s in sessions]
+    first_balances = GameSessionRepository.first_balances(session_ids)
+    # Legacy split rounds are shown paired in the drill-down, so the Rounds
+    # column has to count wagers rather than callbacks to match.
+    double_counted = GameSessionRepository.payout_only_counts(session_ids)
     records = []
-    for s in GameSessionRepository.page(qs, limit, offset):
-        row = game_services.serialize_session(s)
+    for s in sessions:
+        row = game_services.serialize_session(s, first_balances.get(s.id))
+        extra = double_counted.get(s.id, 0)
+        if extra:
+            row['rounds'] = max(0, row['rounds'] - extra)
         row['user_id'] = s.user_id
         row['username'] = s.user.username
         row['full_name'] = s.user.full_name
@@ -1485,10 +1636,6 @@ def _pair_legacy_split_rounds(rounds: list[dict]) -> list[dict]:
     amount and opening balance, the payout's closing balance and timestamp, and
     the real net. A stake with no payout (a plain loss) and a payout with no
     stake are both passed through unchanged.
-
-    NOTE: not currently called from get_bet_history_rounds below (dollara's
-    version keeps its existing, unmodified output for this port) — added
-    standalone per the port checklist.
     """
     by_round: dict[str, list[dict]] = {}
     for r in rounds:
@@ -1534,13 +1681,19 @@ def get_bet_history_rounds(session_uid: str) -> dict:
     ).first()
     if not session:
         raise ValueError('Session not found')
-    rounds = GameRoundRepository.list_for_session(session.id)
-    detail = game_services.serialize_session(session)
+    rounds = GameRoundRepository.list_for_session(session.id, limit=None)
+    first_balance = GameSessionRepository.first_balances([session.id]).get(session.id)
+    detail = game_services.serialize_session(session, first_balance)
+    extra = GameSessionRepository.payout_only_counts([session.id]).get(session.id, 0)
+    if extra:
+        detail['rounds'] = max(0, detail['rounds'] - extra)
     detail['user_id'] = session.user_id
     detail['username'] = session.user.username
     return {
         'session': detail,
-        'rounds': [game_services.serialize_round(r) for r in rounds],
+        'rounds': _pair_legacy_split_rounds(
+            [game_services.serialize_round(r) for r in rounds]
+        ),
     }
 
 
@@ -1549,11 +1702,10 @@ def get_bet_history_rounds(session_uid: str) -> dict:
 # --------------------------------------------------------------------------- #
 
 def _d(value) -> str:
-    return value.isoformat() if value else ''
+    return fmt_when(value) if value else ''
 
 
 def _d_ist(value) -> str:
-    """IST-rendered timestamp for reports (mirrors ``_d``, in local time)."""
     return fmt_when_ist(value) if value else ''
 
 
@@ -1602,11 +1754,6 @@ def _apply_member_filter(qs, member_id, field='user_id'):
 
     A term that matches nobody filters everything out — exporting the whole
     table because a search found nothing would be worse than an empty file.
-
-    NOTE: dollara's existing _report_users/_report_transactions/etc below keep
-    their original simple `username=member_id` exact-match filtering for this
-    port — this helper (and the richer resolve_player_ids lookup) is added
-    standalone and used by the new _report_casino/_report_sports below.
     """
     if not member_id:
         return qs
@@ -1643,52 +1790,35 @@ class _PlayerIpLookup:
         return self._cache[user_id] or (signup_ip or '')
 
 
-def _sports_category_slugs() -> frozenset:
-    """Admin-managed sports verticals (GameCategory.is_sports), for splitting
-    casino vs sports report rows.
-
-    mahakalworld reads this off a cached ``sports_category_slugs()`` helper in
-    core/repositories.py; dollara's repositories.py has no such cache/
-    invalidation plumbing (out of scope for this port — repositories.py is not
-    one of the files being touched), so this is a local, uncached equivalent.
-    A plain query is cheap enough for report generation, which is not a hot
-    path. Falls back to the historical enum members if no category has been
-    flagged yet.
-    """
-    try:
-        slugs = frozenset(
-            GameCategory.objects.filter(is_sports=True).values_list('slug', flat=True)
-        )
-    except Exception:
-        slugs = frozenset()
-    return slugs or frozenset({Game.Category.SPORTS, Game.Category.VIRTUAL_SPORTS})
-
-
 def _report_users(date_from, date_to, member_id=None):
     qs = User.objects.filter(role=User.Role.USER).select_related(
         'wallet', 'usersetting'
     ).order_by('-created_at')
     if member_id:
-        qs = qs.filter(username=member_id)
+        qs = qs.filter(id__in=resolve_player_ids(member_id))
     if date_from:
         qs = qs.filter(created_at__date__gte=date_from)
     if date_to:
         qs = qs.filter(created_at__date__lte=date_to)
     header = [
-        'ID', 'Username', 'Full name', 'Phone', 'Email', 'Status', 'KYC',
-        'Real balance', 'Bonus balance', 'Registered', 'Last login',
+        'ID', 'Username', 'Full name', 'Phone', 'Status',
+        'Real balance', 'Bonus balance', 'Registered', 'Registered (ITZ)',
+        'Last login', 'Last login (ITZ)', 'Signup IP', 'Last login IP',
     ]
+    ip_for = _PlayerIpLookup()
 
     def rows():
         for u in qs.iterator():
             wallet = getattr(u, 'wallet', None)
             prefs = getattr(u, 'usersetting', None)
             yield [
-                u.id, u.username, u.full_name, u.phone, u.email,
-                u.account_status, prefs.kyc_status if prefs else '',
+                u.id, u.username, u.full_name, u.phone,
+                u.account_status,
                 float(wallet.main_balance) if wallet else 0,
                 float(wallet.bonus_balance) if wallet else 0,
-                _d(u.created_at), _d(u.last_login_at),
+                _d(u.created_at), _d_ist(u.created_at),
+                _d(u.last_login_at), _d_ist(u.last_login_at),
+                u.signup_ip or '', ip_for(u.id, u.signup_ip),
             ]
 
     return header, rows()
@@ -1696,25 +1826,42 @@ def _report_users(date_from, date_to, member_id=None):
 
 def _report_transactions(date_from, date_to, tx_type=None, member_id=None):
     qs = Transaction.objects.select_related('user').order_by('-created_at')
-    if tx_type:
+    # The Deposits and Withdrawals downloads follow the cashier console: a
+    # manual wallet adjustment moves real balance and is filed with that list,
+    # split by the sign of the amount (credit with deposits, debit with
+    # withdrawals). Filtering on type alone dropped those rows, so a credit
+    # that shows on the Deposits page was missing from the Excel.
+    cashier = tx_type in (
+        Transaction.TxType.DEPOSIT, Transaction.TxType.WITHDRAWAL,
+    )
+    if cashier:
+        qs = qs.filter(_cashier_type_filter(tx_type))
+    elif tx_type:
         qs = qs.filter(type=tx_type)
-    if member_id:
-        qs = qs.filter(user__username=member_id)
+    qs = _apply_member_filter(qs, member_id)
     if date_from:
         qs = qs.filter(created_at__date__gte=date_from)
     if date_to:
         qs = qs.filter(created_at__date__lte=date_to)
     header = [
-        'ID', 'User ID', 'Username', 'Type', 'Amount', 'Currency', 'Status',
-        'Method', 'Reference', 'Notes', 'Created',
+        'ID', 'User ID', 'Username', 'Full name', 'IP address', 'Type', 'Amount',
+        'Currency', 'Status', 'Method', 'Reference', 'Notes', 'Created',
+        'Created (ITZ)',
     ]
+    ip_for = _PlayerIpLookup()
 
     def rows():
         for t in qs.iterator():
+            # Adjustments are stored signed. On a cashier export the amount is
+            # the magnitude, matching the Deposits / Withdrawals pages. The
+            # full transactions export keeps the sign.
+            amount = abs(t.amount) if cashier else t.amount
             yield [
-                t.id, t.user_id, t.user.username, t.type, float(t.amount),
+                t.id, t.user_id, t.user.username, t.user.full_name,
+                ip_for(t.user_id, t.user.signup_ip), t.type, float(amount),
                 t.currency, t.status, t.payment_method, t.reference_number,
-                (t.notes or '').replace('\n', ' '), _d(t.created_at),
+                (t.notes or '').replace('\n', ' '),
+                _d(t.created_at), _d_ist(t.created_at),
             ]
 
     return header, rows()
@@ -1724,79 +1871,60 @@ def _report_bet_history(date_from, date_to, member_id=None):
     qs = GameSession.objects.select_related('user', 'game').filter(
         Q(rounds_count__gt=0) | Q(total_bet__gt=0)
     ).order_by('-updated_at')
-    if member_id:
-        qs = qs.filter(user__username=member_id)
+    qs = _apply_member_filter(qs, member_id)
     if date_from:
         qs = qs.filter(created_at__date__gte=date_from)
     if date_to:
         qs = qs.filter(created_at__date__lte=date_to)
     header = [
-        'Session', 'User ID', 'Username', 'Game', 'Category', 'Rounds',
-        'Pending', 'Staked', 'Won', 'P&L', 'Result', 'Started', 'Last played',
+        'Session', 'User ID', 'Username', 'IP address', 'Game', 'Category',
+        'Rounds', 'Pending', 'Staked', 'Won', 'P&L', 'Result', 'Started',
+        'Started (ITZ)', 'Last played', 'Last played (ITZ)',
     ]
+    ip_for = _PlayerIpLookup()
 
     def rows():
         for s in qs.iterator():
             data = game_services.serialize_session(s)
             yield [
-                s.session_uid, s.user_id, s.user.username, s.game_name,
+                s.session_uid, s.user_id, s.user.username,
+                ip_for(s.user_id, s.user.signup_ip), s.game_name,
                 s.game.category if s.game else '', s.rounds_count,
                 s.pending_rounds, float(s.total_bet), float(s.total_win),
-                float(s.profit_loss), data['result'], _d(s.created_at),
-                _d(s.last_played_at),
+                float(s.profit_loss), data['result'],
+                _d(s.created_at), _d_ist(s.created_at),
+                _d(s.last_played_at), _d_ist(s.last_played_at),
             ]
 
     return header, rows()
 
 
 def _report_rounds(date_from, date_to, member_id=None):
-    qs = GameRound.objects.select_related('user', 'game').order_by('-created_at')
-    if member_id:
-        qs = qs.filter(user__username=member_id)
+    qs = GameRound.objects.select_related(
+        'user', 'game', 'game__provider', 'session', 'session__game', 'session__game__provider',
+    ).order_by('-created_at')
+    qs = _apply_member_filter(qs, member_id)
     if date_from:
         qs = qs.filter(created_at__date__gte=date_from)
     if date_to:
         qs = qs.filter(created_at__date__lte=date_to)
     header = [
-        'ID', 'Serial', 'Round', 'User ID', 'Username', 'Game', 'Bet', 'Win',
-        'P&L', 'Balance after', 'Settlement', 'Created',
+        'ID', 'Serial', 'Round', 'User ID', 'Username', 'IP address', 'Game',
+        'Bet', 'Win', 'P&L', 'Balance after', 'Settlement', 'Created',
+        'Created (ITZ)',
     ]
+    ip_for = _PlayerIpLookup()
 
     def rows():
         for r in qs.iterator():
             yield [
                 r.id, r.serial_number, r.game_round, r.user_id, r.user.username,
-                r.game_name or (r.game.name if r.game else ''),
+                ip_for(r.user_id, r.user.signup_ip),
+                game_services.displayed_game(r)[0] or '',
                 float(r.bet_amount), float(r.win_amount),
                 float(r.win_amount - r.bet_amount),
                 float(r.balance_after) if r.balance_after is not None else '',
-                r.settle_status, _d(r.created_at),
-            ]
-
-    return header, rows()
-
-
-def _report_bonuses(date_from, date_to, member_id=None):
-    qs = UserBonus.objects.select_related('user', 'bonus').order_by('-created_at')
-    if member_id:
-        qs = qs.filter(user__username=member_id)
-    if date_from:
-        qs = qs.filter(created_at__date__gte=date_from)
-    if date_to:
-        qs = qs.filter(created_at__date__lte=date_to)
-    header = [
-        'ID', 'User ID', 'Username', 'Bonus', 'Amount', 'Source', 'Status',
-        'Wagering required', 'Wagering done', 'Created',
-    ]
-
-    def rows():
-        for ub in qs.iterator():
-            yield [
-                ub.id, ub.user_id, ub.user.username,
-                (ub.bonus.display_title or ub.bonus.name) if ub.bonus else (ub.notes or ''),
-                float(ub.amount), ub.source, ub.status,
-                float(ub.wagering_required), float(ub.wagering_completed),
-                _d(ub.created_at),
+                r.settle_status, _d(r.created_at), _d_ist(r.created_at),
             ]
 
     return header, rows()
@@ -1807,12 +1935,12 @@ def _report_casino(date_from, date_to, member_id=None):
 
     The sports/casino split is admin-managed data (``game_categories.is_sports``),
     so it is read through the same helper the settlement path uses rather than
-    hardcoded here. Uses the richer ``_apply_member_filter``/``resolve_player_ids``
-    lookup (id / username / phone / full name) rather than dollara's existing
-    reports' plain ``username=member_id`` match.
+    hardcoded here.
     """
-    qs = GameRound.objects.select_related('user', 'game').exclude(
-        game__category__in=_sports_category_slugs()
+    qs = GameRound.objects.select_related(
+        'user', 'game', 'game__provider', 'session', 'session__game', 'session__game__provider',
+    ).exclude(
+        game__category__in=sports_category_slugs()
     ).order_by('-created_at')
     qs = _apply_member_filter(qs, member_id)
     if date_from:
@@ -1828,14 +1956,13 @@ def _report_casino(date_from, date_to, member_id=None):
 
     def rows():
         for r in qs.iterator():
-            game = r.game
-            provider = getattr(game, 'provider', None) if game else None
+            game_name, category, provider = game_services.displayed_game(r)
             yield [
                 r.id, r.game_round, r.user_id, r.user.username,
                 ip_for(r.user_id, r.user.signup_ip),
-                r.game_name or (game.name if game else ''),
-                game.category if game else '',
-                provider.name if provider else '',
+                game_name or '',
+                category or '',
+                provider or '',
                 float(r.bet_amount), float(r.win_amount),
                 float(r.win_amount - r.bet_amount),
                 r.currency, r.settle_status,
@@ -1885,6 +2012,34 @@ def _report_sports(date_from, date_to, member_id=None):
                 -float(b.profit_loss), float(b.commission),
                 b.status, _d(b.placed_at), _d_ist(b.placed_at),
                 _d(b.settled_at), _d_ist(b.settled_at),
+            ]
+
+    return header, rows()
+
+
+def _report_bonuses(date_from, date_to, member_id=None):
+    qs = UserBonus.objects.select_related('user', 'bonus').order_by('-created_at')
+    qs = _apply_member_filter(qs, member_id)
+    if date_from:
+        qs = qs.filter(created_at__date__gte=date_from)
+    if date_to:
+        qs = qs.filter(created_at__date__lte=date_to)
+    header = [
+        'ID', 'User ID', 'Username', 'IP address', 'Bonus', 'Amount', 'Source',
+        'Status', 'Wagering required', 'Wagering done', 'Created',
+        'Created (ITZ)',
+    ]
+    ip_for = _PlayerIpLookup()
+
+    def rows():
+        for ub in qs.iterator():
+            yield [
+                ub.id, ub.user_id, ub.user.username,
+                ip_for(ub.user_id, ub.user.signup_ip),
+                (ub.bonus.display_title or ub.bonus.name) if ub.bonus else (ub.notes or ''),
+                float(ub.amount), ub.source, ub.status,
+                float(ub.wagering_required), float(ub.wagering_completed),
+                _d(ub.created_at), _d_ist(ub.created_at),
             ]
 
     return header, rows()
@@ -1944,12 +2099,6 @@ def _game_statistics(user_id: int) -> tuple[list[dict], list[dict]]:
     ``amount`` is what the provider paid back (for Aura Gaming that is the
     final return value). ``result`` is the player's net: amount − bet, so a
     bet of 300 with amount 200 is result −100.
-
-    NOTE: not currently called from get_user_full_detail below (dollara's
-    version keeps its existing, simpler payload for this port) — added
-    standalone per the port checklist, along with the other player-profile
-    enrichment helpers below it (_received_bonuses, _cashier_rows,
-    _sport_bet_rows, _player_financials). See the port report.
     """
     real_rows = (
         GameRound.objects.filter(user_id=user_id)
@@ -2079,19 +2228,6 @@ def _tx_playable_delta(t: Transaction) -> Decimal | None:
     return None
 
 
-def _wallet_playable(wallet: Wallet | None) -> Decimal:
-    """What the player can actually stake: real money plus bonus credit.
-
-    Local equivalent of mahakalworld's ``WalletRepository.playable`` —
-    dollara's core/repositories.py (not touched by this port) has no such
-    method, so it is inlined here for ``_cashier_rows`` below.
-    """
-    if wallet is None:
-        return Decimal('0')
-    playable = wallet.main_balance + wallet.bonus_balance - wallet.locked_balance
-    return playable if playable > 0 else Decimal('0')
-
-
 def _cashier_rows(user_id: int) -> tuple[list[dict], list[dict], list[dict]]:
     """Deposits, withdrawals and the full transaction ledger for the profile.
 
@@ -2099,7 +2235,7 @@ def _cashier_rows(user_id: int) -> tuple[list[dict], list[dict], list[dict]]:
     rather than three queries over the same rows.
     """
     txs = list(
-        Transaction.objects.filter(user_id=user_id).order_by('-created_at')[:200]
+        Transaction.objects.filter(user_id=user_id).order_by('-created_at')
     )
     provider_names = _payment_provider_names(
         {t.provider_id for t in txs if t.provider_id}
@@ -2109,7 +2245,9 @@ def _cashier_rows(user_id: int) -> tuple[list[dict], list[dict], list[dict]]:
     # Walk newest → oldest from the current playable balance so each history
     # row can show the wallet total available after that credit/debit. Known
     # GameRound.balance_after values re-anchor the walk when present.
-    running = _wallet_playable(Wallet.objects.filter(user_id=user_id).first())
+    running = WalletRepository.playable(
+        Wallet.objects.filter(user_id=user_id).first()
+    )
     wallet_after: dict[int, float | None] = {}
     for t in txs:
         # Only bet settlements are keyed to a GameRound serial; other types may
@@ -2220,22 +2358,32 @@ def _round_game_info(serials: set) -> dict:
             'game_name',
             'game__name',
             'game__provider__name',
+            'session__game_name',
+            'session__game__name',
+            'session__game__provider__name',
             'balance_after',
         )
     )
     return {
         serial: {
-            # The round records the table actually played, which is more
-            # specific than the catalog row for a lobby launch.
-            'game_name': round_game_name or catalog_name,
-            'provider': provider_name,
+            # The round records the table actually played when the callback UID
+            # is in the catalog. A live-table callback that is not in the
+            # catalog keeps the launch session's name instead.
+            'game_name': (
+                round_game_name or catalog_name or session_game_name or session_catalog_name
+            ),
+            'provider': provider_name or session_provider_name,
             # Wallet total recorded when the round settled — authoritative
             # post-transaction balance for bet_settlement ledger rows.
             'balance_after': (
                 float(balance_after) if balance_after is not None else None
             ),
         }
-        for serial, round_game_name, catalog_name, provider_name, balance_after in rows
+        for (
+            serial, round_game_name, catalog_name, provider_name,
+            session_game_name, session_catalog_name, session_provider_name,
+            balance_after,
+        ) in rows
     }
 
 
@@ -2272,6 +2420,8 @@ def _aggregator_sports_detail(payload: dict | None) -> dict:
         return {}
     if not isinstance(inner, dict):
         return {}
+    if isinstance(inner.get('betslip'), dict):
+        return _betslip_sports_detail(inner)
     home = (inner.get('homeName_en') or inner.get('homeName') or '').strip()
     away = (inner.get('awayName_en') or inner.get('awayName') or '').strip()
     selection = (inner.get('betChoice_en') or inner.get('betChoice') or '').strip()
@@ -2281,15 +2431,86 @@ def _aggregator_sports_detail(payload: dict | None) -> dict:
         'sport': inner.get('sportTypeName_en') or inner.get('sportTypeName'),
         'market_name': inner.get('betTypeName_en') or inner.get('betTypeName'),
         'selection_name': selection or None,
-        # Kept only to work out _aggregator_winner() below — the aggregator
-        # never sends an explicit result/winner field, so a two-way market
-        # (both sides named at placement, no draw) is the only case a winner
-        # can be inferred safely, by elimination from the settled outcome.
+        # Shown as Home/Away, and used by _aggregator_winner() below — the
+        # aggregator never sends an explicit result/winner field, so a two-way
+        # market (both sides named at placement, no draw) is the only case a
+        # winner can be inferred safely, by elimination from the settled outcome.
         'home': home or None,
         'away': away or None,
+        'league': inner.get('leagueName_en') or inner.get('leagueName'),
         'odds': inner.get('odds'),
         'placed_at': inner.get('betTime'),
     }
+
+
+def _betslip_sports_detail(inner: dict) -> dict:
+    """Match/market detail from an exchange-style sportsbook (Uni247) stake.
+
+    These send ``{"betslip": {"bets": [...], "k": ...}, "transaction": {...}}``
+    where each bet names its own event, so a multi-selection slip has no single
+    home/away/match — only a single-bet slip fills those columns.
+    """
+    slip = inner['betslip']
+    bets = [b for b in slip.get('bets') or [] if isinstance(b, dict)]
+    txn = inner.get('transaction') if isinstance(inner.get('transaction'), dict) else {}
+
+    placed_at = None
+    stamp = txn.get('timestamp') or slip.get('timestamp')
+    try:
+        if stamp and float(stamp) > 0:
+            placed_at = datetime.fromtimestamp(
+                float(stamp) / 1000, tz=dt_timezone.utc
+            ).isoformat()
+    except (TypeError, ValueError, OverflowError, OSError):
+        placed_at = None
+
+    def text(value):
+        value = str(value).strip() if value is not None else ''
+        return value or None
+
+    sports = {text(b.get('sport_name')) for b in bets} - {None}
+    leagues = {text(b.get('tournament_name')) for b in bets} - {None}
+    detail = {
+        'sport': sports.pop() if len(sports) == 1 else None,
+        'league': leagues.pop() if len(leagues) == 1 else None,
+        'odds': text(slip.get('k')),
+        'placed_at': placed_at,
+    }
+    if len(bets) != 1:
+        selections = [text(b.get('outcome_name')) for b in bets]
+        detail['selection_name'] = ', '.join(s for s in selections if s) or None
+        return detail
+
+    bet = bets[0]
+    backlay = (text(bet.get('backlay')) or '').lower()
+    sides = [text(c) for c in bet.get('competitor_name') or []]
+    home, away = (sides[0], sides[1]) if len(sides) == 2 else (None, None)
+    detail.update({
+        'event_name': f'{home} v {away}' if home and away else None,
+        'event_key': text(bet.get('event_id')),
+        'market_name': text(bet.get('market_name')),
+        'selection_name': text(bet.get('outcome_name')),
+        'home': home,
+        'away': away,
+        'odds': text(bet.get('odds')) or detail['odds'],
+        'side': {'b': 'back', 'back': 'back', 'l': 'lay', 'lay': 'lay'}.get(backlay),
+    })
+    return detail
+
+
+_EVENT_SIDES_RE = re.compile(r'\s+vs?\.?\s+', re.IGNORECASE)
+
+
+def _event_sides(name: str | None) -> tuple[str | None, str | None]:
+    """Home/away out of an exchange event name such as "India A v Australia A".
+
+    The exchange stores only the combined name. Anything that doesn't split
+    into exactly two sides is left blank rather than guessed.
+    """
+    parts = [p.strip() for p in _EVENT_SIDES_RE.split(name or '')]
+    if len(parts) != 2 or not all(parts):
+        return None, None
+    return parts[0], parts[1]
 
 
 def _aggregator_winner(status: str, detail: dict, fallback_selection) -> str | None:
@@ -2300,12 +2521,15 @@ def _aggregator_winner(status: str, detail: dict, fallback_selection) -> str | N
     bet was on one of exactly those two) — anything else (3-way, handicap,
     totals, props) is left blank rather than guessed, since a wrong name here
     is worse than none on a betting ledger.
+
+    A lay bet wins when its selection loses, so the two cases swap for it.
     """
     selection = detail.get('selection_name') or fallback_selection
-    if status == 'won':
-        return selection
-    if status != 'lost':
+    if status not in ('won', 'lost'):
         return None
+    selection_won = (status == 'won') != (detail.get('side') == 'lay')
+    if selection_won:
+        return selection
     home, away = detail.get('home'), detail.get('away')
     sel = (selection or '').strip().lower()
     if not (home and away and sel):
@@ -2333,12 +2557,16 @@ def _sport_bet_rows(user_id: int) -> list[dict]:
         .order_by('-created_at')[:50]
     )
     for b in exchange:
+        home, away = _event_sides(b.event.name if b.event_id else None)
         merged.append({
             'id': b.id,
             'selection_name': b.selection_name,
             'event_name': b.event.name if b.event_id else None,
             'event_key': b.event.event_key if b.event_id else None,
             'sport': b.event.sport if b.event_id else None,
+            'home': home,
+            'away': away,
+            'league': b.event.competition if b.event_id else None,
             'market_name': b.market.name if b.market_id else None,
             # Set by whoever resolves the market — the authoritative result,
             # not a guess. Null until the market settles.
@@ -2349,12 +2577,15 @@ def _sport_bet_rows(user_id: int) -> list[dict]:
             # profit_loss is stored house-signed; the player's P/L is its negative.
             'profit_loss': -float(b.profit_loss),
             'status': b.status,
+            # Exchange bets are placed in-house — no aggregator callback, so
+            # no callback remark to show.
+            'remark': None,
             'placed_at': (b.placed_at or b.created_at).isoformat(),
             'created_at': b.created_at.isoformat(),
             '_sort': b.created_at,
         })
 
-    sports = _sports_category_slugs()
+    sports = sports_category_slugs()
     if sports:
         rounds = list(
             GameRound.objects.select_related('game')
@@ -2362,20 +2593,39 @@ def _sport_bet_rows(user_id: int) -> list[dict]:
             .order_by('-created_at')[:50]
         )
         # The match/market a round was actually placed on lives in the *stake*
-        # callback's raw payload (see _aggregator_sports_detail), keyed by the
-        # round's serial number. mahakalworld additionally falls back through
-        # `stake_serial` for a round whose result callback has since replaced
-        # `serial_number` — dollara's GameRound has no such column yet (see the
-        # port report), so only `serial_number` is used here.
-        lookup_serials = [r.serial_number for r in rounds if r.serial_number]
-        payload_by_serial = dict(
+        # callback's raw payload (see _aggregator_sports_detail), keyed by
+        # whichever serial number was the placement's — stake_serial once a
+        # result callback has taken over serial_number, else serial_number
+        # itself for a round still pending. The result callback (serial_number
+        # once a payout has been folded in) is fetched too, for its remark.
+        # One batched lookup for the page.
+        lookup_serials = {
+            s for r in rounds for s in (r.stake_serial, r.serial_number) if s
+        }
+        payload_by_serial: dict = {}
+        remark_by_serial: dict = {}
+        logs = (
             GameCallbackLog.objects.filter(serial_number__in=lookup_serials)
-            .values_list('serial_number', 'decrypted_payload')
+            .order_by('id')
+            .values_list('serial_number', 'decrypted_payload', 'result', 'message')
         )
+        for serial, payload, result, message in logs:
+            payload_by_serial.setdefault(serial, payload)
+            # A redelivered callback is logged again as 'duplicate'; the remark
+            # worth showing is the one written when it actually moved the
+            # wallet ("bet=100.0 win=0 bal=997.20").
+            if result == GameCallbackLog.Result.SETTLED:
+                remark_by_serial[serial] = message
         for r in rounds:
             pending = r.settle_status == GameRound.SettleStatus.PENDING
             name = r.game_name or (r.game.name if r.game else None)
-            detail = _aggregator_sports_detail(payload_by_serial.get(r.serial_number))
+            stake_serial = r.stake_serial or r.serial_number
+            detail = _aggregator_sports_detail(payload_by_serial.get(stake_serial))
+            # Stake first, then the payout if it came as its own callback.
+            remarks = [
+                remark_by_serial.get(s)
+                for s in dict.fromkeys((stake_serial, r.serial_number))
+            ]
             status = 'pending' if pending else (
                 'won' if r.win_amount > r.bet_amount
                 else ('lost' if r.win_amount < r.bet_amount else 'settled')
@@ -2388,15 +2638,19 @@ def _sport_bet_rows(user_id: int) -> list[dict]:
                 'event_name': detail.get('event_name') or name,
                 'event_key': detail.get('event_key'),
                 'sport': detail.get('sport') or (r.game.category if r.game else None),
+                'home': detail.get('home'),
+                'away': detail.get('away'),
+                'league': detail.get('league'),
                 'market_name': detail.get('market_name') or (r.game.category if r.game else None),
                 'winner': _aggregator_winner(status, detail, name),
-                'side': None,
+                'side': detail.get('side'),
                 'odds': detail.get('odds'),
                 'stake': float(r.bet_amount),
                 'profit_loss': (
                     None if pending else float(r.win_amount - r.bet_amount)
                 ),
                 'status': status,
+                'remark': ' | '.join(m for m in remarks if m) or None,
                 'placed_at': detail.get('placed_at') or r.created_at.isoformat(),
                 'created_at': r.created_at.isoformat(),
                 '_sort': r.created_at,
@@ -2411,15 +2665,22 @@ def _sport_bet_rows(user_id: int) -> list[dict]:
 def _player_financials(user_id: int) -> dict:
     """The money summary in the profile header.
 
-    Deposits and withdrawals count completed transactions only. Gross profit is
+    Deposits and withdrawals count completed transactions only, using the same
+    type filter as the console's Deposits/Withdrawals pages so manual wallet
+    adjustments are included and the two screens agree. Gross profit is
     the player's casino + sportsbook result; net profit is that less what they
     were given in bonuses, which is what the reference's Net Profit column means.
     """
     money = Transaction.objects.filter(
         user_id=user_id, status=Transaction.Status.COMPLETED
     ).aggregate(
-        deposits=Sum('amount', filter=Q(type=Transaction.TxType.DEPOSIT)),
-        withdrawals=Sum('amount', filter=Q(type=Transaction.TxType.WITHDRAWAL)),
+        deposits=Sum(
+            Abs('amount'), filter=_cashier_type_filter(Transaction.TxType.DEPOSIT)
+        ),
+        # Debit adjustments are stored signed; count their magnitude.
+        withdrawals=Sum(
+            Abs('amount'), filter=_cashier_type_filter(Transaction.TxType.WITHDRAWAL)
+        ),
     )
 
     rounds = GameRound.objects.filter(user_id=user_id).aggregate(
@@ -2470,26 +2731,48 @@ def _player_financials(user_id: int) -> dict:
 
 
 def get_user_full_detail(user_id: int) -> dict:
+    """Everything the player profile popup renders: the identity/money header,
+    game statistics, bonuses, the cashier tables and the sportsbook bet history."""
     detail = get_user_detail(user_id)
-    txs = Transaction.objects.filter(user_id=user_id).order_by('-created_at')[:20]
-    # Recent wagers come from the real round events (GameRound), matching the
-    # Bets page — the legacy Bet table is never populated by the live flow.
-    bets = GameRound.objects.select_related('game').filter(user_id=user_id).order_by('-created_at')[:20]
+    detail.update(_player_financials(user_id))
+
+    real_stats, fun_stats = _game_statistics(user_id)
+    detail['game_stats_real'] = real_stats
+    detail['game_stats_fun'] = fun_stats
+
+    detail['received_bonuses'] = _received_bonuses(user_id)
+
+    deposits, withdrawals, history = _cashier_rows(user_id)
+    detail['deposits'] = deposits
+    detail['withdrawals'] = withdrawals
+    detail['transaction_history'] = history
+
+    detail['sport_bets'] = _sport_bet_rows(user_id)
+
+    # Kept for callers that already read these two keys (the older popup and
+    # the agent panel), so widening the payload stays backwards compatible.
     detail['transactions'] = [
         {
-            'id': t.id,
-            'type': t.type,
-            'amount': float(t.amount),
-            'status': t.status,
-            'payment_method': t.payment_method,
-            'created_at': t.created_at.isoformat(),
+            'id': t['id'],
+            'type': t['type'],
+            'amount': t['amount'],
+            'status': t['status'],
+            'payment_method': t['provider'],
+            'created_at': t['created_at'],
         }
-        for t in txs
+        for t in history[:20]
     ]
+    bets = (
+        GameRound.objects.select_related(
+            'game', 'game__provider', 'session', 'session__game', 'session__game__provider',
+        )
+        .filter(user_id=user_id)
+        .order_by('-created_at')[:20]
+    )
     detail['bets'] = [
         {
             'id': b.id,
-            'game_name': b.game_name or (b.game.name if b.game else None),
+            'game_name': game_services.displayed_game(b)[0],
             'bet_amount': float(b.bet_amount),
             'payout': float(b.win_amount),
             'status': (

@@ -25,8 +25,9 @@ from core.affiliate_models import (Affiliate, AffiliateApiKey, AffiliateAuditLog
                                    AffiliateKycDocument, AffiliateLink,
                                    AffiliatePayout, AffiliatePayoutMethod,
                                    AffiliateReferral, AffiliateSupportTicket)
-from core.affiliate_services import (ZERO, _iso, audit, f, get_program_settings,
-                                     inr, money, notify, save_program_settings,
+from core.affiliate_services import (ZERO, _attach_player_identity, _iso, audit,
+                                     f, get_program_settings, inr, money,
+                                     notify, save_program_settings,
                                      serialize_affiliate, serialize_api_key,
                                      serialize_kyc_document,
                                      serialize_ledger_entry, serialize_payout,
@@ -37,6 +38,14 @@ from core.models import User
 from tenants.state import tenant_atomic
 
 logger = logging.getLogger('affiliate')
+
+
+def _window(qs, offset, limit):
+    """``limit is None`` returns every matching row from ``offset``."""
+    start = max(0, int(offset or 0))
+    if limit is None:
+        return qs[start:]
+    return qs[start:start + int(limit)]
 
 
 def _actor_label(admin_id) -> str:
@@ -78,7 +87,7 @@ def _serialize_application(affiliate: Affiliate) -> dict:
     }
 
 
-def list_applications(*, status=None, limit=50, offset=0) -> dict:
+def list_applications(*, status=None, limit=None, offset=0) -> dict:
     qs = Affiliate.objects.select_related('parent')
     if status and status != 'all':
         qs = qs.filter(status=status)
@@ -89,7 +98,7 @@ def list_applications(*, status=None, limit=50, offset=0) -> dict:
                                    Affiliate.Status.INFO_REQUESTED,
                                    Affiliate.Status.REJECTED])
     total = qs.count()
-    rows = qs.order_by('-applied_at', '-created_at')[offset:offset + limit]
+    rows = _window(qs.order_by('-applied_at', '-created_at'), offset, limit)
     return {
         'records': [_serialize_application(a) for a in rows],
         'total': total,
@@ -101,6 +110,31 @@ def list_applications(*, status=None, limit=50, offset=0) -> dict:
                 status=Affiliate.Status.INFO_REQUESTED).count(),
         },
     }
+
+
+def _apply_qualification_terms(affiliate, payload: dict) -> None:
+    """Store the three player-qualification terms. 0 still means inherit."""
+    if payload.get('minDeposit') is not None:
+        amount = money(payload['minDeposit'])
+        if amount < ZERO:
+            raise ValueError('Minimum deposit cannot be negative.')
+        affiliate.min_deposit = amount
+    if payload.get('minRedeposits') is not None:
+        try:
+            count = int(payload['minRedeposits'] or 0)
+        except (TypeError, ValueError):
+            raise ValueError('Minimum redeposits must be a whole number.')
+        if count < 0:
+            raise ValueError('Minimum redeposits cannot be negative.')
+        affiliate.min_redeposits = count
+    if payload.get('qualificationPeriodDays') is not None:
+        try:
+            days = int(payload['qualificationPeriodDays'] or 0)
+        except (TypeError, ValueError):
+            raise ValueError('Qualification period must be a whole number of days.')
+        if days < 0:
+            raise ValueError('Qualification period cannot be negative.')
+        affiliate.qualification_period_days = days
 
 
 def approve_application(affiliate_id: int, admin_id: int, payload: dict) -> dict:
@@ -139,6 +173,7 @@ def approve_application(affiliate_id: int, admin_id: int, payload: dict) -> dict
             affiliate.tier_label = str(payload['tierLabel'])[:20]
         if payload.get('payoutThreshold') is not None:
             affiliate.payout_threshold = money(payload['payoutThreshold'])
+        _apply_qualification_terms(affiliate, payload)
         affiliate.approved_at = timezone.now()
         affiliate.approved_by = admin_id
         affiliate.rejection_reason = None
@@ -197,7 +232,7 @@ def request_application_info(affiliate_id: int, admin_id: int, message: str) -> 
 # ---------------------------------------------------------------------------
 
 def list_affiliates(*, status=None, tier=None, commission_type=None, q=None,
-                    limit=100, offset=0) -> dict:
+                    limit=None, offset=0) -> dict:
     qs = Affiliate.objects.select_related('parent').exclude(
         status__in=[Affiliate.Status.PENDING, Affiliate.Status.REJECTED,
                     Affiliate.Status.INFO_REQUESTED]
@@ -215,7 +250,7 @@ def list_affiliates(*, status=None, tier=None, commission_type=None, q=None,
         )
 
     total = qs.count()
-    rows = list(qs.order_by('-created_at')[offset:offset + limit])
+    rows = list(_window(qs.order_by('-created_at'), offset, limit))
     ids = [a.id for a in rows]
 
     referral_stats = {
@@ -224,14 +259,23 @@ def list_affiliates(*, status=None, tier=None, commission_type=None, q=None,
         .values('affiliate_id').annotate(
             total_players=Count('id'),
             active_players=Count('id', filter=Q(status=AffiliateReferral.Status.ACTIVE)),
+            ftds=Count('id', filter=Q(first_deposit_at__isnull=False)),
             total_deposits=Sum('lifetime_deposits'),
         )
+    } if ids else {}
+    click_counts = {
+        r['affiliate_id']: r['clicks']
+        for r in AffiliateClick.objects.filter(affiliate_id__in=ids)
+        .values('affiliate_id').annotate(clicks=Count('id'))
     } if ids else {}
 
     settings = get_program_settings()
     records = []
     for affiliate in rows:
         stats = referral_stats.get(affiliate.id, {})
+        signups = stats.get('total_players', 0) or 0
+        ftds = stats.get('ftds', 0) or 0
+        clicks = click_counts.get(affiliate.id, 0) or 0
         records.append({
             'id': affiliate.id,
             'code': affiliate.code,
@@ -247,7 +291,11 @@ def list_affiliates(*, status=None, tier=None, commission_type=None, q=None,
             'override_rate': f(override_rate_for(affiliate, settings)),
             'parent_affiliate_id': affiliate.parent_id,
             'parent_name': affiliate.parent.name if affiliate.parent else None,
-            'total_players': stats.get('total_players', 0),
+            'clicks': clicks,
+            'signups': signups,
+            'ftds': ftds,
+            'conversion_rate': round((ftds / clicks) * 100, 1) if clicks else 0.0,
+            'total_players': signups,
             'active_players': stats.get('active_players', 0),
             'total_deposits': f(stats.get('total_deposits') or 0),
             'total_earnings': f(affiliate.total_commission),
@@ -291,10 +339,13 @@ def get_affiliate_detail(affiliate_id: int) -> dict:
         deposits=Sum('lifetime_deposits'),
         ngr=Sum('lifetime_ngr'),
     )
+    signups = agg['signups'] or 0
+    ftds = agg['ftds'] or 0
     detail['stats'] = {
         'clicks': clicks,
-        'signups': agg['signups'] or 0,
-        'ftds': agg['ftds'] or 0,
+        'signups': signups,
+        'ftds': ftds,
+        'conversion_rate': round((ftds / clicks) * 100, 1) if clicks else 0.0,
         'total_deposits': f(agg['deposits'] or 0),
         'total_ngr': f(agg['ngr'] or 0),
         'total_earnings': f(affiliate.total_commission),
@@ -321,12 +372,7 @@ def get_affiliate_detail(affiliate_id: int) -> dict:
     ]
 
     recent = list(referrals.order_by('-attributed_at')[:100])
-    countries = dict(
-        User.objects.filter(id__in=[r.user_id for r in recent])
-        .values_list('id', 'country_code')
-    ) if recent else {}
-    for row in recent:
-        row._country_code = countries.get(row.user_id)
+    _attach_player_identity(recent)
     detail['referred_users'] = [serialize_referral(r) for r in recent]
 
     ledger = AffiliateCommissionLedger.objects.filter(
@@ -392,6 +438,9 @@ def update_affiliate(affiliate_id: int, admin_id: int, payload: dict) -> dict:
         'override_rate': f(affiliate.override_rate),
         'parent_affiliate_id': affiliate.parent_id,
         'tier_label': affiliate.tier_label,
+        'min_deposit': f(affiliate.min_deposit),
+        'min_redeposits': affiliate.min_redeposits,
+        'qualification_period_days': affiliate.qualification_period_days,
     }
 
     if payload.get('commissionType'):
@@ -416,6 +465,7 @@ def update_affiliate(affiliate_id: int, admin_id: int, payload: dict) -> dict:
         affiliate.tier_label = str(payload['tierLabel'])[:20]
     if payload.get('payoutThreshold') is not None:
         affiliate.payout_threshold = money(payload['payoutThreshold'])
+    _apply_qualification_terms(affiliate, payload)
 
     if 'parentAffiliateId' in payload:
         new_parent_id = payload['parentAffiliateId'] or None
@@ -554,12 +604,12 @@ def revoke_affiliate_key(affiliate_id: int, key_id: int, admin_id: int) -> dict:
 # Payout approvals
 # ---------------------------------------------------------------------------
 
-def list_payout_requests(*, status=None, limit=50, offset=0) -> dict:
+def list_payout_requests(*, status=None, limit=None, offset=0) -> dict:
     qs = AffiliatePayout.objects.select_related('affiliate')
     if status and status != 'all':
         qs = qs.filter(status=status)
     total = qs.count()
-    rows = list(qs.order_by('-requested_at', '-created_at')[offset:offset + limit])
+    rows = list(_window(qs.order_by('-requested_at', '-created_at'), offset, limit))
     entry_counts = dict(
         AffiliateCommissionLedger.objects.filter(payout_id__in=[p.id for p in rows])
         .values('payout_id').annotate(n=Count('id')).values_list('payout_id', 'n')
@@ -799,7 +849,7 @@ def clawback_ledger_entry(entry_id: int, admin_id: int, reason: str) -> dict:
 # Fraud, audit and settings
 # ---------------------------------------------------------------------------
 
-def list_fraud_flags(*, status=None, risk_level=None, limit=100, offset=0) -> dict:
+def list_fraud_flags(*, status=None, risk_level=None, limit=None, offset=0) -> dict:
     qs = AffiliateFraudFlag.objects.select_related('affiliate')
     if status and status != 'all':
         qs = qs.filter(status=status)
@@ -822,7 +872,7 @@ def list_fraud_flags(*, status=None, risk_level=None, limit=100, offset=0) -> di
                 'created_at': _iso(row.created_at),
                 'resolved_at': _iso(row.resolved_at),
             }
-            for row in qs.order_by('-created_at')[offset:offset + limit]
+            for row in _window(qs.order_by('-created_at'), offset, limit)
         ],
         'total': total,
         'limit': limit,
@@ -860,7 +910,7 @@ def resolve_fraud_flag(flag_id: int, admin_id: int, *, status, note=None) -> dic
 
 
 def list_audit_log(*, affiliate_id=None, date_from=None, date_to=None,
-                   limit=100, offset=0) -> dict:
+                   limit=None, offset=0) -> dict:
     qs = AffiliateAuditLog.objects.select_related('affiliate')
     if affiliate_id:
         qs = qs.filter(affiliate_id=affiliate_id)
@@ -885,7 +935,7 @@ def list_audit_log(*, affiliate_id=None, date_from=None, date_to=None,
                 'ip': row.ip_address,
                 'created_at': _iso(row.created_at),
             }
-            for row in qs.order_by('-created_at')[offset:offset + limit]
+            for row in _window(qs.order_by('-created_at'), offset, limit)
         ],
         'total': total,
         'limit': limit,
