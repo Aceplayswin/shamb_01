@@ -109,6 +109,40 @@ The drop-in reference the product side was built from lives at
 reuses the exact same `build_signing_string` contract so the two sides cannot
 drift.
 
+## Panel single sign-on (full control)
+
+Super Admin can open every panel a product runs, with full access and no
+password, over the same signed channel:
+
+| Panel | Opens as |
+|-------|----------|
+| `admin` | The product's `__super_admin__` console account: no staff role (full access), no password (cannot be used from the login form). Created on first use and reset to full access on every sign-on, so a product admin cannot restrict or lock it. |
+| `agent` | Any **active** agent |
+| `affiliate` | Any **approved** affiliate (skips their password and 2FA) |
+| `affiliate_manager` | Any **active** manager |
+
+Flow:
+
+1. Console → `POST /api/v1/super-admin/products/<id>/panel-sso` `{panel, account_id}`.
+2. Super Admin → signed `POST {be_url}/api/v1/webhooks/super-admin/sso` (same
+   `X-SA-*` contract as data pulls; the JSON body is covered by the signature).
+   The product checks the account and returns a **60-second ticket** inside
+   `sso_url = <panel URL>/sso#ticket=…`. `GET` on the same path lists the panel URLs.
+3. The console opens `sso_url` in a new tab. The panel's `/sso` page posts the
+   ticket to the public `POST {be_url}/api/v1/sso/exchange` and receives the same
+   payload as that panel's own login, which it stores as usual.
+
+Properties:
+
+- The ticket has no `sub` claim, so it is never accepted as a bearer token. It
+  rides in the URL fragment (never sent to servers) and is wiped from the address bar.
+- The session lasts 8 hours and carries `imp: "super_admin"` and **no** `sid`, so
+  it never signs the real account holder out and does not touch `last_login_at`.
+  Suspending or closing the account still ends it.
+- Panel URLs come from the product's own env: `ADMIN_URL`, `AGENT_URL`,
+  `AFFILIATE_URL`, `AFFILIATE_MANAGER_URL`.
+- Code: product `api/core/super_admin_sso.py`; Super Admin `tenants/views.py:product_panel_sso`.
+
 ## Operational notes
 
 - Set the product's `be_url` (Super Admin → product URLs) before pulling — the

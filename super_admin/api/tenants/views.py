@@ -753,13 +753,6 @@ _DATASETS = {
         'columns': ['id', 'login_id', 'name', 'email', 'phone', 'status',
                     'assigned_affiliates', 'last_login_at', 'created_at'],
     },
-    'ai_call_logs': {
-        'label': 'AI Call Logs',
-        'model': 'core.models.AiCallLog',
-        'order': '-created_at',
-        'columns': ['id', 'user_id', 'voice_executive_id', 'duration_seconds',
-                    'deposit_intent', 'deposit_amount', 'status', 'created_at'],
-    },
     'platform_settings': {
         'label': 'Platform Settings',
         'model': 'core.models.PlatformSetting',
@@ -1160,6 +1153,19 @@ def product_credential_mark_delivered(request, product_id):
 # request/response shapes mirror ``product_data_summary`` / ``product_dataset`` so
 # the frontend can switch sources with minimal change.
 
+def _webhook_error(e: WebhookError):
+    """Relay a product webhook failure to the console.
+
+    A 401/403 from the *product* (bad signature, unknown key) becomes 502: the
+    console treats 401 as "your Super Admin session expired" and logs out,
+    which would be the wrong response to a product-side key problem.
+    """
+    status = e.http_status or 502
+    if status in (401, 403):
+        status = 502
+    return _error(str(e), status)
+
+
 @require_auth(['super_admin'])
 @require_http_methods(['GET'])
 def product_webhook_summary(request, product_id):
@@ -1170,7 +1176,7 @@ def product_webhook_summary(request, product_id):
     try:
         data = call_product(product, 'data.summary')
     except WebhookError as e:
-        return _error(str(e), e.http_status or 502)
+        return _webhook_error(e)
     return JsonResponse(data)
 
 
@@ -1192,7 +1198,51 @@ def product_webhook_dataset(request, product_id, dataset):
     try:
         data = call_product(product, f'data.{dataset}', query=query)
     except WebhookError as e:
-        return _error(str(e), e.http_status or 502)
+        return _webhook_error(e)
+    return JsonResponse(data)
+
+
+# --- Panel single sign-on ---
+# Super Admin opens any of a product's four panels with full access: the admin
+# console (as the product's dedicated unrestricted Super Admin console account)
+# or the agent / affiliate / affiliate-manager panel as a chosen account. The
+# product issues a 60-second ticket over the signed webhook; the console opens
+# the returned ``sso_url`` and the panel redeems it. Product side:
+# api/core/super_admin_sso.py.
+
+_SSO_PANELS = ('admin', 'agent', 'affiliate', 'affiliate_manager')
+
+
+@csrf_exempt
+@require_auth(['super_admin'])
+@require_http_methods(['GET', 'POST'])
+def product_panel_sso(request, product_id):
+    """GET: the product's panel URLs. POST ``{panel, account_id}``: a sign-on URL."""
+    product = Product.objects.filter(id=product_id).first()
+    if not product:
+        return _error('Product not found', 404)
+
+    if request.method == 'GET':
+        try:
+            return JsonResponse(call_product(product, 'sso'))
+        except WebhookError as e:
+            return _webhook_error(e)
+
+    body = _json_body(request)
+    panel = str(body.get('panel') or '').strip()
+    if panel not in _SSO_PANELS:
+        return _error(f"Unknown panel '{panel}'", 400)
+    account_id = body.get('account_id')
+    if panel != 'admin' and not account_id:
+        return _error('account_id is required for this panel', 400)
+
+    payload = {'panel': panel}
+    if panel != 'admin':
+        payload['account_id'] = account_id
+    try:
+        data = call_product(product, 'sso', method='POST', body=payload)
+    except WebhookError as e:
+        return _webhook_error(e)
     return JsonResponse(data)
 
 

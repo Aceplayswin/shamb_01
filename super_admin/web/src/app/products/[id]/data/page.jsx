@@ -1,19 +1,19 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import Swal from 'sweetalert2';
 import {
   ArrowLeft, Box, Loader2, Search, Database, Users, Wallet, ArrowLeftRight,
-  Dice5, Gamepad2, Boxes, Gift, PhoneCall, Settings2, ChevronLeft,
+  Dice5, Gamepad2, Boxes, Gift, Settings2, ChevronLeft,
   ChevronRight, Eye, X, RefreshCw, Wallet2, Coins, Lock, Power, PowerOff,
   Activity, CheckCircle2, XCircle, Clock, ChevronDown, Network, Handshake,
-  UserCog, TrendingDown, HandCoins, BadgeCheck,
+  UserCog, TrendingDown, HandCoins, BadgeCheck, ShieldCheck, ExternalLink, LogIn,
 } from 'lucide-react';
 import {
   getProductWebhookSummary, getProductWebhookDataset, getProductWebhookDeliveries,
-  updateProductGameActive,
+  updateProductGameActive, openProductPanelSso,
 } from '@/services/api';
 import { useTheme } from '../../../providers';
 import DashboardLayout from '../../../components/DashboardLayout';
@@ -41,9 +41,82 @@ const DATASET_ICONS = {
   agents: Network,
   affiliates: Handshake,
   affiliate_managers: UserCog,
-  ai_call_logs: PhoneCall,
   platform_settings: Settings2,
 };
+
+/* Partner datasets whose rows can be opened in their own panel, and which row
+   status the panel accepts (the product refuses anything else with a reason). */
+const ROW_PANELS = {
+  agents: { panel: 'agent', usable: (r) => r.status === 'active', noun: 'agent' },
+  affiliates: { panel: 'affiliate', usable: (r) => r.status === 'approved', noun: 'affiliate' },
+  affiliate_managers: { panel: 'affiliate_manager', usable: (r) => r.status === 'active', noun: 'manager' },
+};
+
+/* The four product panels Super Admin can sign into. `dataset` is where the
+   account is chosen; the admin console needs no account. */
+const PANELS = [
+  {
+    key: 'admin',
+    label: 'Admin Console',
+    icon: ShieldCheck,
+    accent: 'indigo',
+    text: 'Full, unrestricted access to every console page: players, cashier, games, bonuses, agents, affiliates, staff and settings.',
+  },
+  { key: 'agent', label: 'Agent Panel', icon: Network, accent: 'sky', dataset: 'agents', choose: 'Choose agent', text: 'Open the panel as any active agent.' },
+  { key: 'affiliate', label: 'Affiliate Portal', icon: Handshake, accent: 'emerald', dataset: 'affiliates', choose: 'Choose affiliate', text: 'Open the portal as any approved affiliate.' },
+  { key: 'affiliate_manager', label: 'Affiliate Manager Panel', icon: UserCog, accent: 'amber', dataset: 'affiliate_managers', choose: 'Choose manager', text: 'Open the panel as any active manager.' },
+];
+
+/* Sign-on cards. The admin console opens directly; the partner panels jump to
+   their tab, where each row has its own "Open panel" button. */
+function PanelAccess({ datasets, opening, onOpenAdmin, onChoose }) {
+  const counts = Object.fromEntries((datasets || []).map((d) => [d.key, d.count]));
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+      <div className="mb-3">
+        <h2 className="font-display text-sm font-bold text-gray-900 dark:text-white">Panel Access</h2>
+        <p className="text-xs text-gray-400">
+          Sign into any of this product&apos;s panels with full control. Opens in a new tab; the account&apos;s own session is not affected.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {PANELS.map((p) => {
+          const busy = opening === 'admin:' && p.key === 'admin';
+          return (
+            <div key={p.key} className="flex flex-col rounded-lg border border-gray-100 p-4 dark:border-gray-700">
+              <div className="flex items-center gap-2.5">
+                <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${ACCENTS[p.accent]}`}>
+                  <p.icon className="h-4 w-4" />
+                </span>
+                <span className="font-display text-sm font-bold text-gray-900 dark:text-white">{p.label}</span>
+              </div>
+              <p className="mt-2 flex-1 text-xs text-gray-500 dark:text-gray-400">{p.text}</p>
+              {p.key === 'admin' ? (
+                <button
+                  onClick={onOpenAdmin}
+                  disabled={busy}
+                  className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 transition-colors"
+                >
+                  {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+                  Open console
+                </button>
+              ) : (
+                <button
+                  onClick={() => onChoose(p.dataset)}
+                  className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <LogIn className="h-3.5 w-3.5" />
+                  {p.choose}
+                  {counts[p.dataset] != null && <span className="text-gray-400">({counts[p.dataset]})</span>}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 const PAGE_SIZE = 50;
 
@@ -388,10 +461,54 @@ function DataExplorer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  /* Single sign-on into a product panel. The tab is opened inside the click so
+     popup blockers allow it, then pointed at the sign-on URL once the product
+     has issued its 60-second ticket. */
+  const [opening, setOpening] = useState(null);
+  const tableRef = useRef(null);
+  const openPanel = useCallback(async (panel, accountId) => {
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.title = 'Opening panel…';
+      win.document.body.innerHTML =
+        '<p style="font:14px system-ui,sans-serif;color:#64748b;padding:24px">Opening panel…</p>';
+    }
+    setOpening(`${panel}:${accountId ?? ''}`);
+    try {
+      const { sso_url: url } = await openProductPanelSso(id, panel, accountId);
+      if (win) {
+        win.opener = null;
+        win.location.href = url;
+      } else {
+        // Popup blocked: a second, direct click on the link is always allowed.
+        const safeUrl = String(url).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+        swal({
+          icon: 'info',
+          title: 'Panel ready',
+          html: `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:#4f46e5;font-weight:600">Open panel in a new tab</a><br><small>The link works for 60 seconds.</small>`,
+          showConfirmButton: false,
+          showCloseButton: true,
+        });
+      }
+    } catch (e) {
+      win?.close();
+      swal({ icon: 'error', title: 'Could not open panel', text: e.message });
+    } finally {
+      setOpening(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const chooseAccountIn = useCallback((dataset) => {
+    setActive(dataset);
+    tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
   const activeMeta = useMemo(
     () => summary?.datasets?.find((d) => d.key === active),
     [summary, active],
   );
+  const rowPanel = ROW_PANELS[active];
 
   if (summaryLoading) {
     return (
@@ -454,8 +571,16 @@ function DataExplorer() {
         {/* Aggregates */}
         <SummaryCards aggregates={summary.aggregates || {}} />
 
+        {/* Single sign-on into the product's four panels */}
+        <PanelAccess
+          datasets={summary.datasets}
+          opening={opening}
+          onOpenAdmin={() => openPanel('admin')}
+          onChoose={chooseAccountIn}
+        />
+
         {/* Dataset tabs + table */}
-        <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+        <div ref={tableRef} className="scroll-mt-4 rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
           {/* Tab strip */}
           <div className="flex flex-wrap gap-2 border-b border-gray-100 p-3 dark:border-gray-700">
             {summary.datasets.map((d) => {
@@ -520,7 +645,7 @@ function DataExplorer() {
                     {columns.map((c) => (
                       <th key={c} className="whitespace-nowrap px-4 py-3">{humanize(c)}</th>
                     ))}
-                    <th className="px-4 py-3 text-right">{active === 'games' ? 'Actions' : 'View'}</th>
+                    <th className="px-4 py-3 text-right">{active === 'games' || rowPanel ? 'Actions' : 'View'}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -554,6 +679,23 @@ function DataExplorer() {
                               {row.is_active_web ? 'Active' : 'Inactive'}
                             </button>
                           )}
+                          {rowPanel && (() => {
+                            const usable = rowPanel.usable(row);
+                            const busy = opening === `${rowPanel.panel}:${row.id}`;
+                            return (
+                              <button
+                                onClick={() => openPanel(rowPanel.panel, row.id)}
+                                disabled={!usable || busy}
+                                title={usable
+                                  ? `Open the panel as this ${rowPanel.noun}`
+                                  : `Only ${rowPanel.panel === 'affiliate' ? 'approved' : 'active'} accounts can use the panel (this one is ${String(row.status).replace(/_/g, ' ')})`}
+                                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-bold text-indigo-600 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-transparent disabled:text-gray-400 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-400 dark:hover:bg-indigo-950 dark:disabled:border-gray-700 dark:disabled:text-gray-500 transition-colors"
+                              >
+                                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
+                                Open panel
+                              </button>
+                            );
+                          })()}
                           <button
                             onClick={() => setDetailRow(row)}
                             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"

@@ -177,6 +177,14 @@ export const getProductWebhookDataset = (id, dataset, { page = 1, pageSize = 50,
   if (q) params.set('q', q);
   return superAdminApi(`/api/v1/super-admin/products/${id}/data-webhook/${dataset}?${params.toString()}`);
 };
+// Single sign-on into one of the product's panels. Resolves to { sso_url, … };
+// `accountId` is required for every panel except 'admin'.
+export const openProductPanelSso = (id, panel, accountId) =>
+  superAdminApi(`/api/v1/super-admin/products/${id}/panel-sso`, {
+    method: 'POST',
+    body: JSON.stringify(accountId ? { panel, account_id: accountId } : { panel }),
+  });
+
 export const getProductWebhookDeliveries = (id, { limit = 50 } = {}) =>
   superAdminApi(`/api/v1/super-admin/products/${id}/data-webhook/deliveries?limit=${limit}`);
 
