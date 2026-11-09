@@ -8,7 +8,8 @@ import {
   ArrowLeft, Box, Loader2, Search, Database, Users, Wallet, ArrowLeftRight,
   Dice5, Gamepad2, Boxes, Gift, PhoneCall, Settings2, ChevronLeft,
   ChevronRight, Eye, X, RefreshCw, Wallet2, Coins, Lock, Power, PowerOff,
-  Activity, CheckCircle2, XCircle, Clock, ChevronDown,
+  Activity, CheckCircle2, XCircle, Clock, ChevronDown, Network, Handshake,
+  UserCog, TrendingDown, HandCoins, BadgeCheck,
 } from 'lucide-react';
 import {
   getProductWebhookSummary, getProductWebhookDataset, getProductWebhookDeliveries,
@@ -37,6 +38,9 @@ const DATASET_ICONS = {
   games: Gamepad2,
   game_providers: Boxes,
   bonuses: Gift,
+  agents: Network,
+  affiliates: Handshake,
+  affiliate_managers: UserCog,
   ai_call_logs: PhoneCall,
   platform_settings: Settings2,
 };
@@ -73,13 +77,18 @@ function StatusPill({ value }) {
     completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400',
     won: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400',
     verified: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400',
+    approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400',
     pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400',
+    info_requested: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400',
     processing: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
     open: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
     draft: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
     inactive: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
     suspended: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400',
     blocked: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400',
+    locked: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400',
+    closed: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+    none: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
     failed: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400',
     rejected: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400',
     lost: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400',
@@ -87,36 +96,61 @@ function StatusPill({ value }) {
   };
   const cls = map[v] || 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400';
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-[0.6rem] font-bold uppercase ${cls}`}>
-      {value}
+    <span className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[0.6rem] font-bold uppercase ${cls}`}>
+      {String(value).replace(/_/g, ' ')}
     </span>
   );
 }
 
 const STATUS_COLS = new Set(['status', 'account_status', 'kyc_status']);
 
-/* Headline aggregate cards (balances + status breakdowns). */
-function SummaryCards({ aggregates }) {
-  const money = (n) =>
-    new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(n ?? 0);
-  const cards = [
-    { label: 'Main Balance', value: money(aggregates.total_main_balance), icon: Wallet2, accent: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400' },
-    { label: 'Bonus Balance', value: money(aggregates.total_bonus_balance), icon: Coins, accent: 'bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-400' },
-    { label: 'Locked Balance', value: money(aggregates.total_locked_balance), icon: Lock, accent: 'bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400' },
-  ];
+const ACCENTS = {
+  emerald: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400',
+  amber: 'bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-400',
+  indigo: 'bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400',
+  sky: 'bg-sky-100 text-sky-600 dark:bg-sky-950 dark:text-sky-400',
+  rose: 'bg-rose-100 text-rose-600 dark:bg-rose-950 dark:text-rose-400',
+};
+
+function CardRow({ cards, cols }) {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <div className={`grid grid-cols-1 gap-4 ${cols}`}>
       {cards.map((c) => (
         <div key={c.label} className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
           <div className="flex items-start justify-between">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{c.label}</p>
-            <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${c.accent}`}>
+            <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${ACCENTS[c.accent]}`}>
               <c.icon className="h-4 w-4" />
             </span>
           </div>
           <p className="mt-3 text-2xl font-bold text-gray-900 dark:text-white">{c.value}</p>
         </div>
       ))}
+    </div>
+  );
+}
+
+/* Headline aggregate cards (player balances, then partner money). */
+function SummaryCards({ aggregates }) {
+  const money = (n) =>
+    new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(n ?? 0);
+  const players = [
+    { label: 'Main Balance', value: money(aggregates.total_main_balance), icon: Wallet2, accent: 'emerald' },
+    { label: 'Bonus Balance', value: money(aggregates.total_bonus_balance), icon: Coins, accent: 'amber' },
+    { label: 'Locked Balance', value: money(aggregates.total_locked_balance), icon: Lock, accent: 'indigo' },
+  ];
+  // Products that predate the partner datasets don't send these keys.
+  const hasPartners = 'total_agent_balance' in aggregates;
+  const partners = [
+    { label: 'Agent Credit', value: money(aggregates.total_agent_balance), icon: Network, accent: 'sky' },
+    { label: 'Agent Exposure', value: money(aggregates.total_agent_exposure), icon: TrendingDown, accent: 'rose' },
+    { label: 'Affiliate Commission Pending', value: money(aggregates.total_affiliate_pending_commission), icon: HandCoins, accent: 'amber' },
+    { label: 'Affiliate Commission Paid', value: money(aggregates.total_affiliate_paid_commission), icon: BadgeCheck, accent: 'emerald' },
+  ];
+  return (
+    <div className="space-y-4">
+      <CardRow cards={players} cols="sm:grid-cols-3" />
+      {hasPartners && <CardRow cards={partners} cols="sm:grid-cols-2 lg:grid-cols-4" />}
     </div>
   );
 }
@@ -440,7 +474,7 @@ function DataExplorer() {
                   <Icon className="h-3.5 w-3.5" />
                   {d.label}
                   <span className={`rounded-md px-1.5 py-0.5 text-[0.6rem] font-bold ${isActive ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-300'}`}>
-                    {d.count}
+                    {d.count ?? '—'}
                   </span>
                 </button>
               );

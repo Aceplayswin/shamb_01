@@ -724,6 +724,35 @@ _DATASETS = {
                     'value_amount', 'min_deposit', 'wagering_multiplier', 'status',
                     'start_date', 'end_date', 'created_at'],
     },
+    # Partner programmes — webhook only (``model: None``). Super Admin's own
+    # ``core.models`` has no mirror of these tables, so the legacy direct-DB
+    # endpoints skip them; the product serves them over the signed webhook.
+    'agents': {
+        'label': 'Agents',
+        'model': None,
+        'order': '-created_at',
+        'columns': ['id', 'code', 'username', 'name', 'level', 'parent_id',
+                    'commission_rate', 'partnership', 'balance', 'exposure',
+                    'unsettled_pl', 'total_players', 'status', 'contact_phone',
+                    'last_login_at', 'created_at'],
+    },
+    'affiliates': {
+        'label': 'Affiliates',
+        'model': None,
+        'order': '-created_at',
+        'columns': ['id', 'code', 'name', 'email', 'phone', 'company_name',
+                    'parent_id', 'tier_label', 'commission_type',
+                    'commission_rate', 'cpa_amount', 'total_referrals',
+                    'pending_commission', 'paid_commission', 'status',
+                    'kyc_status', 'last_login_at', 'created_at'],
+    },
+    'affiliate_managers': {
+        'label': 'Affiliate Managers',
+        'model': None,
+        'order': '-created_at',
+        'columns': ['id', 'login_id', 'name', 'email', 'phone', 'status',
+                    'assigned_affiliates', 'last_login_at', 'created_at'],
+    },
     'ai_call_logs': {
         'label': 'AI Call Logs',
         'model': 'core.models.AiCallLog',
@@ -740,6 +769,8 @@ _DATASETS = {
 }
 
 _DATASET_ORDER = list(_DATASETS.keys())
+# Datasets the legacy direct-DB explorer can read (it imports ``model`` locally).
+_DIRECT_DB_DATASETS = [k for k in _DATASET_ORDER if _DATASETS[k]['model']]
 _MAX_PAGE_SIZE = 200
 _DEFAULT_PAGE_SIZE = 50
 
@@ -790,7 +821,7 @@ def product_data_summary(request, product_id):
     aggregates = {}
     with use_tenant(str(product.id), alias):
         try:
-            for key in _DATASET_ORDER:
+            for key in _DIRECT_DB_DATASETS:
                 cfg = _DATASETS[key]
                 model = _import_model(cfg['model'])
                 datasets.append({
@@ -844,6 +875,8 @@ def product_dataset(request, product_id, dataset):
     cfg = _DATASETS.get(dataset)
     if not cfg:
         return _error('Unknown dataset', 404)
+    if not cfg['model']:
+        return _error('Dataset is only available over the product webhook', 404)
 
     try:
         page = max(1, int(request.GET.get('page', 1)))
