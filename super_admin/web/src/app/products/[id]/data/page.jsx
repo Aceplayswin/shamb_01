@@ -187,16 +187,16 @@ const ACCENTS = {
 
 function CardRow({ cards, cols }) {
   return (
-    <div className={`grid grid-cols-1 gap-4 ${cols}`}>
+    <div className={`grid grid-cols-2 gap-2 ${cols}`}>
       {cards.map((c) => (
-        <div key={c.label} className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
-          <div className="flex items-start justify-between">
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{c.label}</p>
-            <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${ACCENTS[c.accent]}`}>
-              <c.icon className="h-4 w-4" />
-            </span>
+        <div key={c.label} className="flex min-w-0 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-800">
+          <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${ACCENTS[c.accent]}`}>
+            <c.icon className="h-3.5 w-3.5" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-[11px] font-medium text-gray-500 dark:text-gray-400">{c.label}</p>
+            <p className="truncate text-sm font-bold text-gray-900 dark:text-white">{c.value}</p>
           </div>
-          <p className="mt-3 text-2xl font-bold text-gray-900 dark:text-white">{c.value}</p>
         </div>
       ))}
     </div>
@@ -208,23 +208,21 @@ function SummaryCards({ aggregates }) {
   const money = (n) =>
     new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(n ?? 0);
   const players = [
-    { label: 'Main Balance', value: money(aggregates.total_main_balance), icon: Wallet2, accent: 'emerald' },
-    { label: 'Bonus Balance', value: money(aggregates.total_bonus_balance), icon: Coins, accent: 'amber' },
-    { label: 'Locked Balance', value: money(aggregates.total_locked_balance), icon: Lock, accent: 'indigo' },
+    { label: 'Main', value: money(aggregates.total_main_balance), icon: Wallet2, accent: 'emerald' },
+    { label: 'Bonus', value: money(aggregates.total_bonus_balance), icon: Coins, accent: 'amber' },
+    { label: 'Locked', value: money(aggregates.total_locked_balance), icon: Lock, accent: 'indigo' },
   ];
   // Products that predate the partner datasets don't send these keys.
   const hasPartners = 'total_agent_balance' in aggregates;
   const partners = [
     { label: 'Agent Credit', value: money(aggregates.total_agent_balance), icon: Network, accent: 'sky' },
-    { label: 'Agent Exposure', value: money(aggregates.total_agent_exposure), icon: TrendingDown, accent: 'rose' },
-    { label: 'Affiliate Commission Pending', value: money(aggregates.total_affiliate_pending_commission), icon: HandCoins, accent: 'amber' },
-    { label: 'Affiliate Commission Paid', value: money(aggregates.total_affiliate_paid_commission), icon: BadgeCheck, accent: 'emerald' },
+    { label: 'Exposure', value: money(aggregates.total_agent_exposure), icon: TrendingDown, accent: 'rose' },
+    { label: 'Aff. Pending', value: money(aggregates.total_affiliate_pending_commission), icon: HandCoins, accent: 'amber' },
+    { label: 'Aff. Paid', value: money(aggregates.total_affiliate_paid_commission), icon: BadgeCheck, accent: 'emerald' },
   ];
+  const cards = hasPartners ? [...players, ...partners] : players;
   return (
-    <div className="space-y-4">
-      <CardRow cards={players} cols="sm:grid-cols-3" />
-      {hasPartners && <CardRow cards={partners} cols="sm:grid-cols-2 lg:grid-cols-4" />}
-    </div>
+    <CardRow cards={cards} cols={hasPartners ? 'sm:grid-cols-4 lg:grid-cols-7' : 'sm:grid-cols-3'} />
   );
 }
 
