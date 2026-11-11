@@ -109,39 +109,61 @@ The drop-in reference the product side was built from lives at
 reuses the exact same `build_signing_string` contract so the two sides cannot
 drift.
 
-## Panel single sign-on (full control)
+## Data console (read + write, no panel sign-on)
 
-Super Admin can open every panel a product runs, with full access and no
-password, over the same signed channel:
+Super Admin does **not** sign into a product's panels (admin, agent, affiliate,
+affiliate manager). The earlier panel single sign-on was removed end to end:
+the `panel-sso` endpoint, the product's `sso` webhook and `/sso/exchange`, and
+each panel's `/sso` page. Panel sessions it had already issued (JWTs carrying
+`imp`) are refused by the product's auth middleware.
 
-| Panel | Opens as |
-|-------|----------|
-| `admin` | The product's `__super_admin__` console account: no staff role (full access), no password (cannot be used from the login form). Created on first use and reset to full access on every sign-on, so a product admin cannot restrict or lock it. |
-| `agent` | Any **active** agent |
-| `affiliate` | Any **approved** affiliate (skips their password and 2FA) |
-| `affiliate_manager` | Any **active** manager |
+Instead the console works on the data itself, over the same signed channel:
 
-Flow:
+| Console → Super Admin | Super Admin → product (signed) | Does |
+|---|---|---|
+| `GET …/data-webhook/summary` | `GET …/data/summary` | Counts for every table, money totals, `writable: true` |
+| `GET …/data-webhook/<dataset>?page&page_size&q&sort&dir&filter_<field>` | `GET …/data/<dataset>?…` | One page of any table, with its field schema |
+| `POST …/data-webhook/<dataset>` `{values}` | `POST …/data/<dataset>` | Create a record |
+| `GET …/data-webhook/<dataset>/<id>` | `GET …/data/<dataset>/<id>` | Full record, related rows, available actions |
+| `PATCH …/data-webhook/<dataset>/<id>` `{changes}` | `PATCH …/data/<dataset>/<id>` | Change any fields |
+| `DELETE …/data-webhook/<dataset>/<id>` | `DELETE …/data/<dataset>/<id>` | Delete it |
+| `POST …/data-webhook/<dataset>/<id>/actions/<action>` `{values}` | `POST …/data/<dataset>/<id>/actions/<action>` | Run an action |
 
-1. Console → `POST /api/v1/super-admin/products/<id>/panel-sso` `{panel, account_id}`.
-2. Super Admin → signed `POST {be_url}/api/v1/webhooks/super-admin/sso` (same
-   `X-SA-*` contract as data pulls; the JSON body is covered by the signature).
-   The product checks the account and returns a **60-second ticket** inside
-   `sso_url = <panel URL>/sso#ticket=…`. `GET` on the same path lists the panel URLs.
-3. The console opens `sso_url` in a new tab. The panel's `/sso` page posts the
-   ticket to the public `POST {be_url}/api/v1/sso/exchange` and receives the same
-   payload as that panel's own login, which it stores as usual.
+(`…` is `/api/v1/super-admin/products/<id>` on the console side and
+`{be_url}/api/v1/webhooks/super-admin` on the product side.)
 
-Properties:
+Product side: `api/core/super_admin_data.py` (registry, schema, writes,
+actions) behind `api/core/webhook_views.py`. Super Admin side:
+`tenants/views.py` (`product_webhook_dataset` / `_record` / `_action`), which
+only validate the request shape and relay it. The console renders whatever the
+product sends, so a new table or action needs no Super Admin change.
 
-- The ticket has no `sub` claim, so it is never accepted as a bearer token. It
-  rides in the URL fragment (never sent to servers) and is wiped from the address bar.
-- The session lasts 8 hours and carries `imp: "super_admin"` and **no** `sid`, so
-  it never signs the real account holder out and does not touch `last_login_at`.
-  Suspending or closing the account still ends it.
-- Panel URLs come from the product's own env: `ADMIN_URL`, `AGENT_URL`,
-  `AFFILIATE_URL`, `AFFILIATE_MANAGER_URL`.
-- Code: product `api/core/super_admin_sso.py`; Super Admin `tenants/views.py:product_panel_sso`.
+- **Datasets** are every ORM-backed table of the product, keyed by table name and
+  discovered from Django's app registry. Replay nonces and login challenges are
+  left out; audit trails (`agent_audit_logs`, `affiliate_audit_logs`,
+  `affiliate_api_logs`, `game_callback_logs`) are read-only.
+- **Secrets never leave the product.** `password_hash` is write-only: a new
+  password is hashed by the product and rotates the account's
+  `active_session_id`, signing it out everywhere. Other secret columns
+  (`two_factor_secret`, `aes_secret_key`, `webhook_secret`, …) can be replaced or
+  cleared but are only ever reported as set / not set. `active_session_id` is
+  never exposed; the *Sign out everywhere* action rotates it.
+- **Validation** is each field's own `clean()`: type, choices, length, decimal
+  places, and that a referenced row exists. Refusals come back as HTTP 400 with
+  `{"error", "fields": {name: reason}}`, which Super Admin relays unchanged.
+- **Actions** go through the product's own services so the books stay right:
+  adjust main balance (ledger adjustment row), confirm/reject deposit,
+  approve/reject withdrawal, agent application approval / rejection / credit /
+  status, affiliate application approval / rejection / status, affiliate payout
+  approve / paid / reject, and sign-out. Audit entries name the product's
+  `__super_admin__` account, which has no password and stays inactive, so
+  nobody can sign in as it.
+- **Replay protection for writes.** Every POST / PATCH / DELETE records its
+  `(key_id, nonce)` in `super_admin_webhook_nonces`; the same signed write sent
+  twice is refused with 409. Existing product databases get the table created on
+  the first write.
+- **Audit.** Every request is a row in `webhook_deliveries` here, and the product
+  logs each change with before/after values to `logs/super_admin_data.log`.
 
 ## Operational notes
 

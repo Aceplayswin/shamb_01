@@ -7,6 +7,7 @@ tenant's database context explicitly.
 
 import hmac
 import json
+import re
 import ssl
 import urllib.error
 import urllib.request
@@ -1147,11 +1148,17 @@ def product_credential_mark_delivered(request, product_id):
     return JsonResponse({'id': product.id, 'credential': serialize_credential(cred)})
 
 
-# --- Webhook-based data fetch (PULL) ---
-# Same datasets as the direct-DB explorer, but fetched over the signed webhook
-# instead of opening the tenant database. The product returns the rows. The
-# request/response shapes mirror ``product_data_summary`` / ``product_dataset`` so
-# the frontend can switch sources with minimal change.
+# --- Webhook data console (read + write) ---
+# Every table of a product, read and changed over the signed webhook instead of
+# opening the tenant database. The product owns the list of datasets, their
+# fields and their actions (product api/core/super_admin_data.py), so the
+# console renders whatever it is sent; these views only check the request and
+# relay it. Super Admin does not sign into a product's panels.
+
+# Dataset keys are table names; action keys are snake_case words. Anything else
+# never reaches the product.
+_KEY_RE = re.compile(r'^[a-z][a-z0-9_]{0,63}$')
+
 
 def _webhook_error(e: WebhookError):
     """Relay a product webhook failure to the console.
@@ -1159,11 +1166,49 @@ def _webhook_error(e: WebhookError):
     A 401/403 from the *product* (bad signature, unknown key) becomes 502: the
     console treats 401 as "your Super Admin session expired" and logs out,
     which would be the wrong response to a product-side key problem.
+
+    The product's own refusals (400/404/409: a value it would not accept, a
+    record that is gone, a replayed write) pass through with the product's
+    message and, when it sent them, the fields it refused, so the editor can
+    point at the right inputs.
     """
     status = e.http_status or 502
     if status in (401, 403):
-        status = 502
+        return _error(str(e), 502)
+    if 400 <= status < 500 and e.detail:
+        body = {'error': e.detail}
+        fields = (e.payload or {}).get('fields')
+        if isinstance(fields, dict):
+            body['fields'] = fields
+        return JsonResponse(body, status=status)
     return _error(str(e), status)
+
+
+def _console_body(request) -> dict | None:
+    """The JSON object a console write sent, or ``None`` if it is not one."""
+    try:
+        body = _json_body(request)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    return body if isinstance(body, dict) else None
+
+
+def _dataset_query(request) -> dict:
+    """The list query the product understands: paging, search, sort, filters."""
+    query = {
+        'page': request.GET.get('page', '1'),
+        'page_size': request.GET.get('page_size', str(_DEFAULT_PAGE_SIZE)),
+    }
+    search = (request.GET.get('q') or '').strip()[:200]
+    if search:
+        query['q'] = search
+    if _KEY_RE.match(request.GET.get('sort') or ''):
+        query['sort'] = request.GET['sort']
+        query['dir'] = 'asc' if request.GET.get('dir') == 'asc' else 'desc'
+    for key, value in request.GET.items():
+        if key.startswith('filter_') and _KEY_RE.match(key[len('filter_'):]):
+            query[key] = value[:200]
+    return query
 
 
 @require_auth(['super_admin'])
@@ -1180,67 +1225,76 @@ def product_webhook_summary(request, product_id):
     return JsonResponse(data)
 
 
+@csrf_exempt
 @require_auth(['super_admin'])
-@require_http_methods(['GET'])
+@require_http_methods(['GET', 'POST'])
 def product_webhook_dataset(request, product_id, dataset):
-    """Paginated rows for one dataset, pulled from the product over the webhook."""
+    """GET: one page of a dataset (search, sort, ``filter_<field>``).
+    POST ``{values}``: create a record in it."""
     product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
-    if dataset not in _DATASETS:
+    if not _KEY_RE.match(dataset):
         return _error('Unknown dataset', 404)
-    query = {
-        'page': request.GET.get('page', '1'),
-        'page_size': request.GET.get('page_size', str(_DEFAULT_PAGE_SIZE)),
-    }
-    if request.GET.get('q'):
-        query['q'] = request.GET['q']
     try:
-        data = call_product(product, f'data.{dataset}', query=query)
+        if request.method == 'POST':
+            body = _console_body(request)
+            if body is None or not isinstance(body.get('values'), dict):
+                return _error("Send the new record's values", 400)
+            data = call_product(product, f'data.{dataset}', method='POST',
+                                body={'values': body['values']})
+            return JsonResponse(data, status=201)
+        data = call_product(product, f'data.{dataset}', query=_dataset_query(request))
     except WebhookError as e:
         return _webhook_error(e)
     return JsonResponse(data)
 
 
-# --- Panel single sign-on ---
-# Super Admin opens any of a product's four panels with full access: the admin
-# console (as the product's dedicated unrestricted Super Admin console account)
-# or the agent / affiliate / affiliate-manager panel as a chosen account. The
-# product issues a 60-second ticket over the signed webhook; the console opens
-# the returned ``sso_url`` and the panel redeems it. Product side:
-# api/core/super_admin_sso.py.
-
-_SSO_PANELS = ('admin', 'agent', 'affiliate', 'affiliate_manager')
+@csrf_exempt
+@require_auth(['super_admin'])
+@require_http_methods(['GET', 'PATCH', 'DELETE'])
+def product_webhook_record(request, product_id, dataset, record_id):
+    """One record of a product: GET it in full, PATCH ``{changes}``, or DELETE it."""
+    product = Product.objects.filter(id=product_id).first()
+    if not product:
+        return _error('Product not found', 404)
+    if not _KEY_RE.match(dataset):
+        return _error('Unknown dataset', 404)
+    resource = f'data.{dataset}.{record_id}'
+    try:
+        if request.method == 'PATCH':
+            body = _console_body(request)
+            changes = body.get('changes') if body else None
+            if not isinstance(changes, dict) or not changes:
+                return _error('Nothing to change', 400)
+            data = call_product(product, resource, method='PATCH', body={'changes': changes})
+        elif request.method == 'DELETE':
+            data = call_product(product, resource, method='DELETE')
+        else:
+            data = call_product(product, resource)
+    except WebhookError as e:
+        return _webhook_error(e)
+    return JsonResponse(data)
 
 
 @csrf_exempt
 @require_auth(['super_admin'])
-@require_http_methods(['GET', 'POST'])
-def product_panel_sso(request, product_id):
-    """GET: the product's panel URLs. POST ``{panel, account_id}``: a sign-on URL."""
+@require_http_methods(['POST'])
+def product_webhook_action(request, product_id, dataset, record_id, action):
+    """Run one of a record's actions (confirm a deposit, adjust a balance, …)
+    with ``{values}`` as its inputs."""
     product = Product.objects.filter(id=product_id).first()
     if not product:
         return _error('Product not found', 404)
-
-    if request.method == 'GET':
-        try:
-            return JsonResponse(call_product(product, 'sso'))
-        except WebhookError as e:
-            return _webhook_error(e)
-
-    body = _json_body(request)
-    panel = str(body.get('panel') or '').strip()
-    if panel not in _SSO_PANELS:
-        return _error(f"Unknown panel '{panel}'", 400)
-    account_id = body.get('account_id')
-    if panel != 'admin' and not account_id:
-        return _error('account_id is required for this panel', 400)
-
-    payload = {'panel': panel}
-    if panel != 'admin':
-        payload['account_id'] = account_id
+    if not (_KEY_RE.match(dataset) and _KEY_RE.match(action)):
+        return _error('Unknown action', 404)
+    body = _console_body(request)
+    if body is None:
+        return _error('Send the action inputs as a JSON object', 400)
+    values = body.get('values') if isinstance(body.get('values'), dict) else {}
     try:
-        data = call_product(product, 'sso', method='POST', body=payload)
+        data = call_product(product, f'data.{dataset}.{record_id}.actions.{action}',
+                            method='POST', body={'values': values})
     except WebhookError as e:
         return _webhook_error(e)
     return JsonResponse(data)

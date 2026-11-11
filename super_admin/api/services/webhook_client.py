@@ -1,13 +1,14 @@
-"""Super Admin -> Product signed-webhook client (the PULL data plane).
+"""Super Admin -> Product signed-webhook client (the data plane).
 
 Instead of Super Admin opening a MySQL connection to a product's database, it
 sends an HTTP request to the product's data webhook, signed with the product's
 private key. The product verifies the signature with its public key and returns
-JSON. The product is the only process that ever touches its own database.
+JSON. The product is the only process that ever touches its own database, for
+reads (GET) and for the console's writes (POST / PATCH / DELETE) alike.
 
 Wire contract (mirrors :mod:`services.crypto_keys`):
 
-    GET  {be_url}/api/v1/webhooks/super-admin/data/{resource}?{query}
+    {METHOD}  {be_url}/api/v1/webhooks/super-admin/data/{resource}?{query}
     Headers:
         X-SA-Product:   <product id>
         X-SA-Key-Id:    <credential.key_id>
@@ -55,11 +56,16 @@ class WebhookError(RuntimeError):
     """Raised when a product webhook call fails (network, auth, or product error).
 
     ``http_status`` is the product's HTTP status when there was a response.
+    ``detail`` is the product's own error message and ``payload`` its whole
+    JSON error body (which may say which fields it refused).
     """
 
-    def __init__(self, message: str, *, http_status: int | None = None):
+    def __init__(self, message: str, *, http_status: int | None = None,
+                 detail: str | None = None, payload: dict | None = None):
         super().__init__(message)
         self.http_status = http_status
+        self.detail = detail
+        self.payload = payload
 
 
 def _resource_path(resource: str) -> str:
@@ -119,9 +125,11 @@ def call_product(
     delivery = WebhookDelivery.objects.create(
         product=product,
         credential=credential,
-        resource=resource,
+        # Sized to the columns: a long search or filter must not fail the audit
+        # row (and with it the request).
+        resource=resource[:100],
         request_method=method,
-        request_path=full_path,
+        request_path=full_path[:500],
         nonce=nonce,
         status=WebhookDelivery.Status.PENDING,
     )
@@ -144,10 +152,11 @@ def call_product(
             http_status = resp.status
         data = json.loads(payload) if payload else {}
     except urllib.error.HTTPError as e:
-        detail = _extract_error(e)
+        detail, error_body = _read_error(e)
         _finish(delivery, started, WebhookDelivery.Status.FAILED, e.code, detail)
         raise WebhookError(
-            f'Product webhook returned HTTP {e.code}: {detail}', http_status=e.code
+            f'Product webhook returned HTTP {e.code}: {detail}', http_status=e.code,
+            detail=detail, payload=error_body,
         )
     except urllib.error.URLError as e:
         _finish(delivery, started, WebhookDelivery.Status.FAILED, None, str(e.reason))
@@ -162,12 +171,15 @@ def call_product(
     return data
 
 
-def _extract_error(e: urllib.error.HTTPError) -> str:
+def _read_error(e: urllib.error.HTTPError) -> tuple[str, dict | None]:
+    """The product's error message, and its JSON error body if it sent one."""
     try:
         body = json.loads(e.read())
-        return str(body.get('error') or body.get('detail') or e.reason)
     except Exception:
-        return str(e.reason)
+        return str(e.reason), None
+    if not isinstance(body, dict):
+        return str(e.reason), None
+    return str(body.get('error') or body.get('detail') or e.reason), body
 
 
 def _finish(delivery: WebhookDelivery, started: float, status, http_status, error) -> None:

@@ -45,13 +45,16 @@ urlpatterns = [
     # Game activation control (write): Super Admin flips a game's web visibility
     # directly in the product's tenant DB. Product admins can only add/edit games.
     path('super-admin/products/<int:product_id>/games/<int:game_id>/active', views.product_game_active),
-    # Webhook-based data fetch (PULL): same datasets, fetched over the signed
-    # webhook instead of connecting to the tenant database.
+    # Webhook data console: every table of the product, read and written over
+    # the signed webhook instead of connecting to the tenant database. Super
+    # Admin works on the data here; it has no sign-on into the product's panels.
     path('super-admin/products/<int:product_id>/data-webhook/summary', views.product_webhook_summary),
     path('super-admin/products/<int:product_id>/data-webhook/deliveries', views.product_webhook_deliveries),
     path('super-admin/products/<int:product_id>/data-webhook/<str:dataset>', views.product_webhook_dataset),
-    # Single sign-on into the product's admin / agent / affiliate / manager panels.
-    path('super-admin/products/<int:product_id>/panel-sso', views.product_panel_sso),
+    path('super-admin/products/<int:product_id>/data-webhook/<str:dataset>/<int:record_id>',
+         views.product_webhook_record),
+    path('super-admin/products/<int:product_id>/data-webhook/<str:dataset>/<int:record_id>'
+         '/actions/<str:action>', views.product_webhook_action),
 
     # Public (no auth) — product frontends resolve branding + live theme here,
     # addressed by product id (non-secret; the api_key is never in a URL).

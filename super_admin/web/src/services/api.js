@@ -36,7 +36,11 @@ export async function superAdminApi(path, options = {}) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error ?? 'Request failed');
+    const error = new Error(err.error ?? 'Request failed');
+    error.status = res.status;
+    // Which inputs the product refused, so an editor can mark them.
+    error.fields = err.fields && typeof err.fields === 'object' ? err.fields : null;
+    throw error;
   }
   return res.json();
 }
@@ -168,21 +172,50 @@ export const markCredentialDelivered = (id) =>
     method: 'POST',
   });
 
-// Webhook-based data fetch (PULL) — fetches a product's data over the signed
-// webhook instead of connecting to its tenant database directly.
+// Data console — every table of a product, read and written over the signed
+// webhook (Super Admin never connects to the product's database, and has no
+// sign-on into its panels). The product decides which datasets exist, their
+// fields and their actions; these calls just carry them.
+const dataPath = (id, dataset, recordId) =>
+  `/api/v1/super-admin/products/${id}/data-webhook/${encodeURIComponent(dataset)}` +
+  (recordId != null ? `/${encodeURIComponent(recordId)}` : '');
+
 export const getProductWebhookSummary = (id) =>
   superAdminApi(`/api/v1/super-admin/products/${id}/data-webhook/summary`);
-export const getProductWebhookDataset = (id, dataset, { page = 1, pageSize = 50, q = '' } = {}) => {
+export const getProductWebhookDataset = (
+  id, dataset, { page = 1, pageSize = 50, q = '', sort = null, dir = 'desc', filters = {} } = {},
+) => {
   const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   if (q) params.set('q', q);
-  return superAdminApi(`/api/v1/super-admin/products/${id}/data-webhook/${dataset}?${params.toString()}`);
+  if (sort) {
+    params.set('sort', sort);
+    params.set('dir', dir === 'asc' ? 'asc' : 'desc');
+  }
+  Object.entries(filters || {}).forEach(([field, value]) => {
+    params.set(`filter_${field}`, value === null ? '__null__' : String(value));
+  });
+  return superAdminApi(`${dataPath(id, dataset)}?${params.toString()}`);
 };
-// Single sign-on into one of the product's panels. Resolves to { sso_url, … };
-// `accountId` is required for every panel except 'admin'.
-export const openProductPanelSso = (id, panel, accountId) =>
-  superAdminApi(`/api/v1/super-admin/products/${id}/panel-sso`, {
+// One full record: every readable field, which write-only fields are set, what
+// points at it, and the actions it offers.
+export const getProductRecord = (id, dataset, recordId) =>
+  superAdminApi(dataPath(id, dataset, recordId));
+export const updateProductRecord = (id, dataset, recordId, changes) =>
+  superAdminApi(dataPath(id, dataset, recordId), {
+    method: 'PATCH',
+    body: JSON.stringify({ changes }),
+  });
+export const createProductRecord = (id, dataset, values) =>
+  superAdminApi(dataPath(id, dataset), {
     method: 'POST',
-    body: JSON.stringify(accountId ? { panel, account_id: accountId } : { panel }),
+    body: JSON.stringify({ values }),
+  });
+export const deleteProductRecord = (id, dataset, recordId) =>
+  superAdminApi(dataPath(id, dataset, recordId), { method: 'DELETE' });
+export const runProductRecordAction = (id, dataset, recordId, action, values = {}) =>
+  superAdminApi(`${dataPath(id, dataset, recordId)}/actions/${encodeURIComponent(action)}`, {
+    method: 'POST',
+    body: JSON.stringify({ values }),
   });
 
 export const getProductWebhookDeliveries = (id, { limit = 50 } = {}) =>
