@@ -25,6 +25,75 @@ logger = logging.getLogger('paygate')
 
 MIN_GATEWAY_DEPOSIT = Decimal('100')
 GATEWAY_CHANNEL = 'paygate'
+P2PPAY_CHANNEL = 'p2ppay'
+
+
+# --- Gateway registry ------------------------------------------------------
+# What the deposit page's picker offers. `flow` tells the web app how to run
+# checkout: 'widget' = open the Razorpay popup with the returned payload,
+# 'redirect' = send the player to the returned checkoutUrl.
+
+
+def _gateway_catalog() -> dict:
+    from core import p2ppay
+
+    pg = getattr(settings, 'PAYGATE', {}) or {}
+    p2p = getattr(settings, 'P2PPAY', {}) or {}
+    return {
+        GATEWAY_CHANNEL: {
+            'code': GATEWAY_CHANNEL,
+            'name': pg.get('LABEL') or 'Instant checkout',
+            'description': pg.get('DESCRIPTION') or 'Pay in a secure checkout window',
+            'flow': 'widget',
+            'icon': 'card',
+            'configured': bool(
+                str(pg.get('KEY_ID') or '').strip() and str(pg.get('KEY_SECRET') or '').strip()
+            ),
+        },
+        P2PPAY_CHANNEL: {
+            'code': P2PPAY_CHANNEL,
+            'name': p2p.get('LABEL') or 'UPI / Bank transfer',
+            'description': p2p.get('DESCRIPTION')
+            or 'Pay from your UPI app or bank, then enter the UTR',
+            'flow': 'redirect',
+            'icon': 'upi',
+            'configured': p2ppay.is_configured(),
+        },
+    }
+
+
+def available_gateways() -> list[dict]:
+    """Configured gateways in DEPOSIT_GATEWAYS order (no secrets)."""
+    catalog = _gateway_catalog()
+    out = []
+    for code in getattr(settings, 'DEPOSIT_GATEWAYS', [GATEWAY_CHANNEL]):
+        entry = catalog.get(code)
+        if not entry or not entry['configured'] or any(g['code'] == code for g in out):
+            continue
+        out.append(
+            {
+                'code': entry['code'],
+                'name': entry['name'],
+                'description': entry['description'],
+                'flow': entry['flow'],
+                'icon': entry['icon'],
+                'minAmount': float(MIN_GATEWAY_DEPOSIT),
+            }
+        )
+    return out
+
+
+def resolve_gateway(code: str | None) -> str:
+    """The gateway to use for a checkout: the one asked for, else the first."""
+    available = [g['code'] for g in available_gateways()]
+    if not available:
+        raise PaygateError('No payment method is available right now.', status=503)
+    if not code:
+        return available[0]
+    wanted = str(code).strip().lower()
+    if wanted not in available:
+        raise ValueError('That payment method is not available. Please choose another.')
+    return wanted
 
 
 def _notes(tx: Transaction) -> dict:
@@ -216,6 +285,8 @@ def start_checkout(
 
     return {
         'success': True,
+        'gateway': GATEWAY_CHANNEL,
+        'flow': 'widget',
         'transactionId': tx.id,
         'orderId': order_id,
         'checkout': checkout,
@@ -337,6 +408,10 @@ def abandon_checkout(user_id: int, transaction_id: int) -> dict:
 def _refresh_from_gateway(tx: Transaction) -> Transaction:
     if tx.status != Transaction.Status.PROCESSING:
         return tx
+    if _notes(tx).get('channel') == P2PPAY_CHANNEL:
+        from core import deposit_p2ppay
+
+        return deposit_p2ppay.refresh(tx)
     merchant_order_id = _order_id_for(tx)
     try:
         live = paygate.get_order_status(merchant_order_id)
@@ -362,6 +437,7 @@ def get_checkout_status(user_id: int, transaction_id: int) -> dict:
     notes = _notes(tx)
     return {
         'success': True,
+        'gateway': notes.get('channel') or tx.payment_method or GATEWAY_CHANNEL,
         'transactionId': tx.id,
         'orderId': _order_id_for(tx),
         'amount': float(tx.amount),
@@ -391,6 +467,10 @@ def handle_callback(order_id: str | None, status: str | None, utr: str | None = 
             tx = None
     logger.info('paygate-callback order=%s status=%s utr=%s', order_id, status, utr or '-')
     if tx is None:
+        return {'received': True}
+    # This callback is unsigned; P2P·PAY deposits settle only through their
+    # own signed webhook or a GET /orders lookup.
+    if _notes(tx).get('channel') == P2PPAY_CHANNEL:
         return {'received': True}
     if str(status or '').upper() == 'SUCCESS':
         _queue_for_admin_if_needed(tx, utr=str(utr) if utr else None)

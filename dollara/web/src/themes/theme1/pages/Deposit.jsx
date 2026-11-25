@@ -1,24 +1,43 @@
 'use client';
 
-// Deposit — amount, then Paygate checkout (Razorpay widget). Payment success
-// queues the deposit for admin approval; the wallet is credited only then.
+// Deposit — amount, then pick a payment gateway and pay (Paygate's checkout
+// popup, or P2P·PAY's hosted UPI / bank page). Payment success queues the
+// deposit for admin approval; the wallet is credited only then.
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Check, Clock, Loader2, X } from 'lucide-react';
+import { Check, Clock, CreditCard, Loader2, Lock, Smartphone, X } from 'lucide-react';
 import { api } from '@/services/api';
 import { useAuthStore } from '@/store/auth';
 import { usePaygateDeposit } from '@/hooks/usePaygateDeposit';
+import { useDepositGateways } from '@/hooks/useDepositGateways';
 
 const MIN_DEPOSIT = 100;
 const QUICK_AMOUNTS = [500, 1000, 2500, 5000, 10000];
 const STEPS = ['Amount', 'Payment'];
+const GATEWAY_ICONS = { card: CreditCard, upi: Smartphone };
 
 export default function Theme1Deposit() {
   const router = useRouter();
   const { token, isHydrated, hydrate } = useAuthStore();
-  const { pay, paying, error: payError, receipt, reset: resetPay } = usePaygateDeposit();
+  const {
+    pay,
+    paying,
+    redirecting,
+    resuming,
+    error: payError,
+    receipt,
+    reset: resetPay,
+  } = usePaygateDeposit();
+  const {
+    gateways,
+    selected: gateway,
+    selectedGateway,
+    setSelected: setGateway,
+    loading: gatewaysLoading,
+    error: gatewaysError,
+  } = useDepositGateways(Boolean(token));
 
   const [step, setStep] = useState('amount');
   const [amount, setAmount] = useState('');
@@ -60,9 +79,10 @@ export default function Theme1Deposit() {
   const stepIndex = { amount: 0, pay: 1, done: 1 }[step];
 
   const startPay = async () => {
+    if (!gateway) return;
     setError(null);
     try {
-      await pay({ amount: numAmount });
+      await pay({ amount: numAmount, gateway });
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Could not start payment';
       if (/log in again|unauthorized/i.test(msg)) {
@@ -82,18 +102,27 @@ export default function Theme1Deposit() {
 
   if (!isHydrated || !token || !pendingChecked) return null;
 
-  const formLocked = hasPending && step !== 'done';
+  const formLocked = hasPending && step !== 'done' && !resuming && !receipt;
   const bannerError = error || (step !== 'done' ? payError : null);
+  const showForm = !formLocked && !resuming && !receipt;
 
   return (
     <main className="mx-auto max-w-xl flex-1 px-4 py-8">
       <h1 className="text-2xl font-bold">Deposit</h1>
-      {!formLocked && step !== 'done' && <Stepper steps={STEPS} current={stepIndex} />}
+      {showForm && step !== 'done' && <Stepper steps={STEPS} current={stepIndex} />}
 
       {bannerError && (
         <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
           {bannerError}
         </p>
+      )}
+
+      {resuming && (
+        <section className="card-glass mt-6 p-8 text-center">
+          <Loader2 className="mx-auto h-10 w-10 animate-spin text-brand-400" />
+          <p className="mt-4 text-lg font-semibold">Checking your payment…</p>
+          <p className="mt-1 text-sm text-slate-400">This only takes a moment.</p>
+        </section>
       )}
 
       {formLocked && (
@@ -113,7 +142,7 @@ export default function Theme1Deposit() {
         </section>
       )}
 
-      {!formLocked && step === 'amount' && (
+      {showForm && step === 'amount' && (
         <div className="mt-6 space-y-6">
           <section className="card-glass p-6">
             <label className="text-sm text-slate-400">Enter amount</label>
@@ -156,12 +185,16 @@ export default function Theme1Deposit() {
         </div>
       )}
 
-      {!formLocked && step === 'pay' && (
+      {showForm && step === 'pay' && (
         <div className="mt-6 space-y-6">
           <section className="card-glass flex items-center justify-between p-5">
             <div>
               <p className="text-sm font-semibold">Secure checkout</p>
-              <p className="text-xs text-slate-500">Pay ₹{numAmount.toLocaleString('en-IN')}</p>
+              <p className="text-xs text-slate-500">
+                {selectedGateway
+                  ? `Pay ₹${numAmount.toLocaleString('en-IN')} with ${selectedGateway.name}`
+                  : `Pay ₹${numAmount.toLocaleString('en-IN')}`}
+              </p>
             </div>
             <span className="text-lg font-bold text-gradient-gold">
               ₹{numAmount.toLocaleString('en-IN')}
@@ -171,26 +204,49 @@ export default function Theme1Deposit() {
           {paying ? (
             <section className="card-glass p-8 text-center">
               <Loader2 className="mx-auto h-10 w-10 animate-spin text-brand-400" />
-              <p className="mt-4 text-lg font-semibold">Opening secure payment…</p>
+              <p className="mt-4 text-lg font-semibold">
+                {redirecting ? 'Taking you to the payment page…' : 'Opening secure payment…'}
+              </p>
               <p className="mt-1 text-sm text-slate-400">Do not close this window.</p>
             </section>
           ) : (
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setStep('amount')}
-                className="flex-1 rounded-xl border border-white/15 py-4 text-sm font-semibold text-white transition hover:bg-white/5"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={startPay}
-                className="flex-[2] rounded-xl bg-brand-500 py-4 font-semibold text-surface-900 transition hover:bg-brand-400"
-              >
-                Pay ₹{numAmount.toLocaleString('en-IN')}
-              </button>
-            </div>
+            <>
+              <GatewayPicker
+                gateways={gateways}
+                selected={gateway}
+                onSelect={setGateway}
+                loading={gatewaysLoading}
+                error={gatewaysError}
+              />
+
+              <div>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setStep('amount')}
+                    className="flex-1 rounded-xl border border-white/15 py-4 text-sm font-semibold text-white transition hover:bg-white/5"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={startPay}
+                    disabled={!gateway}
+                    className="flex-[2] rounded-xl bg-brand-500 py-4 font-semibold text-surface-900 transition hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Pay ₹{numAmount.toLocaleString('en-IN')}
+                  </button>
+                </div>
+                {selectedGateway && (
+                  <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-slate-500">
+                    <Lock className="h-3.5 w-3.5" />
+                    {selectedGateway.flow === 'redirect'
+                      ? 'You will finish paying on a secure page, then come back here.'
+                      : 'A secure checkout window will open.'}
+                  </p>
+                )}
+              </div>
+            </>
           )}
         </div>
       )}
@@ -259,6 +315,71 @@ export default function Theme1Deposit() {
         </div>
       )}
     </main>
+  );
+}
+
+function GatewayPicker({ gateways, selected, onSelect, loading, error }) {
+  if (loading) {
+    return (
+      <section className="card-glass flex items-center gap-3 p-5 text-sm text-slate-400">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading payment methods…
+      </section>
+    );
+  }
+  if (error || gateways.length === 0) {
+    return (
+      <section className="card-glass p-5 text-sm text-slate-400">
+        {error || 'No payment methods are available right now. Please try again later.'}
+      </section>
+    );
+  }
+  return (
+    <section className="card-glass p-5">
+      <p id="gateway-label" className="text-sm font-semibold">
+        Choose payment method
+      </p>
+      <div role="radiogroup" aria-labelledby="gateway-label" className="mt-3 space-y-2">
+        {gateways.map((g) => {
+          const Icon = GATEWAY_ICONS[g.icon] ?? CreditCard;
+          const active = g.code === selected;
+          return (
+            <button
+              key={g.code}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => onSelect(g.code)}
+              className={`flex w-full items-center gap-3 rounded-xl border p-4 text-left transition ${
+                active
+                  ? 'border-brand-500 bg-brand-500/10'
+                  : 'border-white/10 hover:border-white/25 hover:bg-white/[0.03]'
+              }`}
+            >
+              <span
+                className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${
+                  active ? 'bg-brand-500 text-surface-900' : 'bg-surface-700 text-slate-300'
+                }`}
+              >
+                <Icon className="h-5 w-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-white">{g.name}</span>
+                {g.description && (
+                  <span className="mt-0.5 block text-xs text-slate-400">{g.description}</span>
+                )}
+              </span>
+              <span
+                className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 ${
+                  active ? 'border-brand-500' : 'border-white/25'
+                }`}
+              >
+                {active && <span className="h-2.5 w-2.5 rounded-full bg-brand-500" />}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

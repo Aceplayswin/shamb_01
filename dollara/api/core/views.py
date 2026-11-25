@@ -18,11 +18,13 @@ from core import (
     admin_services,
     bonus_services,
     deposit_gateway,
+    deposit_p2ppay,
     game_admin_services,
     game_logging,
     game_services,
     services,
 )
+from core.p2ppay import P2PPayError
 from core.paygate import PaygateError
 from core.ai import chat_respond, fraud_score, welcome_call
 from core.game_services import GameError
@@ -467,24 +469,44 @@ def wallet_deposit_proof(request):
         return _error_response(e)
 
 
+@require_auth(['user'])
+@require_http_methods(['GET'])
+def wallet_deposit_gateways(request):
+    """Payment gateways the player can choose from on the deposit page."""
+    return JsonResponse(deposit_gateway.available_gateways(), safe=False)
+
+
 @csrf_exempt
 @require_auth(['user'])
 @require_http_methods(['POST'])
 def wallet_deposit_checkout(request):
-    """Create a Paygate order and return the Razorpay checkout payload."""
+    """Start a gateway deposit with the gateway the player picked.
+
+    Paygate answers flow='widget' with the Razorpay checkout payload; P2P·PAY
+    answers flow='redirect' with the hosted checkoutUrl.
+    """
     try:
         body = _json_body(request)
-        result = deposit_gateway.start_checkout(
-            request.auth.sub,
-            body.get('amount'),
-            payment_method=body.get('paymentMethod') or body.get('payment_method'),
+        gateway = deposit_gateway.resolve_gateway(body.get('gateway'))
+        common = dict(
             affiliate_ref=body.get('affiliateRef'),
             affiliate_sub=body.get('affiliateSub'),
             affiliate_click_id=body.get('affiliateClickId'),
             client_ip=get_client_ip(request),
         )
+        if gateway == deposit_p2ppay.GATEWAY_CODE:
+            result = deposit_p2ppay.start_checkout(
+                request.auth.sub, body.get('amount'), **common
+            )
+        else:
+            result = deposit_gateway.start_checkout(
+                request.auth.sub,
+                body.get('amount'),
+                payment_method=body.get('paymentMethod') or body.get('payment_method'),
+                **common,
+            )
         return JsonResponse(result, status=201)
-    except PaygateError as e:
+    except (PaygateError, P2PPayError) as e:
         return JsonResponse({'error': str(e)}, status=e.status)
     except Transaction.DoesNotExist:
         return _error_response(ValueError('Deposit not found'), 404)
@@ -576,6 +598,27 @@ def wallet_deposit_paygate_callback(request):
     status = (payload.get('status') if payload else None) or request.GET.get('status')
     utr = (payload.get('utr') if payload else None) or request.GET.get('utr')
     return JsonResponse(deposit_gateway.handle_callback(order_id, status, utr))
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def wallet_deposit_p2ppay_webhook(request):
+    """P2P·PAY server-to-server notice (order.success / failed / expired / updated).
+
+    Authenticated by x-p2p-signature over the raw body, not JWT. Set this URL
+    in the P2P·PAY Client panel → API & Webhooks. A non-2xx makes P2P·PAY
+    retry (1, 5, 15, 60 min, 6 h), so only real failures answer 5xx.
+    """
+    try:
+        status = deposit_p2ppay.handle_webhook(
+            request.body,
+            request.headers.get('x-p2p-timestamp', ''),
+            request.headers.get('x-p2p-signature', ''),
+        )
+    except Exception:
+        logger.exception('p2ppay-webhook handling failed')
+        status = 500
+    return HttpResponse(status=status)
 
 
 # Admin-only: crediting a deposit is a product-admin action. The public deposit

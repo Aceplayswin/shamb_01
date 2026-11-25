@@ -286,7 +286,41 @@ PAYGATE = {
     'KEY_SECRET': os.getenv('PAYGATE_KEY_SECRET', ''),
     'PROVIDER': os.getenv('PAYGATE_PROVIDER', 'razorpay'),
     'HTTP_TIMEOUT': int(os.getenv('PAYGATE_HTTP_TIMEOUT', '30')),
+    # Player-facing name/description on the deposit page's gateway picker.
+    'LABEL': os.getenv('PAYGATE_LABEL', 'Instant checkout'),
+    'DESCRIPTION': os.getenv('PAYGATE_DESCRIPTION', 'Pay in a secure checkout window'),
 }
+
+# P2P·PAY — UPI / bank-transfer deposits through its hosted checkout page.
+# The server signs each order (secret never leaves this API), the player is
+# redirected to the returned checkoutUrl, and P2P·PAY reports the result to
+# /api/v1/wallet/deposit/p2ppay-webhook (set that URL in the P2P·PAY Client
+# panel → API & Webhooks). Sandbox keys are pk_test_/sk_test_, live pk_live_/sk_live_.
+P2PPAY = {
+    'API_URL': os.getenv('P2PPAY_API_URL', 'https://pg.democheck.xyz/api/v1').rstrip('/'),
+    'PUBLIC_KEY': os.getenv('P2PPAY_PUBLIC_KEY', ''),
+    'SECRET': os.getenv('P2PPAY_SECRET', ''),
+    # clientRef = "<prefix>-<transaction id>". clientRef must be unique per
+    # P2P·PAY account, so products sharing one account need distinct prefixes.
+    'REF_PREFIX': os.getenv('P2PPAY_REF_PREFIX', 'P2P'),
+    # P2P·PAY SUCCESS means the money was received and confirmed. By default the
+    # deposit still waits for admin approval like every other deposit; set true
+    # to credit the wallet as soon as the gateway confirms.
+    'AUTO_CREDIT': os.getenv('P2PPAY_AUTO_CREDIT', '').lower() in ('1', 'true', 'yes'),
+    'HTTP_TIMEOUT': int(os.getenv('P2PPAY_HTTP_TIMEOUT', '30')),
+    'LABEL': os.getenv('P2PPAY_LABEL', 'UPI / Bank transfer'),
+    'DESCRIPTION': os.getenv(
+        'P2PPAY_DESCRIPTION', 'Pay from your UPI app or bank, then enter the UTR'
+    ),
+}
+
+# Deposit gateways offered on the deposit page, in display order. A gateway is
+# shown only when it is listed here AND its keys are configured.
+DEPOSIT_GATEWAYS = [
+    code.strip().lower()
+    for code in os.getenv('DEPOSIT_GATEWAYS', 'paygate,p2ppay').split(',')
+    if code.strip()
+]
 # The partner portal. Needed server-side because sub-affiliate invite links are
 # built by the API and point at that portal's apply form.
 AFFILIATE_URL = os.getenv('AFFILIATE_URL', '').rstrip('/') or 'http://localhost:3003'
