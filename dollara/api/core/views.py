@@ -18,6 +18,7 @@ from core import (
     admin_services,
     bonus_services,
     deposit_gateway,
+    deposit_manual,
     deposit_p2ppay,
     game_admin_services,
     game_logging,
@@ -472,8 +473,37 @@ def wallet_deposit_proof(request):
 @require_auth(['user'])
 @require_http_methods(['GET'])
 def wallet_deposit_gateways(request):
-    """Payment gateways the player can choose from on the deposit page."""
+    """Payment options on the deposit page, each flagged `available`."""
     return JsonResponse(deposit_gateway.available_gateways(), safe=False)
+
+
+@csrf_exempt
+@require_auth(['user'])
+@require_http_methods(['POST'])
+def wallet_deposit_manual(request):
+    """Manual deposit: UTR + screenshot (uploaded first via /deposit/proof).
+
+    Queues a PENDING deposit for an admin to verify; nothing is credited.
+    """
+    try:
+        body = _json_body(request)
+        result = deposit_manual.submit(
+            request.auth.sub,
+            body.get('amount'),
+            body.get('paymentMethod') or body.get('payment_method'),
+            body.get('referenceNumber') or body.get('utr'),
+            body.get('paymentProofUrl') or body.get('payment_proof_url'),
+            affiliate_ref=body.get('affiliateRef'),
+            affiliate_sub=body.get('affiliateSub'),
+            affiliate_click_id=body.get('affiliateClickId'),
+            client_ip=get_client_ip(request),
+        )
+        return JsonResponse(result, status=201)
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as e:
+        return _error_response(e)
+    except Exception as e:
+        logger.exception('manual deposit failed')
+        return _error_response(e)
 
 
 @csrf_exempt

@@ -287,7 +287,7 @@ PAYGATE = {
     'PROVIDER': os.getenv('PAYGATE_PROVIDER', 'razorpay'),
     'HTTP_TIMEOUT': int(os.getenv('PAYGATE_HTTP_TIMEOUT', '30')),
     # Player-facing name/description on the deposit page's gateway picker.
-    'LABEL': os.getenv('PAYGATE_LABEL', 'Instant checkout'),
+    'LABEL': os.getenv('PAYGATE_LABEL', 'Instant Checkout'),
     'DESCRIPTION': os.getenv('PAYGATE_DESCRIPTION', 'Pay in a secure checkout window'),
 }
 
@@ -308,17 +308,28 @@ P2PPAY = {
     # to credit the wallet as soon as the gateway confirms.
     'AUTO_CREDIT': os.getenv('P2PPAY_AUTO_CREDIT', '').lower() in ('1', 'true', 'yes'),
     'HTTP_TIMEOUT': int(os.getenv('P2PPAY_HTTP_TIMEOUT', '30')),
-    'LABEL': os.getenv('P2PPAY_LABEL', 'UPI / Bank transfer'),
+    'LABEL': os.getenv('P2PPAY_LABEL', 'UPI / Bank Transfer'),
     'DESCRIPTION': os.getenv(
         'P2PPAY_DESCRIPTION', 'Pay from your UPI app or bank, then enter the UTR'
     ),
 }
 
-# Deposit gateways offered on the deposit page, in display order. A gateway is
-# shown only when it is listed here AND its keys are configured.
+# Manual deposit: the player pays into an account from Backoffice → Payment
+# Methods, then submits the UTR + a screenshot for an admin to verify.
+MANUAL_DEPOSIT = {
+    'LABEL': os.getenv('MANUAL_DEPOSIT_LABEL', 'Manual Payment'),
+    'DESCRIPTION': os.getenv(
+        'MANUAL_DEPOSIT_DESCRIPTION',
+        'Pay to our account, then submit the UTR and a screenshot',
+    ),
+}
+
+# Payment options on the deposit page, in display order. Every listed option
+# is shown; one that is not set up yet (gateway keys missing in .env, or no
+# active manual payment method) is shown as unavailable and cannot be used.
 DEPOSIT_GATEWAYS = [
     code.strip().lower()
-    for code in os.getenv('DEPOSIT_GATEWAYS', 'paygate,p2ppay').split(',')
+    for code in os.getenv('DEPOSIT_GATEWAYS', 'paygate,p2ppay,manual').split(',')
     if code.strip()
 ]
 # The partner portal. Needed server-side because sub-affiliate invite links are

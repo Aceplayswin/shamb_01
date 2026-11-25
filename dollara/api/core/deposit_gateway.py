@@ -26,12 +26,28 @@ logger = logging.getLogger('paygate')
 MIN_GATEWAY_DEPOSIT = Decimal('100')
 GATEWAY_CHANNEL = 'paygate'
 P2PPAY_CHANNEL = 'p2ppay'
+MANUAL_CHANNEL = 'manual'
 
 
-# --- Gateway registry ------------------------------------------------------
-# What the deposit page's picker offers. `flow` tells the web app how to run
-# checkout: 'widget' = open the Razorpay popup with the returned payload,
-# 'redirect' = send the player to the returned checkoutUrl.
+# --- Payment option registry ----------------------------------------------
+# What the deposit page's picker offers. `flow` tells the web app what to do:
+#   'widget'   = open the Razorpay popup with the returned payload (Paygate)
+#   'redirect' = send the player to the returned checkoutUrl (P2P·PAY)
+#   'manual'   = show our receiving account, collect UTR + screenshot, and
+#                queue the deposit for an admin to verify
+# Every option listed in DEPOSIT_GATEWAYS is returned; `available` is False
+# when it is not set up yet, and the page shows it greyed out.
+
+
+def _manual_methods_exist() -> bool:
+    from core.backoffice_models import PaymentMethod
+
+    try:
+        return PaymentMethod.objects.filter(is_active=True, supports_deposit=True).exists()
+    except Exception:
+        # A database that missed the payment_methods migration: not set up.
+        logger.exception('manual deposit methods lookup failed')
+        return False
 
 
 def _gateway_catalog() -> dict:
@@ -39,44 +55,55 @@ def _gateway_catalog() -> dict:
 
     pg = getattr(settings, 'PAYGATE', {}) or {}
     p2p = getattr(settings, 'P2PPAY', {}) or {}
+    manual = getattr(settings, 'MANUAL_DEPOSIT', {}) or {}
     return {
         GATEWAY_CHANNEL: {
-            'code': GATEWAY_CHANNEL,
-            'name': pg.get('LABEL') or 'Instant checkout',
+            'name': pg.get('LABEL') or 'Instant Checkout',
             'description': pg.get('DESCRIPTION') or 'Pay in a secure checkout window',
             'flow': 'widget',
             'icon': 'card',
-            'configured': bool(
+            'available': lambda: bool(
                 str(pg.get('KEY_ID') or '').strip() and str(pg.get('KEY_SECRET') or '').strip()
             ),
         },
         P2PPAY_CHANNEL: {
-            'code': P2PPAY_CHANNEL,
-            'name': p2p.get('LABEL') or 'UPI / Bank transfer',
+            'name': p2p.get('LABEL') or 'UPI / Bank Transfer',
             'description': p2p.get('DESCRIPTION')
             or 'Pay from your UPI app or bank, then enter the UTR',
             'flow': 'redirect',
             'icon': 'upi',
-            'configured': p2ppay.is_configured(),
+            'available': p2ppay.is_configured,
+        },
+        MANUAL_CHANNEL: {
+            'name': manual.get('LABEL') or 'Manual Payment',
+            'description': manual.get('DESCRIPTION')
+            or 'Pay to our account, then submit the UTR and a screenshot',
+            'flow': 'manual',
+            'icon': 'manual',
+            'available': _manual_methods_exist,
         },
     }
 
 
 def available_gateways() -> list[dict]:
-    """Configured gateways in DEPOSIT_GATEWAYS order (no secrets)."""
+    """Every payment option in DEPOSIT_GATEWAYS order, flagged `available`.
+
+    No secrets: only labels, the flow and whether the option is set up.
+    """
     catalog = _gateway_catalog()
     out = []
     for code in getattr(settings, 'DEPOSIT_GATEWAYS', [GATEWAY_CHANNEL]):
         entry = catalog.get(code)
-        if not entry or not entry['configured'] or any(g['code'] == code for g in out):
+        if not entry or any(g['code'] == code for g in out):
             continue
         out.append(
             {
-                'code': entry['code'],
+                'code': code,
                 'name': entry['name'],
                 'description': entry['description'],
                 'flow': entry['flow'],
                 'icon': entry['icon'],
+                'available': bool(entry['available']()),
                 'minAmount': float(MIN_GATEWAY_DEPOSIT),
             }
         )
@@ -84,14 +111,22 @@ def available_gateways() -> list[dict]:
 
 
 def resolve_gateway(code: str | None) -> str:
-    """The gateway to use for a checkout: the one asked for, else the first."""
-    available = [g['code'] for g in available_gateways()]
-    if not available:
-        raise PaygateError('No payment method is available right now.', status=503)
+    """The checkout gateway to use: the one asked for, else the first usable.
+
+    Manual payment is not a checkout — it is submitted with a UTR and a
+    screenshot (deposit_manual.submit).
+    """
+    usable = [
+        g['code'] for g in available_gateways() if g['available'] and g['flow'] != 'manual'
+    ]
     if not code:
-        return available[0]
+        if not usable:
+            raise PaygateError('No online payment method is available right now.', status=503)
+        return usable[0]
     wanted = str(code).strip().lower()
-    if wanted not in available:
+    if wanted == MANUAL_CHANNEL:
+        raise ValueError('Manual payments are submitted with your UTR and a screenshot.')
+    if wanted not in usable:
         raise ValueError('That payment method is not available. Please choose another.')
     return wanted
 

@@ -22,6 +22,7 @@ urlpatterns = [
     path('wallet/deposit/methods', views.deposit_methods),
     path('wallet/deposit/proof', views.wallet_deposit_proof),
     path('wallet/deposit/gateways', views.wallet_deposit_gateways),
+    path('wallet/deposit/manual', views.wallet_deposit_manual),
     path('wallet/deposit/checkout', views.wallet_deposit_checkout),
     path('wallet/deposit/p2ppay-webhook', views.wallet_deposit_p2ppay_webhook),
     path('wallet/deposit/verify', views.wallet_deposit_verify),
